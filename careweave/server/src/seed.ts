@@ -7,6 +7,36 @@ const iso = (d: number) => new Date(now.getTime() - d * 86400000).toISOString();
 
 export async function buildSeed() {
   const users = [
+    // Official Hospital Accounts for Firebase Authentication
+    {
+      id: 'u-reception-com',
+      name: 'Maya Patel (Front Desk Officer)',
+      email: 'reception@careweave.com',
+      passwordHash: await bcrypt.hash('HospitalPass@2026', 10),
+      role: 'receptionist',
+      facility: 'CareWeave Front Desk & Triage',
+      permissions: ['register', 'triage', 'queue']
+    },
+    {
+      id: 'u-lab-com',
+      name: 'Dr. KALA.K MD., DNB (Head of Laboratory)',
+      email: 'lab@careweave.com',
+      passwordHash: await bcrypt.hash('HospitalPass@2026', 10),
+      role: 'lab',
+      facility: 'CareWeave Central Laboratory',
+      permissions: ['order', 'collect', 'analyze', 'verify']
+    },
+    {
+      id: 'u-doctor-com',
+      name: 'Dr. ANIRBAN LAHA (Consultant Physician)',
+      email: 'doctor@careweave.com',
+      passwordHash: await bcrypt.hash('HospitalPass@2026', 10),
+      role: 'doctor',
+      facility: 'CareWeave General Medicine & OPD',
+      permissions: ['consult', 'prescribe', 'diagnose']
+    },
+
+    // Acceptance testing & local development aliases
     { id: 'u-reception', name: 'Maya Patel', email: 'reception@careweave.test', passwordHash: await bcrypt.hash('demo123', 10), role: 'receptionist', facility: 'CareWeave Front Desk' },
     { id: 'u-lab', name: 'Lena Okafor', email: 'lab@careweave.test', passwordHash: await bcrypt.hash('demo123', 10), role: 'lab', facility: 'CareWeave Central Laboratory' },
     { id: 'u-pathologist', name: 'Dr. KALA.K MD., DNB', email: 'pathologist@careweave.test', passwordHash: await bcrypt.hash('demo123', 10), role: 'lab', permissions: ['verify'], facility: 'CareWeave Laboratory' },

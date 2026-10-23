@@ -1,3 +1,5 @@
+/* Scoped to the front desk portal so it cannot leak into other portals. */
+.rx{
 /* CareWeave Clinical Design System - Scoped to Front Desk Portal */
 .app-shell, .rx {
   --font-sans: 'Atkinson Hyperlegible Next', system-ui, sans-serif;
@@ -1768,31 +1770,6 @@ tbody tr:hover {
   }
 }
 
-@keyframes pulse-dot {
-  0% { transform: scale(0.95); opacity: 0.8; }
-  50% { transform: scale(1.3); opacity: 1; }
-  100% { transform: scale(0.95); opacity: 0.8; }
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes slideUp {
-  from { transform: translateY(12px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-
-@keyframes slideLeft {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
 
 /* ── Lab design alignment ─────────────────────────────────────────────────
    Same look as the laboratory portal: deep sidebar, no icon tiles, rules not cards. */
@@ -1838,3 +1815,30 @@ tbody tr:hover {
     color: #000000 !important;
   }
 }
+}
+
+@keyframes pulse-dot {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.3); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(12px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slideLeft {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+

@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import Login from '@/auth/Login'
 import RequireRole from '@/auth/RequireRole'
+import DoctorApp from '@/portals/doctor/DoctorApp'
 import ReceptionistApp from '@/portals/receptionist/ReceptionistApp'
 import LabLayout from '@/portals/lab/LabLayout'
 import { Privacy, Terms } from '@/portals/lab/pages/Legal'
@@ -16,6 +17,10 @@ export default function App() {
       <Route path="/login" element={<Login />} />
 
       {/* Front desk portal */}
+      <Route
+        path="/doctor/*"
+        element={<RequireRole role="doctor">{(user) => <DoctorApp user={user} />}</RequireRole>}
+      />
       <Route
         path="/receptionist/*"
         element={<RequireRole role="receptionist">{(user) => <ReceptionistApp user={user} />}</RequireRole>}

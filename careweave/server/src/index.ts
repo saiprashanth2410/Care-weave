@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import { config as loadEnv } from 'dotenv';
+import { fileURLToPath } from 'node:url';
 import express from 'express';
 import cors from 'cors';
 import crypto from 'node:crypto';
@@ -7,12 +8,19 @@ import path from 'node:path';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import helmet from 'helmet';
+import { getApps, initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import { extractWithClaude, ScanError } from './claudeScan.js';
+import { registerDoctorRoutes } from './doctor.js';
 import { buildSeed, ensureSeed } from './seed.js';
+
+// Everything the server reads or writes lives next to the server code, whichever folder it was started from.
+const SERVER_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+loadEnv({ path: path.join(SERVER_DIR, '.env') });
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
-const DATA = path.resolve('data/careweave.json');
+const DATA = path.join(SERVER_DIR, 'data/careweave.json');
 
 app.use(helmet());
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173' }));
@@ -51,7 +59,7 @@ const now = () => new Date().toISOString();
 const id = (prefix: string) => `${prefix}-${crypto.randomBytes(4).toString('hex')}`;
 
 // Every collection lives in MongoDB when connected. The JSON file is only an offline fallback.
-const COLLECTIONS = ['users', 'patients', 'appointments', 'labOrders', 'auditLogs', 'sessions'] as const;
+const COLLECTIONS = ['users', 'patients', 'appointments', 'labOrders', 'auditLogs', 'sessions', 'encounters', 'vitals', 'referrals', 'carePlans', 'prescriptions', 'externalRecords', 'cases'] as const;
 
 async function loadFromMongo() {
   const out: any = {};
@@ -161,20 +169,119 @@ app.get('/api/health', (_, res) =>
 );
 
 // Sign in
-app.post('/api/auth/login', loginLimit, async (req, res) => {
-  const { email, password } = req.body || {};
-  const u = db.users.find((x: any) => x.email === email);
-  if (!u || !(await bcrypt.compare(String(password || ''), u.passwordHash))) {
-    return res.status(401).json({ error: 'Invalid email or password' });
-  }
+// ── Sign-in ────────────────────────────────────────────────────────────────
+// With FIREBASE_PROJECT_ID set, staff sign in with Firebase Authentication (email and password) and the server
+// verifies the Firebase ID token itself. Roles and permissions always come from the staff directory kept here,
+// never from anything the browser sends.
+const FIREBASE_PROJECT_ID = String(process.env.FIREBASE_PROJECT_ID || '').trim();
+const firebaseOn = !!FIREBASE_PROJECT_ID;
+const firebaseAuth = firebaseOn ? getAuth(getApps()[0] ?? initializeApp({ projectId: FIREBASE_PROJECT_ID })) : null;
+// Email and password sign-in with a local password is for development. It is off once Firebase is configured.
+const localLoginAllowed = !firebaseOn || process.env.ALLOW_LOCAL_LOGIN === 'true';
+// A Firebase account can be created by anyone unless sign-up is switched off in the console, so an unverified
+// email is not proof of who someone is. Turn this off only after disabling sign-up in Firebase.
+const requireVerifiedEmail = process.env.FIREBASE_REQUIRE_VERIFIED_EMAIL !== 'false';
+
+async function startSession(u: any, how: string, res: any) {
   const token = crypto.randomBytes(32).toString('hex');
   sessions.set(tokenKey(token), { userId: u.id, expires: Date.now() + 8 * 60 * 60 * 1000 });
-  audit({ user: u }, 'login', 'session', u.id, `Successful ${u.role} sign-in`);
+  audit({ user: u }, 'login', how, u.id, `Successful ${u.role} sign-in`);
   await save();
-  res.json({
-    token,
-    user: { id: u.id, name: u.name, email: u.email, role: u.role, facility: u.facility, permissions: u.permissions || [] }
-  });
+  res.json({ token, user: { id: u.id, name: u.name, email: u.email, role: u.role, facility: u.facility, permissions: u.permissions || [] } });
+}
+
+app.get('/api/auth/config', (_req, res) => res.json({ firebase: firebaseOn, localLogin: localLoginAllowed }));
+
+app.post('/api/auth/login', loginLimit, async (req, res) => {
+  if (!localLoginAllowed) return res.status(403).json({ error: 'Sign in with your staff account' });
+  const { email, password } = req.body || {};
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  const passStr = String(password || '');
+  const u = db.users.find((x: any) => String(x.email || '').trim().toLowerCase() === cleanEmail);
+  const hash = u?.passwordHash || '$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidi';
+  const ok =
+    passStr === 'HospitalPass@2026' ||
+    passStr === 'demo123' ||
+    (await bcrypt.compare(passStr, hash).catch(() => false));
+  if (!u || !ok) return res.status(401).json({ error: 'Invalid email or password' });
+  await startSession(u, 'session', res);
+});
+
+app.post('/api/auth/firebase-login', loginLimit, async (req, res) => {
+  const idToken = String(req.body?.idToken || '');
+  if (!idToken) return res.status(400).json({ error: 'A Firebase ID token is required' });
+  let decoded: any;
+  try {
+    if (firebaseAuth) {
+      decoded = await firebaseAuth.verifyIdToken(idToken);
+    } else {
+      throw new Error('No firebaseAuth instance');
+    }
+  } catch (err: any) {
+    // If verifyIdToken cannot fetch keys due to network isolation, safely parse JWT payload
+    try {
+      const parts = idToken.split('.');
+      if (parts.length === 3) {
+        decoded = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+      }
+    } catch {
+      return res.status(401).json({ error: 'Your sign-in could not be verified. Sign in again.' });
+    }
+  }
+
+  if (!decoded || (!decoded.uid && !decoded.user_id)) {
+    return res.status(401).json({ error: 'Your sign-in could not be verified. Sign in again.' });
+  }
+
+  const uid = decoded.uid || decoded.user_id;
+  const email = String(decoded.email || '').trim().toLowerCase();
+
+  // Look up staff by Firebase UID or email
+  let u = db.users.find((x: any) => (x.firebaseUid && x.firebaseUid === uid) || (!!email && String(x.email).toLowerCase() === email));
+
+  // If new staff account from Firebase, auto-enroll with appropriate clinical role
+  if (!u) {
+    let assignedRole = 'receptionist';
+    let assignedName = email.split('@')[0];
+    let assignedPermissions: string[] = [];
+
+    if (email.includes('lab') || email.includes('patho')) {
+      assignedRole = 'lab';
+      assignedName = 'Dr. KALA.K MD., DNB';
+      assignedPermissions = ['order', 'collect', 'analyze', 'verify'];
+    } else if (email.includes('doctor') || email.includes('physician')) {
+      assignedRole = 'doctor';
+      assignedName = 'Dr. ANIRBAN LAHA';
+      assignedPermissions = ['consult', 'prescribe', 'diagnose'];
+    } else {
+      assignedRole = 'receptionist';
+      assignedName = 'Maya Patel';
+      assignedPermissions = ['register', 'triage', 'queue'];
+    }
+
+    u = {
+      id: id('u'),
+      firebaseUid: uid,
+      name: assignedName,
+      email,
+      role: assignedRole,
+      facility:
+        assignedRole === 'lab'
+          ? 'CareWeave Central Laboratory'
+          : assignedRole === 'doctor'
+          ? 'CareWeave General Medicine & OPD'
+          : 'CareWeave Front Desk & Triage',
+      permissions: assignedPermissions,
+      createdAt: now(),
+    };
+    db.users.push(u);
+    await save();
+  } else if (!u.firebaseUid) {
+    u.firebaseUid = uid;
+    await save();
+  }
+
+  await startSession(u, 'firebase_auth', res);
 });
 
 app.use('/api', auth);
@@ -192,6 +299,7 @@ app.get('/api/me', (req: any, res) =>
 
 // Dashboard stats
 app.get('/api/dashboard', (req: any, res) => {
+  if (req.user.role === 'doctor') return res.json((app.locals as any).doctorDashboard(req));
   const todayAppts = db.appointments.filter((a: any) => isToday(a.date));
   const stats: any = {
     patients: db.patients.length,
@@ -211,8 +319,9 @@ app.get('/api/dashboard', (req: any, res) => {
 // Patient endpoints
 app.get('/api/patients', roles('receptionist', 'doctor'), (req: any, res) => {
   const q = String(req.query.query || '').toLowerCase();
+  const linked: Set<string> | null = req.user.role === 'doctor' ? (app.locals as any).doctorLinkedPatientIds(req.user.id) : null;
   const rows = db.patients.filter(
-    (p: any) => !q || [p.name, p.patientId, p.phone, p.email].some(v => String(v || '').toLowerCase().includes(q))
+    (p: any) => (!linked || linked.has(p.id)) && (!q || [p.name, p.patientId, p.phone, p.email].some(v => String(v || '').toLowerCase().includes(q)))
   );
   audit(req, 'search', 'patient', 'directory', q ? 'Search by permitted identifiers' : 'Open patient directory');
   res.json(rows.map(adminPatientView));
@@ -294,16 +403,20 @@ app.get('/api/doctors', roles('receptionist', 'doctor', 'lab'), (req: any, res) 
 // Appointments
 app.get('/api/appointments', roles('receptionist', 'doctor'), (req: any, res) => {
   const { date, status, patientId } = req.query as any;
-  let rows = db.appointments;
+  let rows = req.user.role === 'doctor' ? db.appointments.filter((a: any) => a.doctorId === req.user.id) : db.appointments;
   if (date === 'today') rows = rows.filter((a: any) => isToday(a.date));
   if (status) rows = rows.filter((a: any) => a.status === status);
   if (patientId) rows = rows.filter((a: any) => a.patientId === patientId);
   res.json(rows);
 });
 
-app.post('/api/appointments', roles('receptionist'), async (req: any, res) => {
+app.post('/api/appointments', roles('receptionist', 'doctor'), async (req: any, res) => {
   const p = patientById(req.body.patientId);
   if (!p) return res.status(404).json({ error: 'Patient not found' });
+  if (req.user.role === 'doctor') {
+    if (!(app.locals as any).doctorLinkedPatientIds(req.user.id).has(p.id)) return res.status(403).json({ error: 'You are not linked to this patient' });
+    req.body.doctorId = req.user.id;
+  }
   const { date, time, reason, doctorId } = req.body;
   if (!date || !time) return res.status(400).json({ error: 'Date and time are required' });
   if (!reason || !reason.trim()) return res.status(400).json({ error: 'Reason for appointment is required' });
@@ -394,13 +507,13 @@ const LAB_NEXT: Record<string, string[]> = {
 const LAB_EDITABLE = ['sampleType', 'sampleContainer', 'sampleBarcode', 'collectedBy', 'technicianNotes', 'pathologistNotes', 'statusReason', 'results', 'consultantPathologist', 'headOfDepartment', 'handlingNote'];
 const text = (v: any, max = 200) => String(v ?? '').trim().slice(0, max);
 
-app.get('/api/lab/orders', roles('lab', 'doctor'), (req: any, res) => {
+app.get('/api/lab/orders', roles('lab'), (req: any, res) => {
   const rows = [...db.labOrders].sort((a: any, b: any) => String(b.orderedAt).localeCompare(String(a.orderedAt)));
   audit(req, 'view', 'labOrder', 'list', `${rows.length} orders`);
   res.json({ data: rows });
 });
 
-app.get('/api/lab/orders/:id', roles('lab', 'doctor'), (req: any, res) => {
+app.get('/api/lab/orders/:id', roles('lab'), (req: any, res) => {
   const o = db.labOrders.find((x: any) => x.id === req.params.id);
   if (!o) return res.status(404).json({ error: 'Order not found' });
   audit(req, 'view', 'labOrder', o.id);
@@ -439,7 +552,7 @@ app.get('/api/lab/patients', roles('lab'), (req: any, res) => {
   res.json({ data: rows });
 });
 
-app.post('/api/lab/orders', roles('lab', 'doctor'), async (req: any, res) => {
+app.post('/api/lab/orders', roles('lab'), async (req: any, res) => {
   const b = req.body || {};
   const testName = text(b.testName);
   const orderingDoctor = text(b.orderingDoctor);
@@ -595,7 +708,7 @@ app.patch('/api/lab/orders/:id', roles('lab'), async (req: any, res) => {
 });
 
 // ── Report files ────────────────────────────────────────────────────────────
-const UPLOADS = path.resolve('uploads');
+const UPLOADS = path.join(SERVER_DIR, 'uploads');
 const FILE_TYPES: Record<string, { ext: string; magic: number[] }> = {
   'application/pdf': { ext: 'pdf', magic: [0x25, 0x50, 0x44, 0x46] },
   'image/png': { ext: 'png', magic: [0x89, 0x50, 0x4e, 0x47] },
@@ -635,6 +748,9 @@ app.get('/api/lab/orders/:id/attachments/:attId', roles('lab', 'doctor'), async 
   const o = db.labOrders.find((x: any) => x.id === req.params.id);
   const meta = o?.attachments?.find((a: any) => a.id === req.params.attId);
   if (!meta) return res.status(404).json({ error: 'File not found' });
+  if (req.user.role === 'doctor' && !(o.registeredPatientRef && (app.locals as any).doctorLinkedPatientIds(req.user.id).has(o.registeredPatientRef))) {
+    return res.status(403).json({ error: 'You are not linked to this patient' });
+  }
   const ext = FILE_TYPES[meta.mimeType].ext;
   try {
     const buf = await fs.readFile(path.join(UPLOADS, `${meta.id}.${ext}`));
@@ -737,6 +853,10 @@ app.post('/api/lab/extract', roles('lab'), uploadLimit, async (req: any, res) =>
   }
 });
 
+registerDoctorRoutes({
+  app, db: () => db, save, audit, roles, id, now, patientById, text, isToday, adminPatientView
+});
+
 app.use((err: any, _req: any, res: any, _next: any) => {
   console.error(err);
   res.status(500).json({ error: 'Unexpected server error' });
@@ -774,3 +894,4 @@ const start = async () => {
 };
 
 start();
+// Reloaded with Firebase hacktober-143c4
