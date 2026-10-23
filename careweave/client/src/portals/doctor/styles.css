@@ -107,3 +107,6 @@
 .dx .dashboard-grid{gap:24px}
 .dx .card{padding:26px}
 .dx .top-actions{gap:16px}
+.dx .open-by-id{display:grid;gap:8px;border-top:1px solid var(--line);margin-top:14px;padding-top:14px}
+.dx .open-by-id p{margin:0;font-size:12px;color:var(--muted)}
+.dx .open-by-id input{height:36px;padding:0 10px;border:1px solid var(--line);border-radius:3px;background:#f6f7f3;font-size:12px}

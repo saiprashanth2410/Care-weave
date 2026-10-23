@@ -35,6 +35,21 @@ const num = (v: any) => {
   return Number.isFinite(n) ? n : null;
 };
 
+// A short list of drug families, so an allergy to one member also catches the others. It is a safety net for the
+// demo, not clinical decision support: anything not listed here is only matched by name.
+const DRUG_FAMILIES: string[][] = [
+  ['penicillin', 'amoxicillin', 'amoxycillin', 'ampicillin', 'piperacillin', 'flucloxacillin', 'cloxacillin', 'oxacillin', 'augmentin', 'co-amoxiclav', 'amoxiclav'],
+  ['sulfa', 'sulfonamide', 'sulfamethoxazole', 'co-trimoxazole', 'cotrimoxazole', 'trimethoprim', 'bactrim'],
+  ['nsaid', 'ibuprofen', 'diclofenac', 'naproxen', 'ketorolac', 'aspirin', 'indomethacin'],
+  ['cephalosporin', 'cefuroxime', 'ceftriaxone', 'cefixime', 'cefalexin', 'cephalexin', 'cefazolin']
+];
+function conflictsWith(allergen: string, medicine: string) {
+  const a = allergen.toLowerCase().trim(), m = medicine.toLowerCase().trim();
+  if (!a || !m) return false;
+  if (m.includes(a) || a.includes(m)) return true;
+  return DRUG_FAMILIES.some((fam) => fam.some((x) => a.includes(x)) && fam.some((x) => m.includes(x)));
+}
+
 export function registerDoctorRoutes(c: Ctx) {
   const { app, roles, audit, save, id, now, text } = c;
   const db = () => c.db();
@@ -186,6 +201,26 @@ export function registerDoctorRoutes(c: Ctx) {
   };
   (app as any).locals.doctorDashboard = doctorDashboard;
   (app as any).locals.doctorLinkedPatientIds = linkedPatientIds;
+
+  // A walk-in or newly registered patient has no booking yet. A doctor who knows the exact patient ID can open the
+  // chart by stating why; that creates a booking in their name, so access is explicit, limited to one patient and audited.
+  app.post('/api/patients/open', roles('doctor'), async (req: any, res) => {
+    const wanted = text(req.body?.patientId, 40);
+    const reason = text(req.body?.reason, 200);
+    if (reason.length < 5) return res.status(400).json({ error: 'Give the reason you are opening this chart (at least 5 characters)' });
+    const p = wanted ? db().patients.find((x: any) => String(x.patientId).toLowerCase() === wanted.toLowerCase()) : null;
+    if (!p) return res.status(404).json({ error: 'No patient with that ID. Check the ID on the patient card.' });
+    if (!isLinked(req, p)) {
+      const t = new Date();
+      db().appointments.push({
+        id: id('appt'), patientId: p.id, patientName: p.name, patientIdCode: p.patientId, doctorId: req.user.id, doctorName: req.user.name,
+        date: t.toISOString().slice(0, 10), time: t.toTimeString().slice(0, 5), reason, status: 'In Consultation', openedByDoctor: true
+      });
+      audit(req, 'open', 'patient', p.id, `Doctor opened a chart by patient ID: ${reason}`);
+      await save();
+    }
+    res.json(c.adminPatientView(p));
+  });
 
   app.get('/api/patients/:id/record', roles('doctor'), (req: any, res) => {
     const p = patientFor(req, res, req.params.id);
@@ -373,7 +408,7 @@ export function registerDoctorRoutes(c: Ctx) {
     const orderId = `ORD-${Date.now().toString().slice(-7)}${crypto.randomInt(10, 99)}`;
     const o: any = {
       id: orderId, external: false, patientId: p.patientId, registeredPatientRef: p.id, patientName: p.name,
-      patientAge: ageFromDob(p.dob), patientGender: p.gender, encounterId: enc.id, testName,
+      patientAge: ageFromDob(p.dob), patientGender: p.gender || 'O', encounterId: enc.id, testName,
       orderingDoctor: req.user.name, referralDoctor: req.user.name, orderedAt: now(), registrationAt: now(), status: 'requested',
       priority: /urgent|stat/i.test(String(req.body?.priority)) ? 'urgent' : 'routine',
       sampleType: text(req.body?.sampleType, 80) || undefined, handlingNote: text(req.body?.clinicalIndication, 500) || undefined,
@@ -409,7 +444,7 @@ export function registerDoctorRoutes(c: Ctx) {
     if (!medicine || !dosage || !frequency) return res.status(400).json({ error: 'Medicine, dose and frequency are required' });
     const enc = db().encounters.find((e: any) => e.patientId === p.id && e.doctorId === req.user.id && (!b.encounterId || e.id === b.encounterId));
     if (!enc) return res.status(400).json({ error: 'Document an encounter for this patient first, so the prescription is linked to it' });
-    const allergy = (p.allergies || []).find((a: any) => medicine.toLowerCase().includes(String(a.allergen).toLowerCase()) || String(a.allergen).toLowerCase().includes(medicine.toLowerCase()));
+    const allergy = (p.allergies || []).find((a: any) => conflictsWith(String(a.allergen), medicine));
     if (allergy && !text(b.allergyOverrideReason)) {
       audit(req, 'blocked', 'prescription', p.id, 'Allergy conflict');
       await save();

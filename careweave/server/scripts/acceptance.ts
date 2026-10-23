@@ -217,10 +217,23 @@ async function main() {
     const spRec = (await call('GET', `/api/patients/${sp?.id}/record`, doc)).json;
     check('the sample patient has a released result on the timeline', spRec.chart?.some((c: any) => c.test === 'HbA1c'));
     const waiting = (await call('GET', '/api/lab/orders', lab)).json.data.find((o: any) => o.id === sc.json.waitingOrder);
+    check('the sample patient has a documented penicillin allergy', spRec.allergies?.some((a: any) => a.allergen === 'Penicillin'));
+    await call('POST', '/api/encounters', doc, { patientId: sp.id, subjective: 'Sample review', assessment: 'Review' });
+    check('prescribing amoxicillin to the sample patient is blocked by the allergy guard', (await call('POST', '/api/prescriptions', doc, { patientId: sp.id, medicine: 'Amoxicillin', dosage: '500 mg', frequency: 'three times daily' })).status === 409);
     check('one sample order waits for verification', waiting?.status === 'awaiting_verification');
     check('the waiting order cannot be verified by the person who entered it', (await call('PATCH', `/api/lab/orders/${waiting.id}`, lab, { status: 'released' })).status === 403);
     check('the sample import produced a duplicate and a conflict', (await call('GET', '/api/reconciliation/cases', doc)).json.filter((k: any) => ['duplicate', 'conflict'].includes(k.type)).length >= 2);
     check('loading the sample twice does nothing', (await call('POST', '/api/demo/scenario', rec, {})).json.loaded === false);
+
+    // ---- walk-in: open a chart by exact patient ID ----
+    const walk = (await call('POST', '/api/patients', rec, { name: 'Walk In Person', dob: '1991-07-07', phone: '+1 (415) 555-0777' })).json;
+    check('a doctor cannot read an unlinked chart', (await call('GET', `/api/patients/${walk.id}/record`, doc)).status === 403);
+    check('opening by ID needs a reason', (await call('POST', '/api/patients/open', doc, { patientId: walk.patientId })).status === 400);
+    check('opening an unknown ID is a 404', (await call('POST', '/api/patients/open', doc, { patientId: 'CW-00000', reason: 'Walk-in visit' })).status === 404);
+    check('only a doctor can open by ID', (await call('POST', '/api/patients/open', rec, { patientId: walk.patientId, reason: 'Walk-in visit' })).status === 403);
+    check('a doctor can open a walk-in by exact ID with a reason', (await call('POST', '/api/patients/open', doc, { patientId: walk.patientId, reason: 'Walk-in visit' })).status === 200);
+    check('the chart is then readable', (await call('GET', `/api/patients/${walk.id}/record`, doc)).status === 200);
+    check('the walk-in opening is in the audit log with the reason', !!(await mongoose.connection.db!.collection('auditLogs').findOne({ entity: 'patient', entityId: walk.id, action: 'open', detail: /Walk-in visit/ })));
 
     // ---- sign-in hardening (local mode) ----
     check('firebase-login does not exist when Firebase is off', (await call('POST', '/api/auth/firebase-login', undefined, { email: 'doctor@careweave.test' })).status === 404);
