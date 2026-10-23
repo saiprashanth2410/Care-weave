@@ -1,5 +1,5 @@
 export type Role = 'receptionist' | 'lab' | 'doctor'
-export type SessionUser = { id: string; name: string; email: string; role: Role; facility: string }
+export type SessionUser = { id: string; name: string; email: string; role: Role; facility: string; permissions?: string[] }
 
 const TOKEN_KEY = 'cw_token'
 
@@ -31,5 +31,7 @@ export async function signIn(email: string, password: string): Promise<SessionUs
   localStorage.setItem(TOKEN_KEY, r.token)
   return r.user
 }
+
+export const can = (user: SessionUser, permission: string) => !!user.permissions?.includes(permission)
 
 export const currentUser = () => call<SessionUser>('/api/me')

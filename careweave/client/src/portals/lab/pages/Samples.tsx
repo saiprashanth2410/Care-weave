@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { getLabOrders, recordSampleCollection, requestOrderRecollection, updateOrderStatus } from '../api'
 import StatusBadge from '../components/StatusBadge'
+import { useLabUser } from '../useLabUser'
 import type { LabOrder } from '../types'
 
 type SampleTab = 'to_collect' | 'in_transit' | 'recollect' | 'all'
@@ -37,7 +38,8 @@ export default function Samples() {
   const [searchParams] = useSearchParams()
 
   // Form states for collection
-  const [collector, setCollector] = useState('Phleb. Sarah V.')
+  const { user } = useLabUser()
+  const [collector, setCollector] = useState(user.name)
   const [container, setContainer] = useState(SAMPLE_CONTAINERS[0])
   const [barcode, setBarcode] = useState('')
 

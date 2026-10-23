@@ -3,12 +3,14 @@ import { useSearchParams } from 'react-router-dom'
 import { getLabOrders, requestOrderRecollection, updateOrderStatus, verifyAndReleaseOrder } from '../api'
 import DiagnosticReportView from '../components/DiagnosticReportView'
 import type { LabOrder } from '../types'
+import { useLabUser } from '../useLabUser'
 
 export default function Verification() {
   const [orders, setOrders] = useState<LabOrder[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedOrder, setSelectedOrder] = useState<LabOrder | null>(null)
-  const [verifierName, setVerifierName] = useState('')
+  const { user, canVerify } = useLabUser()
+  const verifierName = user.name
   const [pathNotes, setPathNotes] = useState('')
   const [searchParams] = useSearchParams()
 
@@ -233,28 +235,41 @@ export default function Verification() {
                     Clinical Authorization Actions
                   </h3>
                   <p className="text-xs text-ink-3">
-                    Review the official report preview below. Sign off to digitally release to EMR and patient portal.
+                    Review the report preview below. Signing releases it to the doctor.
                   </p>
+                  {!canVerify && (
+                    <p role="status" className="mt-2 border border-warn px-2 py-1 text-xs font-semibold text-warn">
+                      Your account cannot verify results. Sign in with a verifier account to release this report.
+                    </p>
+                  )}
+                  {canVerify && selectedOrder.processedBy === user.name && (
+                    <p role="status" className="mt-2 border border-warn px-2 py-1 text-xs font-semibold text-warn">
+                      You entered these results, so a different verifier must release them.
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
+                    disabled={!canVerify}
                     onClick={handleRequestRerun}
-                    className="min-h-10 border border-warn px-3 text-xs font-semibold text-warn hover:bg-warn/10"
+                    className="min-h-10 border border-warn px-3 text-xs font-semibold text-warn hover:bg-warn/10 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     Request Repeat Run
                   </button>
                   <button
                     type="button"
+                    disabled={!canVerify}
                     onClick={handleRejectSpecimen}
-                    className="min-h-10 border border-alert px-3 text-xs font-semibold text-alert hover:bg-alert/10"
+                    className="min-h-10 border border-alert px-3 text-xs font-semibold text-alert hover:bg-alert/10 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     Reject & Recollect
                   </button>
                   <button
                     type="button"
+                    disabled={!canVerify}
                     onClick={handleAuthorize}
-                    className="min-h-10 bg-accent px-5 text-xs font-semibold text-surface hover:bg-accent-ink"
+                    className="min-h-10 bg-accent px-5 text-xs font-semibold text-surface hover:bg-accent-ink disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     Authorize & Digitally Sign
                   </button>
@@ -269,7 +284,7 @@ export default function Verification() {
                   <input
                     type="text"
                     value={verifierName}
-                    onChange={(e) => setVerifierName(e.target.value)}
+                    readOnly
                     className="w-full border border-rule bg-paper px-2.5 py-1.5 font-medium text-ink"
                   />
                 </div>

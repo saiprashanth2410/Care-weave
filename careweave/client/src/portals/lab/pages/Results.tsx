@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { getLabOrders, recordTestResults, TEST_TEMPLATES } from '../api'
+import { amendResults, attachReport, getLabOrders, openReportFile, recordTestResults, TEST_TEMPLATES } from '../api'
 import AIScannerModal from '../components/AIScannerModal'
 import StatusBadge from '../components/StatusBadge'
 import type { LabOrder, ResultFlag, TestResultItem } from '../types'
@@ -13,15 +13,20 @@ export default function Results() {
   const [techNotes, setTechNotes] = useState('')
   const [saveMessage, setSaveMessage] = useState('')
   const [showScanner, setShowScanner] = useState(false)
+  const [observedAt, setObservedAt] = useState(toLocalInput(new Date()))
+  const [amendReason, setAmendReason] = useState('')
   const [searchParams] = useSearchParams()
 
   const selectOrder = (order: LabOrder) => {
     setActiveOrder(order)
     setSaveMessage('')
     setTechNotes(order.technicianNotes || '')
+    setAmendReason('')
+    setObservedAt(toLocalInput(order.observedAt ? new Date(order.observedAt) : new Date()))
 
     if (order.results && order.results.length > 0) {
-      setResults(order.results)
+      // Flags are recomputed on load so a value never keeps a flag from an older rule.
+      setResults(withFlags(order.results))
     } else {
       // Find matching template or generate default parameters
       const template = TEST_TEMPLATES[order.testName]
@@ -60,20 +65,38 @@ export default function Results() {
     })
   }
 
+  const isSubmitted = !!activeOrder && ['awaiting_verification', 'verified', 'released'].includes(activeOrder.status)
+  const observedIso = () => new Date(observedAt).toISOString()
+
+  const apply = (updated: LabOrder, message: string) => {
+    setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)))
+    setActiveOrder(updated)
+    setResults(updated.results ? withFlags(updated.results) : results)
+    setAmendReason('')
+    setSaveMessage(message)
+  }
+
   const handleSave = async (submitForVerification: boolean) => {
     if (!activeOrder) return
     const updated = await recordTestResults(activeOrder.id, {
       results,
       notes: techNotes,
       submitForVerification,
+      observedAt: observedIso(),
     })
-    setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)))
-    setActiveOrder(updated)
-    setSaveMessage(
-      submitForVerification
-        ? 'Results submitted successfully to the Pathologist Verification Queue.'
-        : 'Draft measurements saved.',
-    )
+    apply(updated, submitForVerification ? 'Results submitted to the verification queue.' : 'Draft measurements saved.')
+  }
+
+  const handleAmend = async () => {
+    if (!activeOrder || amendReason.trim().length < 5) return
+    const updated = await amendResults(activeOrder.id, results, amendReason.trim(), observedIso())
+    apply(updated, 'Amendment recorded. The report goes back to the verification queue.')
+  }
+
+  const handleAttach = async (file?: File) => {
+    if (!activeOrder || !file) return
+    const updated = await attachReport(activeOrder.id, file)
+    apply(updated, `Attached ${file.name}.`)
   }
 
   // Active testing candidates (collected or processing)
@@ -132,11 +155,11 @@ export default function Results() {
 
             {/* Other recently processed orders */}
             <div className="pt-4 border-t border-rule">
-              <p className="text-xs font-semibold text-ink-3 mb-2">OTHER ORDERS</p>
+              <p className="text-xs font-semibold text-ink-3 mb-2">SUBMITTED AND RELEASED (OPEN TO AMEND)</p>
               <ul className="space-y-1">
                 {orders
                   .filter((o) => !['collected', 'processing'].includes(o.status))
-                  .slice(0, 5)
+                  .slice(0, 12)
                   .map((o) => (
                     <li key={o.id}>
                       <button
@@ -238,8 +261,10 @@ export default function Results() {
                               <span className="border border-warn bg-warn/15 px-2 py-0.5 text-[11px] font-bold uppercase text-warn">
                                 Abnormal
                               </span>
-                            ) : param.value ? (
+                            ) : param.value && param.flag === 'normal' ? (
                               <span className="text-xs font-semibold text-ink-3">Normal</span>
+                            ) : param.value ? (
+                              <span className="text-xs font-semibold text-warn">Review against range</span>
                             ) : (
                               <span className="text-xs text-ink-3">Pending</span>
                             )}
@@ -250,6 +275,67 @@ export default function Results() {
                   </table>
                 </div>
               </div>
+
+              {/* Observation time */}
+              <div className="max-w-xs">
+                <label htmlFor="observedAt" className="block text-xs font-semibold uppercase tracking-wider text-ink-3 mb-1">
+                  Observed at *
+                </label>
+                <input
+                  id="observedAt"
+                  type="datetime-local"
+                  required
+                  max={toLocalInput(new Date())}
+                  value={observedAt}
+                  onChange={(e) => setObservedAt(e.target.value)}
+                  className="w-full min-h-11 border border-rule bg-paper px-3 font-mono text-sm text-ink"
+                />
+                <p className="mt-1 text-[11px] text-ink-3">When the measurement was taken on the analyzer.</p>
+              </div>
+
+              {/* Report files */}
+              <div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-ink">Report files</h3>
+                  <label className="flex min-h-11 cursor-pointer items-center border border-rule px-4 text-xs font-semibold text-ink-2 hover:bg-paper">
+                    Attach PDF, PNG or JPEG
+                    <input type="file" accept="application/pdf,image/png,image/jpeg" className="hidden"
+                      onChange={(e) => { handleAttach(e.target.files?.[0]); e.target.value = '' }} />
+                  </label>
+                </div>
+                {(activeOrder.attachments ?? []).length === 0 ? (
+                  <p className="mt-2 text-xs text-ink-3">No files attached yet.</p>
+                ) : (
+                  <ul className="mt-2 divide-y divide-rule border border-rule">
+                    {activeOrder.attachments!.map((a) => (
+                      <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs">
+                        <span><span className="font-semibold text-ink">{a.name}</span> <span className="text-ink-3">· {Math.round(a.size / 1024)} KB · {a.uploadedBy}</span></span>
+                        <button type="button" onClick={() => openReportFile(activeOrder.id, a.id)} className="min-h-11 px-2 font-semibold text-accent-ink underline underline-offset-2">Open</button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {/* Amendment history */}
+              {(activeOrder.amendments ?? []).length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-ink">Amendment history</h3>
+                  <ul className="mt-2 divide-y divide-rule border border-rule text-xs">
+                    {activeOrder.amendments!.map((a) => (
+                      <li key={a.id} className="px-3 py-2">
+                        <p><span className="font-semibold text-ink">{a.byName}</span> <span className="text-ink-3">· {new Date(a.at).toLocaleString()}</span></p>
+                        <p className="text-ink-2">Reason: {a.reason}</p>
+                        <ul className="mt-1 font-mono text-ink-2">
+                          {a.changes.map((c) => (
+                            <li key={c.parameter}>{c.parameter}: {c.before ? `${c.before.value} ${c.before.unit}` : 'new'} {'->'} {c.after.value} {c.after.unit}</li>
+                          ))}
+                        </ul>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {/* Technician Notes */}
               <div>
@@ -266,25 +352,34 @@ export default function Results() {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-rule pt-4">
-                <button
-                  type="button"
-                  onClick={() => handleSave(false)}
-                  className="min-h-11 border border-rule px-4 text-xs font-semibold text-ink-2 hover:bg-paper"
-                >
-                  Save Draft Measurements
-                </button>
-
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => handleSave(true)}
-                    className="min-h-11 bg-accent px-6 text-xs font-semibold text-surface hover:bg-accent-ink"
-                  >
-                    Submit for Pathologist Verification →
+              {isSubmitted ? (
+                <div className="space-y-3 border-t border-rule pt-4">
+                  <div role="note" className="border border-warn p-3 text-xs text-warn">
+                    {['verified', 'released'].includes(activeOrder.status)
+                      ? 'These results are already verified. Changing a value records an amendment and sends the report back to the verification queue.'
+                      : 'These results are waiting for verification. Changing a value records an amendment.'}
+                  </div>
+                  <label htmlFor="amendReason" className="block text-xs font-semibold uppercase tracking-wider text-ink-3">Reason for the change *</label>
+                  <textarea id="amendReason" rows={2} value={amendReason} onChange={(e) => setAmendReason(e.target.value)}
+                    placeholder="e.g. Instrument re-run gave a different value"
+                    className="w-full border border-rule bg-paper p-3 text-sm text-ink" />
+                  <button type="button" onClick={handleAmend} disabled={amendReason.trim().length < 5}
+                    className="min-h-11 bg-accent px-6 text-xs font-semibold text-surface hover:bg-accent-ink disabled:cursor-not-allowed disabled:opacity-40">
+                    Record amendment
                   </button>
                 </div>
-              </div>
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-rule pt-4">
+                  <button type="button" onClick={() => handleSave(false)}
+                    className="min-h-11 border border-rule px-4 text-xs font-semibold text-ink-2 hover:bg-paper">
+                    Save draft measurements
+                  </button>
+                  <button type="button" onClick={() => handleSave(true)}
+                    className="min-h-11 bg-accent px-6 text-xs font-semibold text-surface hover:bg-accent-ink">
+                    Submit for verification
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="border border-rule bg-surface p-12 text-center text-sm text-ink-3">
@@ -310,15 +405,20 @@ export default function Results() {
 }
 
 function evaluateFlag(param: string, rawVal: string, refRange: string): ResultFlag | undefined {
-  const num = parseFloat(rawVal)
+  const num = parseFloat(rawVal.replace(/,/g, ''))
   if (isNaN(num)) return undefined
+  refRange = refRange.replace(/(\d),(?=\d{3})/g, '$1')
 
   // Critical panic values
   if (param.toLowerCase().includes('troponin') && num > 0.04) return 'critical'
-  if (param.toLowerCase().includes('ph') && (num < 7.30 || num > 7.55)) return 'critical'
+  if (/(^|\s)ph(\s|\(|$)/i.test(param) && (num < 7.30 || num > 7.55)) return 'critical'
   if (param.toLowerCase().includes('potassium') && (num < 3.0 || num > 6.0)) return 'critical'
   if (param.toLowerCase().includes('platelet') && num < 50000) return 'critical'
   if (param.toLowerCase().includes('glucose') && num > 300) return 'critical'
+
+  // Only plain numeric intervals are checked automatically. Text such as "Desirable: < 200, Borderline: 200-239"
+  // has several bands, so it is left for the technologist and verifier to judge instead of guessing.
+  if (!/^[<>=\s\d.\-\u2013]+$/.test(refRange)) return undefined
 
   // Standard ranges
   const rangeMatch = refRange.match(/([\d.]+)\s*-\s*([\d.]+)/)
@@ -344,4 +444,11 @@ function evaluateFlag(param: string, rawVal: string, refRange: string): ResultFl
   }
 
   return undefined
+}
+
+const withFlags = (rs: TestResultItem[]) => rs.map((r) => ({ ...r, flag: evaluateFlag(r.parameter, r.value, r.referenceRange) }))
+
+function toLocalInput(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }

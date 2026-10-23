@@ -67,12 +67,49 @@ export function recordSampleCollection(
 
 export function recordTestResults(
   id: string,
-  data: { results: TestResultItem[]; notes?: string; submitForVerification?: boolean },
+  data: { results: TestResultItem[]; notes?: string; submitForVerification?: boolean; observedAt?: string },
 ): Promise<LabOrder> {
   return updateOrderStatus(id, data.submitForVerification ? 'awaiting_verification' : 'processing', {
     results: data.results,
     technicianNotes: data.notes,
+    observedAt: data.observedAt,
   })
+}
+
+// Changing results that were already submitted is an amendment: a reason is required and the old values are kept.
+export async function amendResults(id: string, results: TestResultItem[], reason: string, observedAt?: string): Promise<LabOrder> {
+  const body = await request<{ data: LabOrder }>(`/api/lab/orders/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ results, amendReason: reason, observedAt }),
+  })
+  return body.data
+}
+
+export async function attachReport(id: string, file: File): Promise<LabOrder> {
+  const data = await new Promise<string>((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(String(r.result).split(',')[1] ?? '')
+    r.onerror = () => reject(new Error('Could not read the file'))
+    r.readAsDataURL(file)
+  })
+  const body = await request<{ data: LabOrder }>(`/api/lab/orders/${encodeURIComponent(id)}/attachments`, {
+    method: 'POST',
+    body: JSON.stringify({ name: file.name, mimeType: file.type, data }),
+  })
+  return body.data
+}
+
+// Files need the session token, so they are fetched and opened as a blob rather than linked directly.
+export async function openReportFile(orderId: string, attId: string): Promise<void> {
+  const token = getToken()
+  const res = await fetch(`/api/lab/orders/${encodeURIComponent(orderId)}/attachments/${encodeURIComponent(attId)}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!res.ok) {
+    window.dispatchEvent(new CustomEvent('cw:error', { detail: { message: 'Could not open the file', write: false } }))
+    return
+  }
+  window.open(URL.createObjectURL(await res.blob()), '_blank', 'noopener')
 }
 
 export function verifyAndReleaseOrder(id: string, data: { verifiedBy: string; notes?: string }): Promise<LabOrder> {
@@ -85,50 +122,17 @@ export function requestOrderRecollection(id: string, reason: string): Promise<La
 }
 
 export interface RegisteredPatient {
-  id: string
   patientId: string
   name: string
-  dob?: string
-  gender?: 'M' | 'F' | 'O'
-  phone?: string
-  email?: string
+  ageYears: number
+  encounters: { id: string; date: string; time: string; doctorName: string }[]
 }
 
-export function calculateAgeFromDob(dob?: string): number {
-  if (!dob) return 40
-  const birth = new Date(dob)
-  const now = new Date()
-  let age = now.getFullYear() - birth.getFullYear()
-  const m = now.getMonth() - birth.getMonth()
-  if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) age--
-  return Math.max(0, age)
-}
-
+// Minimal lookup: the lab gets an identifier, a name, an age and visit slots. Nothing is cached in the browser.
 export async function searchRegisteredPatients(q = ''): Promise<RegisteredPatient[]> {
+  if (q.trim().length < 2) return []
   try {
-    const list = await request<RegisteredPatient[]>(`/api/patients?query=${encodeURIComponent(q)}`)
-    if (Array.isArray(list) && list.length > 0) {
-      try {
-        const cached = JSON.parse(localStorage.getItem('cw_registered_patients') || '[]')
-        const merged = [...list, ...cached.filter((c: any) => !list.some((l: any) => l.patientId === c.patientId))]
-        localStorage.setItem('cw_registered_patients', JSON.stringify(merged))
-      } catch {}
-      return list
-    }
-  } catch {
-    // offline or backend restarting
-  }
-
-  try {
-    const cached: RegisteredPatient[] = JSON.parse(localStorage.getItem('cw_registered_patients') || '[]')
-    const query = q.toLowerCase().trim()
-    if (!query) return cached
-    return cached.filter(
-      (p) =>
-        p.name.toLowerCase().includes(query) ||
-        p.patientId.toLowerCase().includes(query) ||
-        (p.phone && p.phone.includes(query)),
-    )
+    return (await request<{ data: RegisteredPatient[] }>(`/api/lab/patients?query=${encodeURIComponent(q.trim())}`)).data
   } catch {
     return []
   }
@@ -147,6 +151,8 @@ export async function createLabOrder(data: {
   visitNo?: string
   opIp?: 'OP' | 'IP'
   referralDoctor?: string
+  encounterId?: string
+  external?: boolean
 }): Promise<LabOrder> {
   const template = TEST_TEMPLATES[data.testName]
   const body = await request<{ data: LabOrder }>('/api/lab/orders', {

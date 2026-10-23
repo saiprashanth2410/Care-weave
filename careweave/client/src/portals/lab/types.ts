@@ -27,6 +27,26 @@ export interface TestResultItem {
   criticalRange?: string
 }
 
+export interface Amendment {
+  id: string
+  at: string
+  byName: string
+  reason: string
+  statusBefore: LabOrderStatus
+  previouslyVerifiedBy: string | null
+  changes: { parameter: string; before: { value: string; unit: string } | null; after: { value: string; unit: string } }[]
+}
+
+export interface Attachment {
+  id: string
+  name: string
+  mimeType: string
+  size: number
+  sha256: string
+  uploadedBy: string
+  uploadedAt: string
+}
+
 export interface LabOrder {
   id: string
   patientId: string
@@ -68,4 +88,8 @@ export interface LabOrder {
   verifiedBy?: string
   verifiedAt?: string
   results?: TestResultItem[]
+  external?: boolean
+  observedAt?: string
+  amendments?: Amendment[]
+  attachments?: Attachment[]
 }

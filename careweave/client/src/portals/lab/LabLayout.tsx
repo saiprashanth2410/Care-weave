@@ -89,7 +89,7 @@ export default function LabLayout({ user }: { user: SessionUser }) {
               <button onClick={() => setNotice(null)} className="min-h-6 text-xs font-semibold underline underline-offset-2">Dismiss</button>
             </div>
           )}
-          <Outlet />
+          <Outlet context={{ user }} />
         </main>
         <footer className="border-t border-rule px-4 py-4 text-xs text-ink-3 sm:px-6 lg:px-8">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2">

@@ -1,10 +1,9 @@
-/* Scoped to the front desk portal so it cannot leak into other portals. */
-.rx {
-& {
+/* CareWeave Clinical Design System - Scoped to Front Desk Portal */
+.app-shell, .rx {
   --font-sans: 'Atkinson Hyperlegible Next', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
 
-  /* CareWeave design tokens (same as the laboratory portal) */
+  /* CareWeave clinical design tokens (identical to laboratory portal) */
   --primary: #0c6b6d;
   --primary-hover: #084e50;
   --primary-light: #e3ecea;
@@ -33,28 +32,21 @@
   --border-subtle: #c3cac2;
   --border-card: #c3cac2;
 
-  --radius-sm: 3px;
-  --radius-md: 3px;
-  --radius-lg: 3px;
-  --radius-xl: 3px;
-  --radius-full: 3px;
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-xl: 2px;
+  --radius-full: 2px;
 
   --shadow-xs: none;
   --shadow-sm: none;
   --shadow-md: none;
   --shadow-lg: none;
   --shadow-xl: none;
-}
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-& {
   font-family: var(--font-sans);
   background-color: var(--bg-page);
-  color: var(--slate-800);
+  color: var(--slate-900);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.5;
@@ -1775,7 +1767,6 @@ tbody tr:hover {
     min-width: 100%;
   }
 }
-}
 
 @keyframes pulse-dot {
   0% { transform: scale(0.95); opacity: 0.8; }
@@ -1805,25 +1796,45 @@ tbody tr:hover {
 
 /* ── Lab design alignment ─────────────────────────────────────────────────
    Same look as the laboratory portal: deep sidebar, no icon tiles, rules not cards. */
-.rx .brand-mark,
-.rx .stat-icon,
-.rx .activity-row > .activity-dot,
-.rx .privacy-card svg { display: none; }
+.rx .brand-mark, .app-shell .brand-mark,
+.rx .stat-icon, .app-shell .stat-icon,
+.rx .activity-row > .activity-dot, .app-shell .activity-row > .activity-dot,
+.rx .privacy-card svg, .app-shell .privacy-card svg { display: none; }
 
-.rx .sidebar { background: var(--navy-900); border-right: none; }
-.rx .side-brand { color: var(--bg-surface); }
-.rx .nav-section-title { color: rgba(246, 247, 243, 0.6); }
-.rx .sidebar nav button { color: rgba(246, 247, 243, 0.82); }
-.rx .sidebar nav button:hover { background: rgba(246, 247, 243, 0.1); color: var(--bg-surface); }
-.rx .sidebar nav button.active { background: var(--primary); color: var(--bg-surface); }
-.rx .workspace-badge { background: rgba(246, 247, 243, 0.08); border-color: rgba(246, 247, 243, 0.2); }
-.rx .workspace-badge b { color: var(--bg-surface); }
-.rx .workspace-badge small { color: rgba(246, 247, 243, 0.7); }
-.rx .privacy-card { background: transparent; border-color: rgba(246, 247, 243, 0.2); }
-.rx .privacy-card, .rx .privacy-card strong { color: var(--bg-surface); }
-.rx .privacy-card small { color: rgba(246, 247, 243, 0.65); }
-.rx .side-user-chip { background: rgba(246, 247, 243, 0.08); }
-.rx .side-user-chip b { color: var(--bg-surface); }
-.rx .side-user-chip small { color: rgba(246, 247, 243, 0.7); }
-.rx .logout-btn, .rx .logout { color: rgba(246, 247, 243, 0.82); min-height: 44px; }
-.rx .logout-btn:hover, .rx .logout:hover { background: rgba(246, 247, 243, 0.1); color: var(--bg-surface); }
+.rx .sidebar, .app-shell .sidebar { background: var(--navy-900); border-right: none; }
+.rx .side-brand, .app-shell .side-brand { color: var(--bg-surface); }
+.rx .nav-section-title, .app-shell .nav-section-title { color: rgba(246, 247, 243, 0.6); }
+.rx .sidebar nav button, .app-shell .sidebar nav button { color: rgba(246, 247, 243, 0.82); }
+.rx .sidebar nav button:hover, .app-shell .sidebar nav button:hover { background: rgba(246, 247, 243, 0.1); color: var(--bg-surface); }
+.rx .sidebar nav button.active, .app-shell .sidebar nav button.active { background: var(--primary); color: var(--bg-surface); }
+.rx .workspace-badge, .app-shell .workspace-badge { background: rgba(246, 247, 243, 0.08); border-color: rgba(246, 247, 243, 0.2); }
+.rx .workspace-badge b, .app-shell .workspace-badge b { color: var(--bg-surface); }
+.rx .workspace-badge small, .app-shell .workspace-badge small { color: rgba(246, 247, 243, 0.7); }
+.rx .privacy-card, .app-shell .privacy-card { background: transparent; border-color: rgba(246, 247, 243, 0.2); }
+.rx .privacy-card, .app-shell .privacy-card, .rx .privacy-card strong, .app-shell .privacy-card strong { color: var(--bg-surface); }
+.rx .privacy-card small, .app-shell .privacy-card small { color: rgba(246, 247, 243, 0.65); }
+.rx .side-user-chip, .app-shell .side-user-chip { background: rgba(246, 247, 243, 0.08); }
+.rx .side-user-chip b, .app-shell .side-user-chip b { color: var(--bg-surface); }
+.rx .side-user-chip small, .app-shell .side-user-chip small { color: rgba(246, 247, 243, 0.7); }
+.rx .logout-btn, .app-shell .logout-btn, .rx .logout, .app-shell .logout { color: rgba(246, 247, 243, 0.82); min-height: 44px; }
+.rx .logout-btn:hover, .app-shell .logout-btn:hover, .rx .logout:hover, .app-shell .logout:hover { background: rgba(246, 247, 243, 0.1); color: var(--bg-surface); }
+
+/* Thermal Token Slip Print Rules */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #printable-token-slip, #printable-token-slip * {
+    visibility: visible;
+  }
+  #printable-token-slip {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm;
+    margin: 0;
+    padding: 10px;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+}

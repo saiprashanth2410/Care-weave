@@ -8,10 +8,23 @@ import {
 } from './icons';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from './api';
+import OPTokenPrintModal from './components/OPTokenPrintModal';
+import DoctorSlotMatrix from './components/DoctorSlotMatrix';
+import ReceptionAIScannerModal, { type ExtractedReceptionData } from './components/ReceptionAIScannerModal';
 import type { AdminPatientRecord, Appointment, Dashboard, Doctor, Patient, User } from './types';
 import './styles.css';
 
 // ─── UTILITIES & HELPERS ───────────────────────────────────────────────────
+function getDoctorRoom(doctorName?: string): string {
+  const d = (doctorName || '').toLowerCase();
+  if (d.includes('laha') || d.includes('anirban')) return 'Room 4';
+  if (d.includes('iyer') || d.includes('rajesh')) return 'Room 2';
+  if (d.includes('priya') || d.includes('sharma')) return 'Room 1';
+  if (d.includes('patil') || d.includes('sneha')) return 'Room 3';
+  if (d.includes('vikram') || d.includes('seth')) return 'ICU Block B';
+  if (d.includes('meenakshi') || d.includes('sundaram')) return 'Room 5';
+  return 'Room 4';
+}
 const fmtDate = (v?: string) =>
   v ? new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 
@@ -70,7 +83,7 @@ function App({ user }: { user: User }) {
 }
 
 function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
-  const [section, setSection] = useState<'overview' | 'queue' | 'appointments' | 'patients'>('overview');
+  const [section, setSection] = useState<'overview' | 'queue' | 'appointments' | 'patients' | 'doctors'>('overview');
   const [collapsed, setCollapsed] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [toast, setToast] = useState('');
@@ -80,6 +93,17 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [showAppointmentModal, setShowAppointmentModal] = useState(false);
   const [registeredPatientToBook, setRegisteredPatientToBook] = useState<Patient | null>(null);
+
+  // New Clinical Reception Features
+  const [showAIScanner, setShowAIScanner] = useState(false);
+  const [printAppointment, setPrintAppointment] = useState<Appointment | null>(null);
+  const [printTokenIndex, setPrintTokenIndex] = useState(1);
+  const [prefilledPatient, setPrefilledPatient] = useState<ExtractedReceptionData | null>(null);
+
+  const handlePrintToken = (appt: Appointment, idx = 1) => {
+    setPrintAppointment(appt);
+    setPrintTokenIndex(idx);
+  };
 
   // Live clock
   useEffect(() => {
@@ -96,7 +120,8 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
 
   const navItems = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-    { id: 'queue', label: 'Patient Queue', icon: Clock3 },
+    { id: 'queue', label: 'Live OPD Queue', icon: Clock3 },
+    { id: 'doctors', label: 'Doctor Roster & Slots', icon: Stethoscope },
     { id: 'appointments', label: 'Appointments', icon: CalendarDays },
     { id: 'patients', label: 'Patient Directory', icon: Users },
   ];
@@ -194,6 +219,15 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
 
             <button
               className="btn-soft"
+              onClick={() => setShowAIScanner(true)}
+              style={{ fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              title="Scan Doctor Prescription Slip or Patient ID"
+            >
+              <span>📷 AI Scanner</span>
+            </button>
+
+            <button
+              className="btn-soft"
               onClick={() => setShowAppointmentModal(true)}
             >
               <CalendarDays size={14} />
@@ -227,6 +261,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               notify={notify}
               onRegister={() => setShowRegisterModal(true)}
               onBook={() => setShowAppointmentModal(true)}
+              onPrintToken={handlePrintToken}
             />
           )}
 
@@ -235,7 +270,20 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               refresh={refresh}
               notify={notify}
               onBook={() => setShowAppointmentModal(true)}
+              onPrintToken={handlePrintToken}
             />
+          )}
+
+          {section === 'doctors' && (
+            <div className="card" style={{ padding: 20 }}>
+              <DoctorSlotMatrix
+                onSelectDoctorForBooking={(docName) => {
+                  setRegisteredPatientToBook(null);
+                  setShowAppointmentModal(true);
+                  notify(`Booking consultation for ${docName}`);
+                }}
+              />
+            </div>
           )}
 
           {section === 'appointments' && (
@@ -263,14 +311,20 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
       {/* Global Modals */}
       {showRegisterModal && (
         <PatientRegistrationModal
-          onClose={() => setShowRegisterModal(false)}
+          initialData={prefilledPatient}
+          onClose={() => {
+            setShowRegisterModal(false);
+            setPrefilledPatient(null);
+          }}
           onSaved={p => {
             setShowRegisterModal(false);
+            setPrefilledPatient(null);
             setRefresh(r => r + 1);
             notify(`Patient ${p.name} registered with ID ${p.patientId}`);
           }}
           onBookAppt={p => {
             setShowRegisterModal(false);
+            setPrefilledPatient(null);
             setRegisteredPatientToBook(p);
             setShowAppointmentModal(true);
           }}
@@ -293,6 +347,27 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
         />
       )}
 
+      {showAIScanner && (
+        <ReceptionAIScannerModal
+          onClose={() => setShowAIScanner(false)}
+          onAutoFill={(extracted) => {
+            setShowAIScanner(false);
+            setPrefilledPatient(extracted);
+            setShowRegisterModal(true);
+            notify(`AI extracted details for ${extracted.name}`);
+          }}
+        />
+      )}
+
+      {printAppointment && (
+        <OPTokenPrintModal
+          appointment={printAppointment}
+          tokenIndex={printTokenIndex}
+          roomNumber={getDoctorRoom(printAppointment.doctorName)}
+          onClose={() => setPrintAppointment(null)}
+        />
+      )}
+
       {toast && (
         <div className="toast">
           <CheckCircle2 size={18} />
@@ -310,7 +385,8 @@ function OverviewSection({
   go,
   notify,
   onRegister,
-  onBook
+  onBook,
+  onPrintToken
 }: {
   user: User;
   refresh: number;
@@ -318,6 +394,7 @@ function OverviewSection({
   notify: (s: string) => void;
   onRegister: () => void;
   onBook: () => void;
+  onPrintToken?: (a: Appointment, idx?: number) => void;
 }) {
   const [data, setData] = useState<Dashboard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -361,7 +438,8 @@ function OverviewSection({
   const handleQuickCheckIn = async (a: Appointment) => {
     try {
       await api.updateAppointment(a.id, { status: 'Checked In' });
-      notify(`${a.patientName} checked in successfully`);
+      notify(`${a.patientName} checked in. Opening token slip.`);
+      onPrintToken?.(a, 1);
       loadData();
     } catch (e) {
       notify((e as Error).message);
@@ -491,14 +569,23 @@ function OverviewSection({
                       </button>
                     )}
                     {['Checked In', 'Waiting', 'Checked in'].includes(a.status) && (
-                      <button
-                        className="btn-primary small-btn"
-                        onClick={() => handleCallIn(a)}
-                        title="Send patient into consultation"
-                      >
-                        <Stethoscope size={13} />
-                        <span>Call In</span>
-                      </button>
+                      <>
+                        <button
+                          className="btn-secondary small-btn"
+                          onClick={() => onPrintToken?.(a)}
+                          title="Print OPD Thermal Token Slip"
+                        >
+                          <span>🖨️ Token</span>
+                        </button>
+                        <button
+                          className="btn-primary small-btn"
+                          onClick={() => handleCallIn(a)}
+                          title="Send patient into consultation"
+                        >
+                          <Stethoscope size={13} />
+                          <span>Call In</span>
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -588,11 +675,13 @@ function OverviewSection({
 function QueueSection({
   refresh,
   notify,
-  onBook
+  onBook,
+  onPrintToken
 }: {
   refresh: number;
   notify: (s: string) => void;
   onBook: () => void;
+  onPrintToken: (a: Appointment, idx: number) => void;
 }) {
   const [items, setItems] = useState<Appointment[]>([]);
   const [tick, setTick] = useState(0);
@@ -691,6 +780,9 @@ function QueueSection({
                 return (
                   <div className="queue-row" key={a.id}>
                     <span className="queue-number">#{String(i + 1).padStart(2, '0')}</span>
+                    <span className="mono" style={{ fontSize: 11, fontWeight: 700, padding: '2px 6px', border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)' }}>
+                      {getDoctorRoom(a.doctorName)}
+                    </span>
                     <div className="avatar">{initials(a.patientName)}</div>
                     <div className="row-main">
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -713,6 +805,14 @@ function QueueSection({
                     </span>
 
                     <div className="row-actions">
+                      <button
+                        className="btn-secondary small-btn"
+                        onClick={() => onPrintToken(a, i + 1)}
+                        title="Print OPD Thermal Token & Wristband Slip"
+                      >
+                        <span>🖨️ Slip</span>
+                      </button>
+
                       <button
                         className="btn-primary small-btn"
                         onClick={() => handleStatusChange(a, 'In Consultation')}
@@ -1453,24 +1553,46 @@ function PatientDrawer({
 
 // ─── PATIENT REGISTRATION MODAL ─────────────────────────────────────────────
 function PatientRegistrationModal({
+  initialData,
   onClose,
   onSaved,
   onBookAppt
 }: {
+  initialData?: ExtractedReceptionData | null;
   onClose: () => void;
   onSaved: (p: Patient) => void;
   onBookAppt: (p: Patient) => void;
 }) {
   const [form, setForm] = useState({
-    name: '',
-    dob: '',
-    phone: '',
+    name: initialData?.name || '',
+    dob: initialData?.dob || '',
+    phone: initialData?.phone || '',
     email: '',
-    emergencyContact: ''
+    emergencyContact: initialData?.emergencyContact || ''
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [duplicates, setDuplicates] = useState<Patient[]>([]);
+  const [liveMatches, setLiveMatches] = useState<Patient[]>([]);
+
+  // Smart Live Duplicate Check while typing
+  useEffect(() => {
+    const q = (form.phone.trim().length > 5 ? form.phone.trim() : form.name.trim().length > 3 ? form.name.trim() : '');
+    if (!q) {
+      setLiveMatches([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      api.patients(q).then((res) => {
+        const matches = res.filter(p =>
+          (form.phone && p.phone === form.phone) ||
+          (form.name && p.name.toLowerCase() === form.name.toLowerCase())
+        );
+        setLiveMatches(matches);
+      }).catch(() => {});
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [form.name, form.phone]);
 
   const update = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm({ ...form, [k]: e.target.value });
@@ -1594,6 +1716,25 @@ function PatientRegistrationModal({
         </div>
 
         <form className="form-grid" onSubmit={submit}>
+          {liveMatches.length > 0 && (
+            <div className="alert warning span-2" style={{ marginBottom: 12, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+              <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 2 }} />
+              <div style={{ flex: 1 }}>
+                <strong style={{ display: 'block' }}>⚠️ Existing Patient Record Detected ({liveMatches.length} match)</strong>
+                <p style={{ margin: '2px 0 6px', fontSize: 12 }}>
+                  "{liveMatches[0].name}" · UHID: <span className="mono font-bold">{liveMatches[0].patientId}</span> · Phone: {liveMatches[0].phone}
+                </p>
+                <button
+                  type="button"
+                  className="btn-secondary small-btn"
+                  onClick={() => onBookAppt(liveMatches[0])}
+                >
+                  Use Existing File & Book Appointment →
+                </button>
+              </div>
+            </div>
+          )}
+
           <label className="span-2">
             Full Legal Name
             <input

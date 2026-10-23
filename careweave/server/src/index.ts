@@ -6,6 +6,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
+import helmet from 'helmet';
 import { extractWithClaude, ScanError } from './claudeScan.js';
 import { buildSeed, ensureSeed } from './seed.js';
 
@@ -13,8 +14,32 @@ const app = express();
 const PORT = Number(process.env.PORT || 4000);
 const DATA = path.resolve('data/careweave.json');
 
+app.use(helmet());
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173' }));
 app.use(express.json({ limit: '14mb' })); // 10 MB scan images arrive base64-encoded
+
+// Small in-memory limiter: enough to slow password guessing and runaway uploads on one server.
+function rateLimit(windowMs: number, max: number, keyOf: (req: any) => string) {
+  const hits = new Map<string, { n: number; reset: number }>();
+  return (req: any, res: any, next: any) => {
+    const k = keyOf(req);
+    const t = Date.now();
+    const h = hits.get(k);
+    if (!h || h.reset < t) {
+      hits.set(k, { n: 1, reset: t + windowMs });
+      if (hits.size > 5000) for (const [key, v] of hits) if (v.reset < t) hits.delete(key);
+      return next();
+    }
+    if (h.n >= max) {
+      res.setHeader('Retry-After', String(Math.ceil((h.reset - t) / 1000)));
+      return res.status(429).json({ error: 'Too many attempts. Wait a few minutes and try again.' });
+    }
+    h.n++;
+    next();
+  };
+}
+const loginLimit = rateLimit(15 * 60 * 1000, 10, (r) => `${r.ip}|${String(r.body?.email || '').toLowerCase()}`);
+const uploadLimit = rateLimit(60 * 1000, 20, (r) => `${r.user?.id || r.ip}`);
 
 let db: any;
 let mongoConnected = false;
@@ -136,7 +161,7 @@ app.get('/api/health', (_, res) =>
 );
 
 // Sign in
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', loginLimit, async (req, res) => {
   const { email, password } = req.body || {};
   const u = db.users.find((x: any) => x.email === email);
   if (!u || !(await bcrypt.compare(String(password || ''), u.passwordHash))) {
@@ -144,11 +169,11 @@ app.post('/api/auth/login', async (req, res) => {
   }
   const token = crypto.randomBytes(32).toString('hex');
   sessions.set(tokenKey(token), { userId: u.id, expires: Date.now() + 8 * 60 * 60 * 1000 });
-  audit({ user: u }, 'login', 'session', u.id, 'Successful receptionist sign-in');
+  audit({ user: u }, 'login', 'session', u.id, `Successful ${u.role} sign-in`);
   await save();
   res.json({
     token,
-    user: { id: u.id, name: u.name, email: u.email, role: u.role, facility: u.facility }
+    user: { id: u.id, name: u.name, email: u.email, role: u.role, facility: u.facility, permissions: u.permissions || [] }
   });
 });
 
@@ -160,7 +185,8 @@ app.get('/api/me', (req: any, res) =>
     name: req.user.name,
     email: req.user.email,
     role: req.user.role,
-    facility: req.user.facility
+    facility: req.user.facility,
+    permissions: req.user.permissions || []
   })
 );
 
@@ -183,7 +209,7 @@ app.get('/api/dashboard', (req: any, res) => {
 });
 
 // Patient endpoints
-app.get('/api/patients', roles('receptionist', 'doctor', 'lab'), (req: any, res) => {
+app.get('/api/patients', roles('receptionist', 'doctor'), (req: any, res) => {
   const q = String(req.query.query || '').toLowerCase();
   const rows = db.patients.filter(
     (p: any) => !q || [p.name, p.patientId, p.phone, p.email].some(v => String(v || '').toLowerCase().includes(q))
@@ -381,33 +407,74 @@ app.get('/api/lab/orders/:id', roles('lab', 'doctor'), (req: any, res) => {
   res.json({ data: o });
 });
 
-app.post('/api/lab/orders', roles('lab', 'doctor', 'receptionist'), async (req: any, res) => {
+const ageFromDob = (dob: string) => {
+  const d = new Date(dob);
+  if (isNaN(+d)) return 0;
+  const n = new Date();
+  let a = n.getFullYear() - d.getFullYear();
+  if (n.getMonth() < d.getMonth() || (n.getMonth() === d.getMonth() && n.getDate() < d.getDate())) a--;
+  return Math.max(0, a);
+};
+const OPEN_VISIT = (a: any) => !['Cancelled', 'No Show'].includes(a.status);
+const can = (req: any, permission: string) => (req.user.permissions || []).includes(permission);
+
+// The lab sees only what it needs to order a test: identifier, name, age and visit slots. No contact details, no visit reasons.
+app.get('/api/lab/patients', roles('lab'), (req: any, res) => {
+  const q = text(req.query.query, 60).toLowerCase();
+  if (q.length < 2) return res.json({ data: [] });
+  const rows = db.patients
+    .filter((p: any) => String(p.patientId).toLowerCase().includes(q) || String(p.name).toLowerCase().includes(q))
+    .slice(0, 8)
+    .map((p: any) => ({
+      patientId: p.patientId,
+      name: p.name,
+      ageYears: ageFromDob(p.dob),
+      encounters: db.appointments
+        .filter((a: any) => a.patientId === p.id && OPEN_VISIT(a))
+        .sort((x: any, y: any) => `${y.date} ${y.time}`.localeCompare(`${x.date} ${x.time}`))
+        .slice(0, 5)
+        .map((a: any) => ({ id: a.id, date: a.date, time: a.time, doctorName: a.doctorName }))
+    }));
+  audit(req, 'search', 'labPatient', 'lookup', `${rows.length} matches`);
+  res.json({ data: rows });
+});
+
+app.post('/api/lab/orders', roles('lab', 'doctor'), async (req: any, res) => {
   const b = req.body || {};
   const testName = text(b.testName);
-  const patientName = text(b.patientName);
   const orderingDoctor = text(b.orderingDoctor);
-  if (!testName || !patientName || !orderingDoctor) {
-    return res.status(400).json({ error: 'Patient name, test and ordering doctor are required' });
-  }
-  const age = Number(b.patientAge);
-  if (!Number.isFinite(age) || age < 0 || age > 130) return res.status(400).json({ error: 'Enter a valid patient age' });
+  if (!testName || !orderingDoctor) return res.status(400).json({ error: 'The test and the ordering doctor are required' });
   if (!['M', 'F', 'O'].includes(b.patientGender)) return res.status(400).json({ error: 'Select the patient gender' });
 
-  // A registered patient id is linked to the real record; anything else stays a free-text lab requisition.
-  const registered = b.patientId ? patientById(String(b.patientId)) : null;
+  const external = b.external === true;
+  let patient: any = null;
+  let encounterId = '';
+  if (!external) {
+    patient = b.patientId ? patientById(String(b.patientId)) : null;
+    if (!patient) return res.status(400).json({ error: 'Select a registered patient, or mark this as an external requisition' });
+    const visit = db.appointments.find((a: any) => a.id === b.encounterId && a.patientId === patient.id && OPEN_VISIT(a));
+    if (!visit) return res.status(400).json({ error: 'Select one of this patient\'s visits (encounters) for the order' });
+    encounterId = visit.id;
+  }
+  const patientName = patient ? patient.name : text(b.patientName);
+  const age = patient ? ageFromDob(patient.dob) : Number(b.patientAge);
+  if (!patientName) return res.status(400).json({ error: 'Patient name is required' });
+  if (!Number.isFinite(age) || age < 0 || age > 130) return res.status(400).json({ error: 'Enter a valid patient age' });
+
   const orderId = `ORD-${Date.now().toString().slice(-7)}${crypto.randomInt(10, 99)}`;
   const o = {
     id: orderId,
-    patientId: registered ? registered.patientId : text(b.patientId, 40) || `PT-${orderId.slice(4)}`,
-    registeredPatientRef: registered ? registered.id : undefined,
-    patientName: registered ? registered.name : patientName,
+    external,
+    patientId: patient ? patient.patientId : text(b.patientId, 40) || `EXT-${orderId.slice(4)}`,
+    registeredPatientRef: patient ? patient.id : undefined,
+    patientName,
     patientAge: age,
     patientGender: b.patientGender,
     patientUhid: text(b.patientUhid, 40) || undefined,
     visitNo: text(b.visitNo, 40) || undefined,
     opIp: b.opIp === 'IP' ? 'IP' : 'OP',
     referralDoctor: text(b.referralDoctor) || orderingDoctor,
-    encounterId: text(b.encounterId, 40) || `ENC-${orderId.slice(4)}`,
+    encounterId: encounterId || text(b.encounterId, 40) || `EXT-${orderId.slice(4)}`,
     testName,
     department: text(b.department) || undefined,
     orderingDoctor,
@@ -418,52 +485,169 @@ app.post('/api/lab/orders', roles('lab', 'doctor', 'receptionist'), async (req: 
     sampleType: text(b.sampleType) || undefined,
     sampleContainer: text(b.sampleContainer) || undefined,
     handlingNote: text(b.handlingNote, 500) || undefined,
+    amendments: [],
+    attachments: [],
     createdBy: req.user.id
   };
   db.labOrders.push(o);
-  audit(req, 'create', 'labOrder', o.id, `${testName} · ${o.priority}`);
+  audit(req, 'create', 'labOrder', o.id, `${testName} · ${o.priority}${external ? ' · external' : ''}`);
   await save();
   res.status(201).json({ data: o });
 });
 
+const cleanResults = (v: any) =>
+  (Array.isArray(v) ? v.slice(0, 200) : []).map((r: any) => ({
+    parameter: text(r?.parameter, 120),
+    value: text(r?.value, 60),
+    unit: text(r?.unit, 30),
+    referenceRange: text(r?.referenceRange, 120),
+    methodology: text(r?.methodology, 160) || undefined,
+    subGroup: text(r?.subGroup, 120) || undefined,
+    flag: ['normal', 'abnormal', 'critical'].includes(r?.flag) ? r.flag : undefined
+  }));
+const sig = (rs: any[]) => JSON.stringify((rs || []).map((r) => [r.parameter, r.value, r.unit, r.referenceRange]));
+
 app.patch('/api/lab/orders/:id', roles('lab'), async (req: any, res) => {
   const o = db.labOrders.find((x: any) => x.id === req.params.id);
   if (!o) return res.status(404).json({ error: 'Order not found' });
-  const { status } = req.body || {};
+  const b = req.body || {};
+  const status = b.status;
+  const results = b.results !== undefined ? cleanResults(b.results) : undefined;
+  const resultsChanged = results !== undefined && sig(results) !== sig(o.results);
+  const submitted = ['awaiting_verification', 'verified', 'released'].includes(o.status);
+  const t = new Date();
+
+  let observedAt: string | undefined;
+  if (b.observedAt !== undefined) {
+    const d = new Date(b.observedAt);
+    if (isNaN(+d) || d.getTime() > t.getTime() + 5 * 60000) return res.status(400).json({ error: 'The observation time cannot be in the future' });
+    observedAt = d.toISOString();
+  }
+
+  // A change to results that were already submitted is an amendment: reason required, old values kept, re-verification forced.
+  let amendment: any = null;
+  if (resultsChanged && submitted) {
+    if (status) return res.status(400).json({ error: 'Amend the results and change the status in two separate steps' });
+    const reason = text(b.amendReason, 500);
+    if (reason.length < 5) return res.status(400).json({ error: 'Give a reason (at least 5 characters) for changing submitted results' });
+    const before: any[] = o.results || [];
+    const changes = (results as any[])
+      .map((r) => ({ r, old: before.find((x) => x.parameter === r.parameter) }))
+      .filter(({ r, old }) => !old || old.value !== r.value || old.unit !== r.unit)
+      .map(({ r, old }) => ({ parameter: r.parameter, before: old ? { value: old.value, unit: old.unit } : null, after: { value: r.value, unit: r.unit } }));
+    amendment = { id: id('amd'), at: now(), by: req.user.id, byName: req.user.name, reason, statusBefore: o.status, previouslyVerifiedBy: o.verifiedBy || null, changes };
+  } else if (resultsChanged && ['requested', 'collection_pending', 'cancelled', 'recollect_required'].includes(o.status) && status !== 'collected') {
+    return res.status(409).json({ error: 'Collect the sample before entering results' });
+  }
 
   if (status) {
     if (!LAB_STATUSES.includes(status)) return res.status(400).json({ error: 'Unknown status' });
     if (!(LAB_NEXT[o.status] || []).includes(status)) {
       return res.status(409).json({ error: `An order that is "${o.status}" cannot move to "${status}"` });
     }
-    if (['recollect_required', 'cancelled'].includes(status) && !text(req.body.statusReason)) {
+    if (['recollect_required', 'cancelled'].includes(status) && !text(b.statusReason)) {
       return res.status(400).json({ error: 'A reason is required to cancel or request a recollection' });
     }
     if (['awaiting_verification', 'verified', 'released'].includes(status)) {
-      const results = req.body.results ?? o.results;
-      if (!Array.isArray(results) || !results.some((r: any) => text(r?.value))) {
+      const have = results ?? o.results;
+      if (!Array.isArray(have) || !have.some((r: any) => text(r?.value))) {
         return res.status(400).json({ error: 'Enter at least one result before sending for verification' });
       }
     }
+    // Finalising is a separate permission, and never by the person who entered the results.
+    if (o.status === 'awaiting_verification' && ['processing', 'verified', 'released', 'recollect_required'].includes(status)) {
+      if (!can(req, 'verify')) return res.status(403).json({ error: 'Only an account with verification permission can do this' });
+    }
+    if (['verified', 'released'].includes(status) && o.processedById && o.processedById === req.user.id) {
+      return res.status(403).json({ error: 'The person who entered the results cannot verify them. Ask another verifier.' });
+    }
   }
 
+  if (results !== undefined && (resultsChanged || !o.results)) o.results = results;
   for (const k of LAB_EDITABLE) {
-    if (req.body?.[k] !== undefined) o[k] = k === 'results' ? req.body[k] : text(req.body[k], 1000);
+    if (k !== 'results' && b[k] !== undefined) o[k] = text(b[k], 1000);
+  }
+  if (observedAt) o.observedAt = observedAt;
+
+  if (amendment) {
+    o.amendments = [...(o.amendments || []), amendment];
+    o.processedBy = req.user.name;
+    o.processedById = req.user.id;
+    if (['verified', 'released'].includes(o.status)) {
+      o.status = 'awaiting_verification';
+      delete o.verifiedBy; delete o.verifiedAt; delete o.approvedAt;
+      o.reportedAt = now();
+    }
   }
   if (status) {
     o.status = status;
     if (status === 'collected') { o.collectedAt = now(); o.collectedBy = o.collectedBy || req.user.name; }
-    if (['processing', 'awaiting_verification'].includes(status)) o.processedBy = req.user.name;
-    if (status === 'awaiting_verification') o.reportedAt = now();
+    if (['processing', 'awaiting_verification'].includes(status) && o.status !== 'released') { o.processedBy = req.user.name; o.processedById = req.user.id; }
+    if (status === 'awaiting_verification') { o.reportedAt = now(); o.observedAt = observedAt || o.observedAt || now(); }
     if (status === 'verified' || status === 'released') { o.verifiedBy = req.user.name; o.verifiedAt = now(); o.approvedAt = now(); }
     if (!['recollect_required', 'cancelled'].includes(status)) delete o.statusReason;
   }
   o.updatedAt = now();
-  audit(req, status ? `status:${status}` : 'update', 'labOrder', o.id, status ? `${status}${o.statusReason ? ' · ' + o.statusReason : ''}` : 'Fields updated');
+  audit(req, amendment ? 'amend' : status ? `status:${status}` : 'update', 'labOrder', o.id,
+    amendment ? `${amendment.changes.length} value(s) amended · ${amendment.reason}` : status ? `${status}${o.statusReason ? ' · ' + o.statusReason : ''}` : 'Fields updated');
   await save();
   res.json({ data: o });
 });
 
+// ── Report files ────────────────────────────────────────────────────────────
+const UPLOADS = path.resolve('uploads');
+const FILE_TYPES: Record<string, { ext: string; magic: number[] }> = {
+  'application/pdf': { ext: 'pdf', magic: [0x25, 0x50, 0x44, 0x46] },
+  'image/png': { ext: 'png', magic: [0x89, 0x50, 0x4e, 0x47] },
+  'image/jpeg': { ext: 'jpg', magic: [0xff, 0xd8, 0xff] }
+};
+
+app.post('/api/lab/orders/:id/attachments', roles('lab'), uploadLimit, async (req: any, res) => {
+  const o = db.labOrders.find((x: any) => x.id === req.params.id);
+  if (!o) return res.status(404).json({ error: 'Order not found' });
+  if (o.status === 'cancelled') return res.status(409).json({ error: 'This order was cancelled' });
+  const mime = text(req.body?.mimeType, 60);
+  const type = FILE_TYPES[mime];
+  if (!type) return res.status(400).json({ error: 'Attach a PDF, PNG or JPEG file' });
+  const buf = Buffer.from(String(req.body?.data || '').replace(/^data:[^;]+;base64,/, ''), 'base64');
+  if (!buf.length || buf.length > 10 * 1024 * 1024) return res.status(400).json({ error: 'The file must be smaller than 10 MB' });
+  if (!type.magic.every((byte, i) => buf[i] === byte)) return res.status(400).json({ error: 'The file content does not match its type' });
+  const attId = id('att');
+  await fs.mkdir(UPLOADS, { recursive: true });
+  await fs.writeFile(path.join(UPLOADS, `${attId}.${type.ext}`), buf);
+  const meta = {
+    id: attId,
+    name: text(req.body?.name, 120).replace(/[^\w.\- ()]/g, '_') || `report.${type.ext}`,
+    mimeType: mime,
+    size: buf.length,
+    sha256: crypto.createHash('sha256').update(buf).digest('hex'),
+    uploadedBy: req.user.name,
+    uploadedAt: now()
+  };
+  o.attachments = [...(o.attachments || []), meta];
+  audit(req, 'attach', 'labOrder', o.id, `${meta.name} (${Math.round(buf.length / 1024)} KB)`);
+  await save();
+  res.status(201).json({ data: o });
+});
+
+// Files are served only to signed-in lab and doctor users, never from a public folder.
+app.get('/api/lab/orders/:id/attachments/:attId', roles('lab', 'doctor'), async (req: any, res) => {
+  const o = db.labOrders.find((x: any) => x.id === req.params.id);
+  const meta = o?.attachments?.find((a: any) => a.id === req.params.attId);
+  if (!meta) return res.status(404).json({ error: 'File not found' });
+  const ext = FILE_TYPES[meta.mimeType].ext;
+  try {
+    const buf = await fs.readFile(path.join(UPLOADS, `${meta.id}.${ext}`));
+    audit(req, 'download', 'labOrder', o.id, meta.name);
+    await save();
+    res.setHeader('Content-Type', meta.mimeType);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Disposition', `inline; filename="${meta.name}"`);
+    res.send(buf);
+  } catch {
+    res.status(404).json({ error: 'File not found' });
+  }
+});
 
 // ── Report scanning (Gemini runs on the server; the key never reaches the browser) ─────────────
 const EXTRACT_PROMPT = `You are a clinical laboratory document parser.
@@ -475,7 +659,7 @@ Use "" or 0 for anything not printed. Never invent a value, name or range. Retur
 
 const scanCache = new Map<string, unknown>(); // identical uploads reuse the result instead of spending quota
 
-app.post('/api/lab/extract', roles('lab'), async (req: any, res) => {
+app.post('/api/lab/extract', roles('lab'), uploadLimit, async (req: any, res) => {
   // Claude is used when ANTHROPIC_API_KEY is set (unless SCAN_PROVIDER=gemini); Gemini is the fallback.
   const useClaude = !!process.env.ANTHROPIC_API_KEY && process.env.SCAN_PROVIDER !== 'gemini';
   const key = process.env.GEMINI_API_KEY as string;
@@ -574,10 +758,16 @@ const start = async () => {
   // Databases seeded before a role existed still need that role's demo account.
   const seeded = (await buildSeed()).users;
   const missing = seeded.filter((u: any) => !db.users.some((x: any) => x.email === u.email));
-  if (missing.length) {
-    db.users.push(...missing);
-    await save();
+  let usersChanged = missing.length > 0;
+  db.users.push(...missing);
+  for (const seed of (await buildSeed()).users) {
+    const existing = db.users.find((u: any) => u.email === seed.email);
+    if (existing && JSON.stringify(existing.permissions || []) !== JSON.stringify((seed as any).permissions || [])) {
+      existing.permissions = (seed as any).permissions || [];
+      usersChanged = true;
+    }
   }
+  if (usersChanged) await save();
   app.listen(PORT, () =>
     console.log(`CareWeave API listening on http://localhost:${PORT} [DB: ${mongoConnected ? 'MongoDB Atlas' : 'Local JSON'}]`)
   );
