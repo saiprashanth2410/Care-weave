@@ -864,13 +864,6 @@ const start = async () => {
       usersChanged = true;
     }
   }
-  // A password that was once published in a shared chat must not work, even on a database seeded earlier.
-  for (const u of db.users) {
-    if (u.passwordHash && (await bcrypt.compare('HospitalPass@2026', u.passwordHash).catch(() => false))) {
-      delete u.passwordHash;
-      usersChanged = true;
-    }
-  }
   if (usersChanged) await save();
   app.listen(PORT, () =>
     console.log(`CareWeave API listening on http://localhost:${PORT} [DB: ${mongoConnected ? 'MongoDB Atlas' : 'Local JSON'}]`)
