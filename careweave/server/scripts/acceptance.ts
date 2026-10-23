@@ -4,8 +4,16 @@ import { spawn } from 'node:child_process';
 import mongoose from 'mongoose';
 import 'dotenv/config';
 
-const PORT = 4100;
-const BASE = `http://localhost:${PORT}`;
+import net from 'node:net';
+
+// Ports are picked free at run time, so a busy 4100 never stops the suite.
+const freePort = () => new Promise<number>((resolve, reject) => {
+  const srv = net.createServer();
+  srv.once('error', reject);
+  srv.listen(0, () => { const { port } = srv.address() as net.AddressInfo; srv.close(() => resolve(port)); });
+});
+let PORT = 0;
+let BASE = '';
 const DB = 'careweave_test';
 const URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017';
 let failed = 0;
@@ -31,7 +39,7 @@ const login = async (who: string) => (await call('POST', '/api/auth/login', unde
 
 
 async function firebaseModeChecks() {
-  const port = 4101;
+  const port = await freePort();
   const base = `http://localhost:${port}`;
   const server = spawn('npx', ['tsx', 'src/index.ts'], { env: { ...process.env, PORT: String(port), MONGODB_URI: URI, MONGODB_DB: `${DB}_fb`, FIREBASE_PROJECT_ID: 'acceptance-test-project', ALLOW_LOCAL_LOGIN: '', FIREBASE_REQUIRE_VERIFIED_EMAIL: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
   await new Promise<void>((resolve, reject) => {
@@ -60,6 +68,8 @@ async function firebaseModeChecks() {
 }
 
 async function main() {
+  PORT = await freePort();
+  BASE = `http://localhost:${PORT}`;
   const server = spawn('npx', ['tsx', 'src/index.ts'], { env: { ...process.env, PORT: String(PORT), MONGODB_URI: URI, MONGODB_DB: DB, CLIENT_ORIGIN: 'http://localhost:5173', FIREBASE_PROJECT_ID: '', ALLOW_LOCAL_LOGIN: '', FIREBASE_REQUIRE_VERIFIED_EMAIL: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
   await new Promise<void>((resolve, reject) => {
     const t = setTimeout(() => reject(new Error('server did not start')), 30000);
@@ -125,6 +135,32 @@ async function main() {
     check('a different verifier can release', (await patch(ord.id, ver, { status: 'released' })).json.data?.status === 'released');
     const re = (await patch(ord.id, lab, { results: [{ ...rs[0], value: '190' }], amendReason: 'Typo correction' })).json.data;
     check('amending a released result forces re-verification', re?.status === 'awaiting_verification' && !re?.verifiedBy && re?.amendments?.length === 2);
+
+    // ---- medical edge cases ----
+    const edge = (await call('POST', '/api/lab/orders', lab, { ...base, external: true, patientName: 'Edge Case', patientAge: 50 })).json.data;
+    await patch(edge.id, lab, { status: 'collected' });
+    const bad = async (parameter: string, value: string, unit: string) =>
+      (await patch(edge.id, lab, { results: [{ parameter, value, unit, referenceRange: '' }] })).status;
+    check('negative glucose is rejected', (await bad('Glucose', '-50', 'mg/dL')) === 400);
+    check('hemoglobin of 999 is rejected', (await bad('Hemoglobin', '999', 'g/dL')) === 400);
+    check('a real but extreme glucose is accepted', (await bad('Glucose', '612', 'mg/dL')) === 200);
+
+    const slot = { doctorId: docId, date: today, time: '15:45', reason: 'Race check' };
+    const two = await Promise.all(['Race One', 'Race Two'].map(async (n, i) => {
+      const p = (await call('POST', '/api/patients', rec, { name: n, dob: `199${i}-01-0${i + 1}`, phone: `+1 415 555 01${i}${i}`, _forceCreate: true })).json;
+      return call('POST', '/api/appointments', rec, { ...slot, patientId: p.id });
+    }));
+    check('two receptionists booking the same doctor slot at once: exactly one wins', two.map((r) => r.status).sort().join() === '201,409', two.map((r) => r.status).join());
+
+    const p1 = (await call('GET', `/api/patients?query=${encodeURIComponent(pat.patientId)}`, rec)).json[0];
+    const first = await call('PATCH', `/api/patients/${pat.id}`, rec, { phone: '+1 415 555 0111', rev: p1.rev });
+    const stale = await call('PATCH', `/api/patients/${pat.id}`, rec, { phone: '+1 415 555 0222', rev: p1.rev });
+    check('an edit made on a stale copy is refused, not silently applied', first.status === 200 && stale.status === 409, `${first.status}/${stale.status}`);
+    const paged = await call('GET', '/api/patients?limit=1', rec);
+    check('patient directory is paged and reports its total', paged.json.length === 1 && Number(paged.headers.get('x-total-count')) >= 3);
+
+    const garbled = await call('POST', '/api/lab/extract', lab, { mimeType: 'image/png', data: '!!not-base64!!' });
+    check('a garbage upload to the scanner returns an error, not a crash', garbled.status >= 400 && garbled.status < 600 && (await call('GET', '/api/health')).status === 200);
 
     // ---- report files ----
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64').toString('base64');
@@ -252,7 +288,12 @@ async function main() {
   }
 }
 
-await mongoose.connect(URI, { dbName: DB });
+try {
+  await mongoose.connect(URI, { dbName: DB, serverSelectionTimeoutMS: 5000 });
+} catch {
+  console.error(`Cannot reach MongoDB at ${URI.replace(/\/\/.*@/, '//')}. Start it, or set MONGODB_URI, then run again.`);
+  process.exit(2);
+}
 try {
   await main();
   await firebaseModeChecks();

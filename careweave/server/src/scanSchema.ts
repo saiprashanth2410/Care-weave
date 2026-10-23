@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-// What a scanned laboratory report becomes, whichever provider read it.
+// Shape of a scanned laboratory report.
 export const Report = z.object({
   patientName: z.string(),
   patientUhid: z.string(),
@@ -45,7 +45,7 @@ Return JSON only, of exactly this shape:
 
 type Inside = 'low' | 'high' | 'in' | 'unknown';
 
-// Compares a printed value with its printed range ("< 200", "> 40", "70 - 110", "≥ 5").
+/** Compares a value with its printed reference range ("< 200", "> 40", "70 - 110", "≥ 5"). */
 export function checkRange(value: string, range: string): Inside {
   const v = parseFloat(value.replace(/,/g, '').match(/-?\d+(\.\d+)?/)?.[0] ?? '');
   if (Number.isNaN(v)) return 'unknown';
@@ -62,8 +62,10 @@ export function checkRange(value: string, range: string): Inside {
 export type ScannedResult = Omit<z.infer<typeof Report>['results'][number], 'unclear'> & { needsCheck: boolean; checkReason: string };
 export type ScannedReport = Omit<z.infer<typeof Report>, 'results'> & { results: ScannedResult[]; warnings: string[] };
 
-// The reviewer sees every flagged row first. A row needs a second look when the model was unsure,
-// when a printed value is missing, or when the printed flag disagrees with the printed range.
+/**
+ * Marks rows a person must check: the model was unsure, no value was read, or the report's own
+ * flag contradicts its reference range.
+ */
 export function normalize(parsed: z.infer<typeof Report>): ScannedReport {
   const warnings: string[] = [];
   const results = parsed.results

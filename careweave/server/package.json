@@ -9,6 +9,7 @@
     "seed": "tsx src/seed.ts",
     "import-medicines": "tsx scripts/import-medicines.ts",
     "check-db": "tsx src/check-db.ts",
+    "test": "tsx --test src/*.test.ts",
     "test:acceptance": "tsx scripts/acceptance.ts"
   },
   "type": "module",

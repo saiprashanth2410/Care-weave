@@ -27,6 +27,7 @@ export type Patient = {
   emergencyContact?: string;
   createdAt: string;
   risk?: string;
+  rev?: number;
 };
 
 export type Doctor = {
