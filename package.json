@@ -1,0 +1,12 @@
+{
+  "name": "hacktober-fest",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "cd medlink && env -u INIT_CWD npm run dev",
+    "build": "cd medlink && env -u INIT_CWD npm run build",
+    "start": "cd medlink && env -u INIT_CWD npm run start",
+    "lint": "cd medlink && env -u INIT_CWD npm run lint"
+  }
+}
+
