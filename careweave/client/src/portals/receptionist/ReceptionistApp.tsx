@@ -214,7 +214,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700 }}
               title="Open Laboratory & Diagnostic Reports"
             >
-              <span>🔬 Laboratory Portal →</span>
+              <span>Laboratory portal</span>
             </Link>
 
             <button
@@ -223,7 +223,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               style={{ fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}
               title="Scan Doctor Prescription Slip or Patient ID"
             >
-              <span>📷 AI Scanner</span>
+              <span>AI scanner</span>
             </button>
 
             <button

@@ -115,7 +115,7 @@ export default function DiagnosticReportView({ order, onClose, onPrint, facility
               <div className="flex">
                 <span className="w-24 font-bold text-slate-700">Age / Gender</span>
                 <span className="text-slate-900">
-                  : {order.patientAge || '—'} Year(s) / {order.patientGender === 'M' ? 'Male' : order.patientGender === 'F' ? 'Female' : 'Other'}
+                  : {order.patientAge || '—'} Year(s) / {order.patientGender === 'M' ? 'Male' : order.patientGender === 'F' ? 'Female' : order.patientGender === 'O' ? 'Other' : 'Not recorded'}
                 </span>
               </div>
               <div className="flex">
