@@ -3,10 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "cd medlink && env -u INIT_CWD npm run dev",
-    "build": "cd medlink && env -u INIT_CWD npm run build",
-    "start": "cd medlink && env -u INIT_CWD npm run start",
-    "lint": "cd medlink && env -u INIT_CWD npm run lint"
+    "dev": "cd careweave/client && npm run dev",
+    "build": "cd careweave/client && npm run build",
+    "lint": "cd careweave/client && npm run lint",
+    "preview": "cd careweave/client && npm run preview",
+    "medlink:dev": "cd medlink && env -u INIT_CWD npm run dev",
+    "medlink:build": "cd medlink && env -u INIT_CWD npm run build"
   }
 }
-
