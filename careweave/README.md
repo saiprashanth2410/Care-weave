@@ -39,7 +39,7 @@ The database starts with these four accounts and nothing else.
 | Variable | Purpose |
 |---|---|
 | `MONGODB_URI`, `MONGODB_DB` | Database. Falls back to `data/careweave.json` if unset. |
-| `GEMINI_API_KEY` | Report scanning with Gemini. Free keys allow about 20 scans a day. |
+| `GEMINI_API_KEY` | Report scanning. Reads with Gemma 4 through the Gemini API, falling back to Gemini Flash if Gemma is busy. `GEMINI_MODEL` picks the model tried first. Free keys allow about 20 scans a day. |
 | `CLIENT_ORIGIN`, `PORT` | CORS origin and port. |
 
 Keys stay on the server. Never put them in `client/`.
@@ -71,10 +71,12 @@ All routes need `Authorization: Bearer <token>` from `POST /api/auth/login`.
 ## Tests
 
 ```bash
-cd server && npm run test:acceptance
+cd server && npm test                 # unit tests: lab value limits, scan checks, scanner against bad AI output, medicine parsing
+cd server && npm run test:acceptance  # end-to-end, needs MongoDB
+cd client && npm test                 # scanner screen and service (Vitest, Testing Library)
 ```
 
-Starts a throwaway server and database (`careweave_test`, port 4100), runs 70 checks (roles, doctor access, patient link, lab workflow, verification permission, amendments, file upload, timeline, prescriptions, external import matching, duplicates, conflicts, reviewer decisions, audit, login rate limit) and drops the database.
+The acceptance run starts a throwaway server on a free port with its own database (`careweave_test`), runs about 100 checks (roles, doctor access, patient link, lab workflow, verification permission, amendments, impossible lab values, two receptionists booking one slot at once, stale edits, file upload, timeline, prescriptions, external import matching, duplicates, conflicts, reviewer decisions, audit, login rate limit) and drops the database. If MongoDB is not reachable it stops at once and says so.
 
 ## Doctor portal and record reconciliation
 

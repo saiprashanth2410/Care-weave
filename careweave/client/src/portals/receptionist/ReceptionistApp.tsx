@@ -1821,7 +1821,8 @@ function EditPatientModal({
     setBusy(true);
     setError('');
     try {
-      const res = await api.updatePatient(patient.id, form);
+      // rev lets the server refuse the save if someone else changed this patient while the form was open.
+      const res = await api.updatePatient(patient.id, { ...form, rev: patient.rev ?? 0 });
       onSaved(res);
     } catch (e: any) {
       setError(e.message || 'Failed to update demographics');

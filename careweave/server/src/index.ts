@@ -10,11 +10,11 @@ import mongoose from 'mongoose';
 import helmet from 'helmet';
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { extractWithGemini } from './geminiScan.js';
-import { ScanError } from './scanSchema.js';
+import { registerScanRoutes } from './scanRoutes.js';
+import { implausibleValue } from './labRules.js';
 import { runScenario } from './scenario.js';
 import { registerDoctorRoutes } from './doctor.js';
-import { importMedicines, searchMedicines } from './medicines.js';
+import { importMedicines } from './medicines.js';
 import { buildSeed, ensureSeed } from './seed.js';
 
 // Everything the server reads or writes lives next to the server code, whichever folder it was started from.
@@ -77,9 +77,22 @@ async function loadFromMongo() {
   return out;
 }
 
+// Transactions need a replica set (Atlas always is). A standalone local mongod cannot run them.
+let txSupported: boolean | undefined;
+async function canTransact() {
+  if (txSupported === undefined) {
+    const hello: any = await mongoose.connection.db!.admin().command({ hello: 1 });
+    txSupported = !!(hello.setName || hello.msg === 'isdbgrid');
+  }
+  return txSupported;
+}
+
+// One save is one unit: every changed document across every collection is written together, or (on a replica set)
+// not at all. The "last written" snapshot only moves forward after the write succeeded, so a failed save is retried
+// with the same changes on the next one.
 async function saveToMongo() {
+  const plan: { c: string; changed: any[]; removed: string[]; after: Map<string, string> }[] = [];
   for (const c of COLLECTIONS) {
-    const coll = mongoose.connection.db!.collection(c);
     const docs: any[] = db[c] || [];
     const before = written.get(c) ?? new Map<string, string>();
     const after = new Map<string, string>();
@@ -90,9 +103,36 @@ async function saveToMongo() {
       if (before.get(d.id) !== json) changed.push(d);
     }
     const removed = [...before.keys()].filter((k) => !after.has(k));
-    if (changed.length) await coll.bulkWrite(changed.map((d) => ({ replaceOne: { filter: { id: d.id }, replacement: d, upsert: true } })));
-    if (removed.length) await coll.deleteMany({ id: { $in: removed } });
-    written.set(c, after);
+    plan.push({ c, changed, removed, after });
+  }
+  const apply = async (session?: any) => {
+    for (const { c, changed, removed } of plan) {
+      const coll = mongoose.connection.db!.collection(c);
+      if (changed.length) await coll.bulkWrite(changed.map((d) => ({ replaceOne: { filter: { id: d.id }, replacement: d, upsert: true } })), { session });
+      if (removed.length) await coll.deleteMany({ id: { $in: removed } }, { session });
+    }
+  };
+  if (plan.some((p) => p.changed.length || p.removed.length)) {
+    if (await canTransact()) {
+      const session = mongoose.connection.getClient().startSession();
+      try { await session.withTransaction(() => apply(session)); } finally { await session.endSession(); }
+    } else {
+      await apply();
+    }
+  }
+  for (const p of plan) written.set(p.c, p.after);
+}
+
+// Indexes the lookups rely on. Failure here is not fatal: the server still works, only slower.
+async function ensureIndexes() {
+  try {
+    const d = mongoose.connection.db!;
+    for (const c of COLLECTIONS) await d.collection(c).createIndex({ id: 1 }, { unique: true });
+    await d.collection('patients').createIndex({ patientId: 1 });
+    await d.collection('appointments').createIndex({ doctorId: 1, date: 1, time: 1 });
+    await d.collection('labOrders').createIndex({ status: 1 });
+  } catch (err: any) {
+    console.warn('Could not create indexes:', err?.message);
   }
 }
 
@@ -105,7 +145,10 @@ function save() {
   saving = saving.then(async () => {
     if (mongoConnected) return saveToMongo();
     await fs.mkdir(path.dirname(DATA), { recursive: true });
-    await fs.writeFile(DATA, JSON.stringify(db, null, 2));
+    // Write a temp file, then rename it over the real one. A crash mid-write leaves the old file intact.
+    const tmp = `${DATA}.${process.pid}.tmp`;
+    await fs.writeFile(tmp, JSON.stringify(db, null, 2));
+    await fs.rename(tmp, DATA);
   });
   return saving;
 }
@@ -170,7 +213,8 @@ function adminPatientView(p: any) {
     email: p.email,
     emergencyContact: p.emergencyContact,
     createdAt: p.createdAt,
-    risk: p.risk
+    risk: p.risk,
+    rev: p.rev || 0
   };
 }
 
@@ -292,7 +336,11 @@ app.get('/api/patients', roles('receptionist', 'doctor'), (req: any, res) => {
     (p: any) => (!linked || linked.has(p.id)) && (!q || [p.name, p.patientId, p.phone, p.email].some(v => String(v || '').toLowerCase().includes(q)))
   );
   audit(req, 'search', 'patient', 'directory', q ? 'Search by permitted identifiers' : 'Open patient directory');
-  res.json(rows.map(adminPatientView));
+  // Paged so a large directory never goes to the browser in one response.
+  const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 200));
+  const offset = Math.max(0, Number(req.query.offset) || 0);
+  res.setHeader('X-Total-Count', String(rows.length));
+  res.json(rows.slice(offset, offset + limit).map(adminPatientView));
 });
 
 app.post('/api/patients', roles('receptionist', 'doctor', 'lab'), async (req: any, res) => {
@@ -352,7 +400,10 @@ app.get('/api/patients/:id/admin', roles('receptionist', 'doctor', 'lab'), (req:
 app.patch('/api/patients/:id', roles('receptionist'), async (req: any, res) => {
   const p = patientById(req.params.id);
   if (!p) return res.status(404).json({ error: 'Patient not found' });
-  const { name, phone, email, emergencyContact } = req.body || {};
+  const { name, phone, email, emergencyContact, rev } = req.body || {};
+  // A form opened before someone else saved must not overwrite their change.
+  if (rev !== undefined && Number(rev) !== (p.rev || 0)) return res.status(409).json({ error: 'This patient was changed by someone else while you were editing. Reload and try again.' });
+  p.rev = (p.rev || 0) + 1;
   if (name) p.name = String(name).trim();
   if (phone) p.phone = String(phone).trim();
   if (email !== undefined) p.email = email || undefined;
@@ -395,6 +446,9 @@ app.post('/api/appointments', roles('receptionist', 'doctor'), async (req: any, 
   if (conflict) return res.status(409).json({ error: `Patient already has an appointment at ${time} on ${date}` });
 
   const doctor = doctorId ? db.users.find((u: any) => u.id === doctorId) : db.users.find((u: any) => u.role === 'doctor');
+  // Checked and added with no await in between, so two requests at the same moment cannot both take the slot.
+  const taken = doctor && db.appointments.find((x: any) => x.doctorId === doctor.id && x.date === date && x.time === time && !['Cancelled', 'Completed', 'No Show'].includes(x.status));
+  if (taken) return res.status(409).json({ error: `${doctor.name} already has a booking at ${time} on ${date}. Choose another time.` });
   const a = {
     id: id('appt'),
     patientId: p.id,
@@ -416,7 +470,12 @@ app.post('/api/appointments', roles('receptionist', 'doctor'), async (req: any, 
 app.patch('/api/appointments/:id', roles('receptionist', 'doctor'), async (req: any, res) => {
   const a = db.appointments.find((x: any) => x.id === req.params.id);
   if (!a) return res.status(404).json({ error: 'Appointment not found' });
-  const { status, date, time, reason } = req.body;
+  const { status, date, time, reason, rev } = req.body;
+  if (rev !== undefined && Number(rev) !== (a.rev || 0)) return res.status(409).json({ error: 'This appointment was changed by someone else. Reload and try again.' });
+  // Check the new slot before changing anything, so a refusal leaves the appointment untouched.
+  const nd = date || a.date, nt = time || a.time;
+  const taken = (date || time) && a.doctorId && db.appointments.find((x: any) => x.id !== a.id && x.doctorId === a.doctorId && x.date === nd && x.time === nt && !['Cancelled', 'Completed', 'No Show'].includes(x.status));
+  if (taken) return res.status(409).json({ error: `${a.doctorName} already has a booking at ${nt} on ${nd}. Choose another time.` });
   const validStatuses = ['Scheduled', 'Checked In', 'Waiting', 'In Consultation', 'Completed', 'Cancelled', 'No Show'];
   if (status) {
     if (!validStatuses.includes(status)) return res.status(400).json({ error: 'Invalid appointment status' });
@@ -428,11 +487,12 @@ app.patch('/api/appointments/:id', roles('receptionist', 'doctor'), async (req: 
     if (!['Scheduled'].includes(a.status) && !status) {
       return res.status(400).json({ error: 'Only scheduled appointments can be rescheduled' });
     }
-    if (date) a.date = date;
-    if (time) a.time = time;
+    a.date = nd;
+    a.time = nt;
     a.rescheduledAt = now();
   }
   if (reason) a.reason = String(reason).trim();
+  a.rev = (a.rev || 0) + 1;
   audit(req, 'update', 'appointment', a.id, `Status: ${a.status}${date ? ` · Rescheduled to ${a.date} ${a.time}` : ''}`);
   await save();
   res.json(a);
@@ -594,6 +654,10 @@ app.patch('/api/lab/orders/:id', roles('lab'), async (req: any, res) => {
   const b = req.body || {};
   const status = b.status;
   const results = b.results !== undefined ? cleanResults(b.results) : undefined;
+  for (const r of results ?? []) {
+    const bad = implausibleValue(r.parameter, r.value, r.unit);
+    if (bad) return res.status(400).json({ error: bad });
+  }
   const resultsChanged = results !== undefined && sig(results) !== sig(o.results);
   const submitted = ['awaiting_verification', 'verified', 'released'].includes(o.status);
   const t = new Date();
@@ -733,35 +797,6 @@ app.get('/api/lab/orders/:id/attachments/:attId', roles('lab', 'doctor'), async 
   }
 });
 
-// ── Report scanning (the provider key stays on the server and never reaches the browser) ───────
-const scanCache = new Map<string, unknown>(); // identical uploads reuse the result instead of spending quota
-
-app.post('/api/lab/extract', roles('lab'), uploadLimit, async (req: any, res) => {
-  const geminiKey = process.env.GEMINI_API_KEY as string;
-  if (!geminiKey) return res.status(503).json({ error: 'Report scanning is not configured. Set GEMINI_API_KEY on the server.' });
-  const mimeType = text(req.body?.mimeType, 60);
-  const data = String(req.body?.data || '').replace(/^data:[^;]+;base64,/, '');
-  if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(mimeType) || !data) {
-    return res.status(400).json({ error: 'Upload a JPG, PNG, WebP or PDF report' });
-  }
-  const kb = Math.round((data.length * 0.75) / 1024);
-  const fileKey = crypto.createHash('sha256').update(mimeType + data).digest('hex');
-  if (scanCache.has(fileKey)) return res.json({ data: scanCache.get(fileKey), cached: true });
-  try {
-    const parsed = await extractWithGemini(mimeType, data, geminiKey);
-    console.log(`[scan] gemini -> ok (${mimeType}, ${kb} KB, ${parsed.results.length} rows)`);
-    audit(req, 'scan', 'labReport', 'upload', `${mimeType} via gemini`);
-    scanCache.set(fileKey, parsed);
-    if (scanCache.size > 50) scanCache.delete(scanCache.keys().next().value as string);
-    await save();
-    res.json({ data: parsed });
-  } catch (e: any) {
-    const status = e instanceof ScanError ? e.status : 503;
-    console.log(`[scan] gemini -> ${status} (${mimeType}, ${kb} KB)`);
-    res.status(status).json({ error: e instanceof ScanError ? e.message : 'The scanner is unavailable right now, try again shortly.' });
-  }
-});
-
 // ── Synthetic sample scenario ───────────────────────────────────────────────
 // One labelled, made-up patient journey for demonstrations. Off when ALLOW_SAMPLE_DATA=false.
 const sampleAllowed = process.env.ALLOW_SAMPLE_DATA !== 'false';
@@ -792,14 +827,7 @@ app.post('/api/demo/scenario', roles('receptionist', 'doctor', 'lab'), async (re
   }
 });
 
-app.get('/api/medicines/search', roles('doctor'), async (req: any, res) => {
-  try {
-    res.json(await searchMedicines(String(req.query.q ?? ''), 15, mongoConnected));
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message || 'Medicine search failed' });
-  }
-});
-
+registerScanRoutes({ app, roles, uploadLimit, text, audit, save, mongoConnected: () => mongoConnected });
 registerDoctorRoutes({
   app, db: () => db, save, audit, roles, id, now, patientById, text, isToday, adminPatientView
 });
@@ -812,6 +840,7 @@ app.use((err: any, _req: any, res: any, _next: any) => {
 const start = async () => {
   await initMongo();
   if (mongoConnected) {
+    await ensureIndexes();
     importMedicines().catch((err) => console.warn('Medicine import failed:', err?.message));
     db = await loadFromMongo();
     if (!db.users.length) {

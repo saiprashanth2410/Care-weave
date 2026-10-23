@@ -181,6 +181,7 @@ export default function AIScannerModal({ onClose, onImportSuccess }: AIScannerMo
                 <span className="text-xs font-bold uppercase tracking-wider text-accent-ink">
                   Extracted ({data.results.length} Parameters Detected)
                 </span>
+                {data.model && <span className="font-mono text-[11px] text-ink-3">Read by {data.model}</span>}
                 {selectedFile && (
                   <span className="font-mono text-[11px] text-ink-3">
                     Source: {selectedFile.name}

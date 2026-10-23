@@ -23,6 +23,7 @@ export interface ExtractedReportData {
   results: ScannedRow[]
   impression?: string
   warnings: string[]
+  model?: string
 }
 
 export type ScannedRow = TestResultItem & { needsCheck?: boolean; checkReason?: string }
@@ -63,6 +64,7 @@ function sanitizeExtractedData(data: Partial<ExtractedReportData>): ExtractedRep
     results: Array.isArray(data.results) ? data.results : [],
     impression: data.impression || undefined,
     warnings: Array.isArray(data.warnings) ? data.warnings : [],
+    model: typeof data.model === 'string' ? data.model : undefined,
   }
 }
 

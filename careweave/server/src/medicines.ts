@@ -3,10 +3,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import mongoose from 'mongoose';
 
-// Brand/medicine catalogue (data/BrandMaster.tsv). It has ~94k rows, so it lives in its own
-// MongoDB collection and is searched there, instead of being loaded into the main in-memory db.
+// Medicine catalogue from catalog/BrandMaster.tsv (about 94,000 rows). It is kept in its own MongoDB
+// collection rather than the in-memory db, which holds every document in RAM.
 
-const FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', 'BrandMaster.tsv');
+const FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'catalog', 'BrandMaster.tsv');
 const COLLECTION = 'medicines';
 
 export type Medicine = {
@@ -31,8 +31,8 @@ function routeFor(form: string) {
   return '';
 }
 
-// "Safedox (cefpodoxime) 200 mg film-coated oral tablet" -> brand, generic, strength, form
-function parse(line: string): Medicine | null {
+/** "Safedox (cefpodoxime) 200 mg film-coated oral tablet" becomes brand, generic, strength and form. */
+export function parseMedicine(line: string): Medicine | null {
   const cols = line.split('\t');
   const id = cols[0]?.trim(), name = cols[1]?.trim();
   if (!id || !name) return null;
@@ -46,11 +46,17 @@ function parse(line: string): Medicine | null {
 }
 
 async function readAll(): Promise<Medicine[]> {
-  const raw = await fs.readFile(FILE, 'utf8');
+  let raw: string;
+  try {
+    raw = await fs.readFile(FILE, 'utf8');
+  } catch {
+    console.warn(`Medicine catalogue not found at ${FILE}. Medicine search is empty until it is added.`);
+    return [];
+  }
   const out: Medicine[] = [];
   const lines = raw.split(/\r?\n/);
   for (let i = 1; i < lines.length; i++) {
-    const med = lines[i] ? parse(lines[i]) : null;
+    const med = lines[i] ? parseMedicine(lines[i]) : null;
     if (med) out.push(med);
   }
   return out;
@@ -58,11 +64,12 @@ async function readAll(): Promise<Medicine[]> {
 
 let memory: Promise<Medicine[]> | null = null;
 
-// Loads the TSV into the medicines collection when it is empty. Safe to call on every start.
+/** Loads the catalogue into the medicines collection when that is empty. Safe to call on every start. */
 export async function importMedicines(force = false) {
   const coll = mongoose.connection.db!.collection(COLLECTION);
   if (!force && (await coll.estimatedDocumentCount()) > 0) return 0;
   const meds = await readAll();
+  if (!meds.length) return 0;
   await coll.deleteMany({});
   for (let i = 0; i < meds.length; i += 5000) await coll.insertMany(meds.slice(i, i + 5000), { ordered: false });
   await coll.createIndex({ id: 1 }, { unique: true });
@@ -81,7 +88,7 @@ export async function searchMedicines(q: string, limit = 15, useMongo = true) {
   if (useMongo) {
     const coll = mongoose.connection.db!.collection(COLLECTION);
     const find = (re: string, n: number) => coll.find({ search: { $regex: re } }, { projection: { _id: 0 } }).limit(n).toArray() as unknown as Promise<Medicine[]>;
-    // Names that start with the text come first, then names that merely contain it.
+    // Prefix matches first, then names that contain the text.
     hits = await find('^' + escapeRe(term), limit);
     if (hits.length < limit) {
       const have = new Set(hits.map((h) => h.id));
