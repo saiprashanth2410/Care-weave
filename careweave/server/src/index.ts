@@ -62,10 +62,15 @@ const id = (prefix: string) => `${prefix}-${crypto.randomBytes(4).toString('hex'
 // Every collection lives in MongoDB when connected. The JSON file is only an offline fallback.
 const COLLECTIONS = ['users', 'patients', 'appointments', 'labOrders', 'auditLogs', 'sessions', 'encounters', 'vitals', 'referrals', 'carePlans', 'prescriptions', 'externalRecords', 'cases'] as const;
 
+// What each document looked like the last time it was written, so a save sends only what changed.
+const written = new Map<string, Map<string, string>>();
+const remember = (c: string, docs: any[]) => written.set(c, new Map(docs.map((d) => [d.id, JSON.stringify(d)])));
+
 async function loadFromMongo() {
   const out: any = {};
   for (const c of COLLECTIONS) {
     out[c] = await mongoose.connection.db!.collection(c).find({}, { projection: { _id: 0 } }).toArray();
+    remember(c, out[c]);
   }
   return out;
 }
@@ -74,10 +79,18 @@ async function saveToMongo() {
   for (const c of COLLECTIONS) {
     const coll = mongoose.connection.db!.collection(c);
     const docs: any[] = db[c] || [];
-    if (docs.length) {
-      await coll.bulkWrite(docs.map((d) => ({ replaceOne: { filter: { id: d.id }, replacement: d, upsert: true } })));
+    const before = written.get(c) ?? new Map<string, string>();
+    const after = new Map<string, string>();
+    const changed: any[] = [];
+    for (const d of docs) {
+      const json = JSON.stringify(d);
+      after.set(d.id, json);
+      if (before.get(d.id) !== json) changed.push(d);
     }
-    await coll.deleteMany({ id: { $nin: docs.map((d) => d.id) } });
+    const removed = [...before.keys()].filter((k) => !after.has(k));
+    if (changed.length) await coll.bulkWrite(changed.map((d) => ({ replaceOne: { filter: { id: d.id }, replacement: d, upsert: true } })));
+    if (removed.length) await coll.deleteMany({ id: { $in: removed } });
+    written.set(c, after);
   }
 }
 
@@ -300,7 +313,7 @@ app.post('/api/patients', roles('receptionist', 'doctor', 'lab'), async (req: an
     patientId: `CW-${Math.floor(10000 + Math.random() * 89999)}`,
     name: String(name).trim(),
     dob,
-    gender: ['M', 'F', 'O'].includes(gender) ? gender : 'F',
+    gender: ['M', 'F', 'O'].includes(gender) ? gender : 'O',
     phone: String(phone).trim(),
     email: email || undefined,
     emergencyContact: emergencyContact || undefined,

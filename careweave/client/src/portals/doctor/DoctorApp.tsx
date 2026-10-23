@@ -865,6 +865,27 @@ function DoctorPatientRecords({
               onChange={e => setQ(e.target.value)}
             />
           </div>
+          <form
+            className="open-by-id"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const form = e.currentTarget;
+              const f = new FormData(form);
+              try {
+                const p = await api.openPatient(String(f.get('pid') || '').trim(), String(f.get('why') || '').trim());
+                setSelected(await api.patient(p.id));
+                setQ(p.patientId);
+                form.reset();
+              } catch (err) {
+                notify((err as Error).message);
+              }
+            }}
+          >
+            <p><b>Patient not in your list?</b> Open a walk-in by exact patient ID. This is logged.</p>
+            <input name="pid" placeholder="Patient ID, for example CW-12345" aria-label="Patient ID" />
+            <input name="why" placeholder="Reason for opening this chart" aria-label="Reason" />
+            <button className="secondary" type="submit">Open chart</button>
+          </form>
           <div className="patient-results">
             {patients.map(p => (
               <button

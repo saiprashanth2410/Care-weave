@@ -32,6 +32,8 @@ export async function runScenario(base: string, users: any[], patients: any[], m
   for (const [i, d] of others.entries()) await call('POST', '/api/appointments', tok.rec, { patientId: pat.id, doctorId: d.id, date: today, time: `1${i + 1}:00`, reason: 'Review of results' });
   await call('POST', '/api/encounters', tok.doc, { patientId: pat.id, subjective: 'Tired through the afternoon, increased thirst.', objective: 'Alert, afebrile.', assessment: 'Type 2 diabetes, control to be reviewed.', plan: 'HbA1c and lipid profile, review with results.', diagnosis: 'Type 2 diabetes follow-up' });
 
+  await call('POST', `/api/patients/${pat.id}/allergies`, tok.doc, { allergen: 'Penicillin', severity: 'Moderate', reaction: 'Skin rash' });
+
   // 1. Released result: entered by one lab user, verified and released by a different one.
   const a = await call('POST', '/api/lab-orders', tok.doc, { patientId: pat.id, testName: 'HbA1c', priority: 'Routine', clinicalIndication: 'Diabetes review' });
   await patch(a.id, tok.lab, { status: 'collected' });
