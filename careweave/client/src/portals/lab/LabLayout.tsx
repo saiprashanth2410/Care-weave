@@ -71,7 +71,7 @@ export default function LabLayout() {
           <div className="flex items-center gap-3 text-right">
             <div>
               <p className="text-sm font-semibold leading-tight text-slate-900">Laboratory assistant</p>
-              <p className="text-[11px] text-slate-500">Signed in</p>
+              <p className="text-xs text-slate-500">Signed in</p>
             </div>
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-50 text-sm font-bold text-teal-600">L</div>
           </div>
@@ -92,7 +92,7 @@ function Brand({ compact = false }: { compact?: boolean }) {
       </div>
       <div className="leading-tight">
         <p className="text-sm font-bold">CareWeave</p>
-        <p className="text-[10px] uppercase tracking-widest text-slate-400">Laboratory</p>
+        <p className="text-[11px] uppercase tracking-widest text-slate-300">Laboratory</p>
       </div>
     </div>
   )
