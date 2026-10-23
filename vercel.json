@@ -1,0 +1,6 @@
+{
+  "buildCommand": "cd careweave/client && npm install && npm run build",
+  "outputDirectory": "careweave/client/dist",
+  "framework": "vite"
+}
+
