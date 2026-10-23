@@ -7,6 +7,7 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "seed": "tsx src/seed.ts",
+    "import-medicines": "tsx scripts/import-medicines.ts",
     "check-db": "tsx src/check-db.ts",
     "test:acceptance": "tsx scripts/acceptance.ts"
   },
