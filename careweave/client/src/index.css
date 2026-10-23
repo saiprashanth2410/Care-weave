@@ -1,28 +1,40 @@
 @import "tailwindcss";
 
+/* CareWeave design tokens.
+   One accent (deep teal), one alarm (brick), one caution (umber), ink on green-grey paper.
+   No pure white, no shadows, square corners, rules instead of cards. */
 @theme {
-  --font-sans: "Inter", system-ui, sans-serif;
-  --color-navy-900: #0b1f3a;
-  --color-navy-800: #12304f;
-  --color-navy-700: #1a4065;
-  --color-teal-600: #0d7c7e;
-  --color-teal-500: #14a3a5;
-  --color-teal-50: #e8f6f6;
-  --color-care-green: #2f9e6e;
+  --font-sans: "Atkinson Hyperlegible Next", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --color-paper: #e9ece7;
+  --color-surface: #f6f7f3;
+  --color-ink: #14231f;
+  --color-ink-2: #3a4a44;
+  --color-ink-3: #56655f;
+  --color-rule: #c3cac2;
+  --color-accent: #0c6b6d;
+  --color-accent-ink: #084e50;
+  --color-deep: #0e2a2b;
+  --color-alert: #a3341f;
+  --color-warn: #7d5200;
+
+  --radius-sm: 3px;
 }
 
 body {
   margin: 0;
-  background: #f6f8fa;
-  color: #0f172a;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-feature-settings: "tnum";
 }
 
-/* Visible keyboard focus everywhere, including on the navy sidebar. */
 :focus-visible {
-  outline: 2px solid var(--color-teal-500);
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * { transition: none !important; animation: none !important; }
+  * { animation: none !important; }
 }
