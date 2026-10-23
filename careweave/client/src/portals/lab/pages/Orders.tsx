@@ -1,23 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { createLabOrder, getLabOrders, TEST_TEMPLATES, updateOrderStatus } from '../api'
+import {
+  calculateAgeFromDob,
+  createLabOrder,
+  getDoctors,
+  getLabOrders,
+  type RegisteredPatient,
+  searchRegisteredPatients,
+  TEST_TEMPLATES,
+  updateOrderStatus,
+} from '../api'
+import AIScannerModal from '../components/AIScannerModal'
 import DiagnosticReportView from '../components/DiagnosticReportView'
 import StatusBadge from '../components/StatusBadge'
 import type { LabOrder, LabOrderStatus, Priority } from '../types'
-
-const CLINIC_DOCTORS = [
-  'Dr. ANIRBAN LAHA (General Medicine)',
-  'Dr. Rajesh Iyer (Cardiology)',
-  'Dr. Priya Sharma (Internal Medicine)',
-  'Dr. Vikram Seth (Critical Care / ICU)',
-  'Dr. Ananya Das (Emergency Medicine)',
-  'Dr. Sundaram K (Nephrology)',
-  'Dr. Meenakshi Sundaram (Endocrinology)',
-  'Dr. Sneha Patil (Gastroenterology)',
-  'Dr. K. Ramanathan (Outpatient Clinic)',
-  'Dr. Shalini Nair (Pediatrics)',
-  'Dr. Arvind Swamy (Urology)',
-]
 
 type TabFilter = 'all' | 'incoming' | 'pending_specimen' | 'testing' | 'review' | 'completed' | 'exceptions'
 
@@ -29,6 +25,7 @@ export default function Orders() {
   const [tab, setTab] = useState<TabFilter>('all')
   const [selectedOrder, setSelectedOrder] = useState<LabOrder | null>(null)
   const [showNewModal, setShowNewModal] = useState(false)
+  const [showScannerModal, setShowScannerModal] = useState(false)
   const [reportOrder, setReportOrder] = useState<LabOrder | null>(null)
   const [searchParams] = useSearchParams()
 
@@ -37,12 +34,28 @@ export default function Orders() {
   const [newUhid, setNewUhid] = useState('')
   const [newVisitNo, setNewVisitNo] = useState('')
   const [newOpIp, setNewOpIp] = useState<'OP' | 'IP'>('IP')
-  const [newPatientAge, setNewPatientAge] = useState<number>(43)
+  const [newPatientAge, setNewPatientAge] = useState<number | ''>('')
   const [newPatientGender, setNewPatientGender] = useState<'M' | 'F' | 'O'>('F')
   const [newTestName, setNewTestName] = useState<string>(Object.keys(TEST_TEMPLATES)[0])
-  const [newDoctor, setNewDoctor] = useState(CLINIC_DOCTORS[0])
+  const [newDoctor, setNewDoctor] = useState('')
+  const [doctors, setDoctors] = useState<string[]>([])
   const [newPriority, setNewPriority] = useState<Priority>('routine')
   const [newHandlingNote, setNewHandlingNote] = useState('')
+
+  // Central Database Patient Autocomplete
+  const [patientSearchQuery, setPatientSearchQuery] = useState('')
+  const [patientSearchResults, setPatientSearchResults] = useState<RegisteredPatient[]>([])
+  const [selectedPatientRef, setSelectedPatientRef] = useState<RegisteredPatient | null>(null)
+  const [isSearchingPatient, setIsSearchingPatient] = useState(false)
+
+  useEffect(() => {
+    getDoctors()
+      .then((list) => {
+        setDoctors(list.map((d) => d.name))
+        setNewDoctor((cur) => cur || list[0]?.name || '')
+      })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     getLabOrders()
@@ -54,8 +67,32 @@ export default function Orders() {
           if (match) setSelectedOrder(match)
         }
       })
+      .catch(() => {}) // the layout banner reports the failure
       .finally(() => setLoading(false))
   }, [searchParams])
+
+  useEffect(() => {
+    if (!patientSearchQuery.trim()) return
+    const timer = setTimeout(() => {
+      setIsSearchingPatient(true)
+      searchRegisteredPatients(patientSearchQuery)
+        .then((res) => setPatientSearchResults(res))
+        .catch(() => setPatientSearchResults([]))
+        .finally(() => setIsSearchingPatient(false))
+    }, 200)
+    return () => clearTimeout(timer)
+  }, [patientSearchQuery])
+
+  const handleSelectPatient = (p: RegisteredPatient) => {
+    setSelectedPatientRef(p)
+    setNewPatientName(p.name)
+    setNewUhid(p.patientId)
+    setNewPatientAge(calculateAgeFromDob(p.dob))
+    setNewPatientGender(p.gender || 'F')
+    setNewOpIp('OP')
+    setPatientSearchQuery('')
+    setPatientSearchResults([])
+  }
 
   const filtered = useMemo(() => {
     return orders.filter((o) => {
@@ -77,6 +114,7 @@ export default function Orders() {
         o.id.toLowerCase().includes(q) ||
         (o.patientName && o.patientName.toLowerCase().includes(q)) ||
         o.patientId.toLowerCase().includes(q) ||
+        (o.patientUhid && o.patientUhid.toLowerCase().includes(q)) ||
         o.testName.toLowerCase().includes(q) ||
         o.orderingDoctor.toLowerCase().includes(q) ||
         (o.department && o.department.toLowerCase().includes(q))
@@ -92,13 +130,14 @@ export default function Orders() {
 
   const handleCreateOrder = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newPatientName.trim()) return
+    if (!newPatientName.trim() || !newDoctor || newPatientAge === '') return
     const created = await createLabOrder({
       patientName: newPatientName.trim(),
-      patientUhid: newUhid.trim() || undefined,
+      patientId: selectedPatientRef?.id || undefined,
+      patientUhid: newUhid.trim() || selectedPatientRef?.patientId || undefined,
       visitNo: newVisitNo.trim() || undefined,
       opIp: newOpIp,
-      patientAge: Number(newPatientAge) || 40,
+      patientAge: Number(newPatientAge),
       patientGender: newPatientGender,
       testName: newTestName,
       orderingDoctor: newDoctor,
@@ -109,6 +148,7 @@ export default function Orders() {
     setOrders((prev) => [created, ...prev])
     setSelectedOrder(created)
     setShowNewModal(false)
+    setSelectedPatientRef(null)
     setNewPatientName('')
     setNewUhid('')
     setNewVisitNo('')
@@ -145,6 +185,12 @@ export default function Orders() {
           <p className="font-mono text-xs text-ink-3">
             Showing {filtered.length} of {orders.length} orders
           </p>
+          <button
+            onClick={() => setShowScannerModal(true)}
+            className="flex min-h-11 items-center gap-1.5 rounded-sm border-2 border-accent bg-accent/10 px-3.5 text-xs font-bold uppercase tracking-wider text-accent-ink hover:bg-accent hover:text-surface"
+          >
+            Scan a report
+          </button>
           <button
             onClick={() => setShowNewModal(true)}
             className="min-h-11 rounded-sm bg-accent px-4 text-xs font-semibold uppercase tracking-wider text-surface hover:bg-accent-ink"
@@ -412,7 +458,7 @@ export default function Orders() {
                 onClick={() => setReportOrder(selectedOrder)}
                 className="flex min-h-11 items-center rounded-sm bg-deep px-4 text-xs font-semibold text-surface hover:bg-ink"
               >
-                📄 View Official Hospital Report
+                View laboratory report
               </button>
             )}
 
@@ -438,6 +484,19 @@ export default function Orders() {
         </div>
       )}
 
+      {/* AI Document Vision Scanner Modal */}
+      {showScannerModal && (
+        <AIScannerModal
+          onClose={() => setShowScannerModal(false)}
+          onImportSuccess={(newOrder) => {
+            setOrders((prev) => [newOrder, ...prev])
+            setSelectedOrder(newOrder)
+            setShowScannerModal(false)
+            setReportOrder(newOrder)
+          }}
+        />
+      )}
+
       {/* New Requisition Modal */}
       {showNewModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-deep/60 overflow-y-auto">
@@ -456,6 +515,75 @@ export default function Orders() {
             </div>
 
             <form onSubmit={handleCreateOrder} className="space-y-4">
+              {/* Central Database Patient Search & Link */}
+              <div className="border border-accent/40 bg-accent/5 p-3 relative">
+                <label className="block text-xs font-bold uppercase tracking-wider text-accent-ink mb-1">
+                  🔍 Search Central Patient Registry (Registered at Reception)
+                </label>
+                <div className="relative">
+                  <input
+                    type="search"
+                    placeholder="Type patient name, UHID (e.g. CW-...) or phone number..."
+                    value={patientSearchQuery}
+                    onChange={(e) => {
+                      setPatientSearchQuery(e.target.value)
+                      if (!e.target.value.trim()) setPatientSearchResults([])
+                    }}
+                    className="w-full min-h-11 border border-accent/40 bg-surface px-3 text-sm text-ink placeholder:text-ink-3"
+                  />
+                  {isSearchingPatient && (
+                    <span className="absolute right-3 top-3 text-xs font-mono text-ink-3 animate-pulse">
+                      Searching...
+                    </span>
+                  )}
+                </div>
+
+                {/* Dropdown list of matching patients */}
+                {patientSearchResults.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full mt-1 z-30 max-h-56 overflow-y-auto border-2 border-accent bg-surface shadow-md">
+                    <div className="bg-paper px-3 py-1 text-[11px] font-bold text-ink-3 uppercase border-b border-rule">
+                      Select Patient to Auto-Fill Requisition ({patientSearchResults.length} found)
+                    </div>
+                    {patientSearchResults.map((p) => (
+                      <button
+                        key={p.id || p.patientId}
+                        type="button"
+                        onClick={() => handleSelectPatient(p)}
+                        className="w-full text-left p-2.5 hover:bg-paper/80 border-b border-rule last:border-b-0 flex items-center justify-between"
+                      >
+                        <div>
+                          <p className="text-sm font-bold text-ink">{p.name}</p>
+                          <p className="font-mono text-xs text-ink-2">
+                            UHID: <span className="text-accent-ink font-bold">{p.patientId}</span>
+                            {p.phone && ` · Tel: ${p.phone}`}
+                          </p>
+                        </div>
+                        <span className="text-xs bg-accent/10 border border-accent/30 text-accent-ink font-semibold px-2 py-0.5">
+                          Select ↵
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {selectedPatientRef ? (
+                  <div className="mt-2 flex items-center justify-between text-xs text-accent-ink font-semibold bg-accent/10 px-2 py-1">
+                    <span>✓ Linked to Central Patient: <b>{selectedPatientRef.name}</b> ({selectedPatientRef.patientId})</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPatientRef(null)}
+                      className="text-ink-3 hover:text-alert underline"
+                    >
+                      Clear link
+                    </button>
+                  </div>
+                ) : (
+                  <p className="mt-1 text-[11px] text-ink-3">
+                    Patients registered at Front Desk appear here automatically. Or enter walk-in details below.
+                  </p>
+                )}
+              </div>
+
               {/* Patient Demographics */}
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="sm:col-span-2">
@@ -482,7 +610,7 @@ export default function Orders() {
                       min={1}
                       max={120}
                       value={newPatientAge}
-                      onChange={(e) => setNewPatientAge(Number(e.target.value))}
+                      onChange={(e) => setNewPatientAge(e.target.value === '' ? '' : Number(e.target.value))}
                       className="w-16 min-h-11 border border-rule bg-paper px-2 text-sm text-ink text-center"
                     />
                     <select
@@ -498,7 +626,7 @@ export default function Orders() {
                 </div>
               </div>
 
-              {/* Hospital Identifiers (NABL Accredited Hospital Fields) */}
+              {/* Hospital identifiers */}
               <div className="grid gap-4 sm:grid-cols-3">
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-ink-3 mb-1">
@@ -570,7 +698,8 @@ export default function Orders() {
                   onChange={(e) => setNewDoctor(e.target.value)}
                   className="w-full min-h-11 border border-rule bg-paper px-3 text-sm text-ink"
                 >
-                  {CLINIC_DOCTORS.map((d) => (
+                  {doctors.length === 0 && <option value="">No doctors registered</option>}
+                  {doctors.map((d) => (
                     <option key={d} value={d}>{d}</option>
                   ))}
                 </select>

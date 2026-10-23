@@ -1,7 +1,11 @@
 import type { AdminPatientRecord, Appointment, Dashboard, Doctor, Patient, User } from './types';
 
 const json = async <T>(res: Response): Promise<T> => {
-  const body = await res.json();
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 401) {
+    localStorage.removeItem('cw_token');
+    window.location.assign('/login');
+  }
   if (!res.ok) throw new Error(body.error || 'Request failed');
   return body;
 };

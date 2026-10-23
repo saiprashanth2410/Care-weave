@@ -5,7 +5,8 @@ import {
   HeartPulse, LayoutDashboard, LogOut, Mail, Menu, Pencil, Phone,
   Plus, RefreshCw, Search, ShieldCheck, Stethoscope, UserCheck,
   UserPlus, Users, X
-} from 'lucide-react';
+} from './icons';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from './api';
 import type { AdminPatientRecord, Appointment, Dashboard, Doctor, Patient, User } from './types';
 import './styles.css';
@@ -19,6 +20,11 @@ const fmtTime = (v?: string) =>
 
 const initials = (n: string) =>
   (n || 'Patient').split(' ').map(v => v[0]).slice(0, 2).join('').toUpperCase();
+
+const greeting = () => {
+  const h = new Date().getHours();
+  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+};
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -50,145 +56,19 @@ function waitUrgency(checkedInAt?: string): 'low' | 'med' | 'urgent' {
 }
 
 // ─── APP ROOT ───────────────────────────────────────────────────────────────
-function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (localStorage.getItem('cw_token')) {
-      api.me()
-        .then(u => {
-          if (u.role === 'receptionist') setUser(u);
-          else {
-            localStorage.removeItem('cw_token');
-            setUser(null);
-          }
-        })
-        .catch(() => localStorage.removeItem('cw_token'))
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="splash">
-        <div className="brand-mark"><HeartPulse size={26} /></div>
-        <strong style={{ fontSize: 18, color: 'var(--navy-900)' }}>CareWeave Front Desk</strong>
-        <span className="muted">Securing front desk session…</span>
-      </div>
-    );
-  }
-
-  return user ? (
-    <Workspace user={user} onLogout={() => { localStorage.removeItem('cw_token'); setUser(null); }} />
-  ) : (
-    <Login onLogin={setUser} />
-  );
-}
-
-// ─── LOGIN COMPONENT ────────────────────────────────────────────────────────
-function Login({ onLogin }: { onLogin: (u: User) => void }) {
-  const [email, setEmail] = useState('reception@careweave.test');
-  const [password, setPassword] = useState('demo123');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
-    setError('');
-    try {
-      const r = await api.login(email, password);
-      if (r.user.role !== 'receptionist') {
-        throw new Error('Access restricted: Only Reception & Front Desk accounts are permitted in this portal.');
-      }
-      localStorage.setItem('cw_token', r.token);
-      onLogin(r.user);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
+function App({ user }: { user: User }) {
+  const navigate = useNavigate();
   return (
-    <div className="login-page">
-      <div className="login-visual">
-        <div className="brand">
-          <div className="brand-mark"><HeartPulse size={22} /></div>
-          <span>CareWeave Front Desk</span>
-        </div>
-        <div className="visual-copy">
-          <p className="eyebrow">PATIENT ACCESS & RECEPTION DESK</p>
-          <h1>Effortless check-ins.<br /><em>Zero clinical clutter.</em></h1>
-          <p>
-            Purpose-built front desk workstation for patient admissions, live queue management,
-            and doctor scheduling with strict patient privacy guardrails.
-          </p>
-          <div className="visual-proof">
-            <div><ShieldCheck size={18} /> Administrative privacy isolation (least-privilege)</div>
-            <div><Clock3 size={18} /> Live waiting room queue with real-time timers</div>
-            <div><UserCheck size={18} /> Automated patient ID & duplicate detection</div>
-          </div>
-        </div>
-        <div className="visual-footer">
-          <span>CAREWEAVE HEALTH · FRONT DESK PORTAL</span>
-          <span>v2.0 OPTIMIZED</span>
-        </div>
-      </div>
-
-      <div className="login-panel">
-        <div className="login-card">
-          <p className="eyebrow">RECEPTION ACCESS</p>
-          <h2>Sign in to Front Desk</h2>
-          <p className="muted">Manage daily arrivals, appointments, and patient registration.</p>
-
-          <form onSubmit={submit}>
-            <label>
-              Email address
-              <input value={email} onChange={e => setEmail(e.target.value)} type="email" required />
-            </label>
-            <label>
-              Password
-              <input value={password} onChange={e => setPassword(e.target.value)} type="password" required />
-            </label>
-            {error && <div className="alert danger"><AlertTriangle size={16} />{error}</div>}
-            <button className="primary wide" disabled={busy}>
-              {busy ? 'Verifying credentials…' : 'Sign in to Reception'}
-              <ArrowRight size={16} />
-            </button>
-          </form>
-
-          <div className="demo-box">
-            <div className="demo-head">
-              <span>Quick Demo Access</span>
-              <span className="mono">PASS: demo123</span>
-            </div>
-            <button
-              type="button"
-              className="demo-account"
-              onClick={() => { setEmail('reception@careweave.test'); setPassword('demo123'); }}
-            >
-              <span className="role-dot"></span>
-              <div>
-                <b>Maya Patel</b>
-                <small>Front Desk Reception Lead · reception@careweave.test</small>
-              </div>
-              <ChevronRight size={16} style={{ color: 'var(--slate-400)', marginLeft: 'auto' }} />
-            </button>
-          </div>
-          <div className="login-note">
-            <ShieldCheck size={14} /> Administrative access only. Medical chart records protected.
-          </div>
-        </div>
-      </div>
-    </div>
+    <Workspace
+      user={user}
+      onLogout={() => {
+        localStorage.removeItem('cw_token');
+        navigate('/login', { replace: true });
+      }}
+    />
   );
 }
 
-// ─── WORKSPACE SHELL ────────────────────────────────────────────────────────
 function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [section, setSection] = useState<'overview' | 'queue' | 'appointments' | 'patients'>('overview');
   const [collapsed, setCollapsed] = useState(false);
@@ -302,6 +182,15 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               <span className="pulse"></span>
               <span>{currentTime} · {new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
             </div>
+
+            <Link
+              to="/lab/overview"
+              className="btn-soft"
+              style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700 }}
+              title="Open Laboratory & Diagnostic Reports"
+            >
+              <span>🔬 Laboratory Portal →</span>
+            </Link>
 
             <button
               className="btn-soft"
@@ -494,7 +383,7 @@ function OverviewSection({
       <div className="page-header">
         <div>
           <p className="eyebrow">COMMAND CENTER</p>
-          <h1>Good morning, {user.name.split(' ')[0]}.</h1>
+          <h1>{greeting()}, {user.name.split(' ')[0]}.</h1>
           <p className="muted">
             Front desk overview for {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}.
           </p>
@@ -1511,6 +1400,52 @@ function PatientDrawer({
             ))}
           </div>
         )}
+
+        {/* Central Lab Diagnostics & Reports */}
+        <div className="section-label" style={{ marginTop: 20 }}>
+          Central Laboratory & Diagnostics
+        </div>
+        {loading ? (
+          <p className="muted" style={{ fontSize: 12 }}>Checking laboratory requisitions…</p>
+        ) : !record?.labOrders || record.labOrders.length === 0 ? (
+          <div style={{ border: '1px solid var(--border-subtle)', padding: 12, borderRadius: 4, background: 'var(--bg-surface)' }}>
+            <p className="muted" style={{ fontSize: 12, margin: 0 }}>No lab investigations ordered for this patient yet.</p>
+            <Link
+              to={`/lab/orders?order=new`}
+              className="btn-primary"
+              style={{ marginTop: 8, fontSize: 11, padding: '5px 12px', textDecoration: 'none', display: 'inline-flex' }}
+            >
+              + Send for Lab Requisition
+            </Link>
+          </div>
+        ) : (
+          <div className="appt-list">
+            {record.labOrders.map((order: any) => (
+              <div className="appt-row" key={order.id} style={{ alignItems: 'flex-start' }}>
+                <div>
+                  <b>{order.testName}</b>
+                  <p className="mono" style={{ margin: '2px 0 0' }}>
+                    Requisition: {order.id} · {order.department || 'Diagnostics'}
+                  </p>
+                  <p className="muted" style={{ margin: 0, fontSize: 11 }}>
+                    Ordered: {order.orderedAt ? new Date(order.orderedAt).toLocaleDateString() : 'Today'} · Ref: {order.orderingDoctor}
+                  </p>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <span className={`status ${order.status.toLowerCase().replace(/_/g, '-')}`}>
+                    {order.status.replace(/_/g, ' ')}
+                  </span>
+                  <Link
+                    to={`/lab/orders?order=${order.id}`}
+                    style={{ display: 'block', fontSize: 11, color: 'var(--primary)', fontWeight: 600, marginTop: 4, textDecoration: 'underline' }}
+                  >
+                    View in Lab →
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1547,6 +1482,13 @@ function PatientRegistrationModal({
     setDuplicates([]);
     try {
       const res = await api.createPatient(form);
+      try {
+        const cached = JSON.parse(localStorage.getItem('cw_registered_patients') || '[]');
+        localStorage.setItem(
+          'cw_registered_patients',
+          JSON.stringify([res, ...cached.filter((x: any) => x.patientId !== res.patientId)])
+        );
+      } catch {}
       onSaved(res);
     } catch (err: any) {
       if (err.message?.includes('duplicate') || err.message?.includes('Duplicate')) {
@@ -2150,6 +2092,10 @@ function RescheduleModal({
 }
 
 // ─── EXPORT RECEPTIONIST PORTAL ───────────────────────────────────────────
-export default function ReceptionistApp() {
-  return <App />;
+export default function ReceptionistApp({ user }: { user: User }) {
+  return (
+    <div className="rx">
+      <App user={user} />
+    </div>
+  );
 }

@@ -1,5 +1,5 @@
 // Lab-side view of the shared LabOrder contract (see docs/lab-contract.md).
-// Extended with full NABL / NABH accredited hospital laboratory reporting fields.
+// Laboratory order and report fields.
 
 export type LabOrderStatus =
   | 'requested'
@@ -41,16 +41,16 @@ export interface LabOrder {
   handlingNote?: string
   statusReason?: string // required for recollect_required / cancelled
 
-  // Official Hospital Demographics (NABL / NABH Hospital format)
-  patientUhid?: string       // e.g. 618135
-  patientNo?: string         // Same as UHID / MRN
-  visitNo?: string           // e.g. 3882620
-  labNo?: string             // e.g. 2057808, 2058027
-  opIp?: 'OP' | 'IP'         // Inpatient / Outpatient
-  referralDoctor?: string    // e.g. Dr. ANIRBAN LAHA
-  registrationAt?: string    // e.g. ISO string
-  reportedAt?: string        // e.g. ISO string
-  approvedAt?: string        // e.g. ISO string
+  // Requisition identifiers
+  patientUhid?: string      
+  patientNo?: string        
+  visitNo?: string          
+  labNo?: string            
+  opIp?: 'OP' | 'IP'        
+  referralDoctor?: string   
+  registrationAt?: string   
+  reportedAt?: string       
+  approvedAt?: string       
 
   // Extended clinical details
   patientName?: string

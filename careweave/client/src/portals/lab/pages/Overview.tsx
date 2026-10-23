@@ -15,7 +15,7 @@ export default function Overview() {
       .then(setOrders)
       .catch(() => {
         setOrders([])
-        setError('Could not load laboratory orders. Is the backend running?')
+        setError('load failed')
       })
   }, [])
 
@@ -42,12 +42,6 @@ export default function Overview() {
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Laboratory overview</h1>
         <p className="mt-1 text-sm text-ink-2">Where every test order stands, from request to release.</p>
       </div>
-
-      {error && (
-        <div role="alert" className="border border-alert bg-surface px-4 py-3 text-sm text-alert">
-          <strong className="font-semibold">Orders did not load.</strong> {error.replace('Could not load laboratory orders. ', '')}
-        </div>
-      )}
 
       <section aria-label="Order counts" className="grid grid-cols-2 gap-px border border-rule bg-rule sm:grid-cols-3 xl:grid-cols-6">
         <Figure label="Incoming requests" value={shown('requested')} to="/lab/orders" />

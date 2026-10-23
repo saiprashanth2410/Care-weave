@@ -55,6 +55,7 @@ export default function Samples() {
           if (match) setSelectedOrder(match)
         }
       })
+      .catch(() => {}) // the layout banner reports the failure
       .finally(() => setLoading(false))
   }, [searchParams])
 

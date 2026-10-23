@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { Link, NavLink, Outlet } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { clearSession, type SessionUser } from '@/auth/session'
 
 const NAV = [
   { to: '/lab/overview', label: 'Overview' },
@@ -9,8 +10,19 @@ const NAV = [
   { to: '/lab/verification', label: 'Verification Queue' },
 ]
 
-export default function LabLayout() {
+export default function LabLayout({ user }: { user: SessionUser }) {
   const [open, setOpen] = useState(false)
+  const navigate = useNavigate()
+  const [notice, setNotice] = useState<{ message: string; write: boolean } | null>(null)
+  useEffect(() => {
+    const onError = (e: Event) => setNotice((e as CustomEvent<{ message: string; write: boolean }>).detail)
+    window.addEventListener('cw:error', onError)
+    return () => window.removeEventListener('cw:error', onError)
+  }, [])
+  const signOut = () => {
+    clearSession()
+    navigate('/login', { replace: true })
+  }
 
   const nav = (
     <nav className="flex flex-col gap-0.5 px-3 pb-4" aria-label="Laboratory">
@@ -57,6 +69,7 @@ export default function LabLayout() {
               </button>
             </div>
             {nav}
+            <button onClick={signOut} className="mx-3 min-h-11 w-[calc(100%-1.5rem)] rounded-sm px-3 text-left text-sm font-medium text-surface/80 hover:bg-surface/10">Sign out</button>
           </div>
         </div>
       )}
@@ -64,11 +77,18 @@ export default function LabLayout() {
       <div className="flex min-w-0 flex-col">
         <div className="hidden items-center justify-between border-b border-rule bg-surface px-8 py-3 lg:flex">
           <p className="text-xs font-semibold uppercase tracking-wider text-accent-ink">Laboratory</p>
-          <p className="text-sm text-ink-2">
-            <span className="font-semibold text-ink">Laboratory assistant</span> · signed in
+          <p className="flex items-center gap-4 text-sm text-ink-2">
+            <span><span className="font-semibold text-ink">{user.name}</span> · {user.facility ?? 'Laboratory'}</span>
+            <button onClick={signOut} className="min-h-11 px-2 text-sm font-semibold text-accent-ink underline underline-offset-2">Sign out</button>
           </p>
         </div>
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          {notice && (
+            <div role="alert" className="mb-6 flex items-start justify-between gap-4 border border-alert bg-surface px-4 py-3 text-sm text-alert">
+              <p><strong className="font-semibold">{notice.write ? 'Not saved.' : 'Could not load.'}</strong> {notice.message}</p>
+              <button onClick={() => setNotice(null)} className="min-h-6 text-xs font-semibold underline underline-offset-2">Dismiss</button>
+            </div>
+          )}
           <Outlet />
         </main>
         <footer className="border-t border-rule px-4 py-4 text-xs text-ink-3 sm:px-6 lg:px-8">
