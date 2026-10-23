@@ -39,8 +39,7 @@ The database starts with these four accounts and nothing else.
 | Variable | Purpose |
 |---|---|
 | `MONGODB_URI`, `MONGODB_DB` | Database. Falls back to `data/careweave.json` if unset. |
-| `ANTHROPIC_API_KEY` | Report scanning with Claude (used first when set). `ANTHROPIC_MODEL` overrides the model. |
-| `GEMINI_API_KEY` | Report scanning with Gemini when no Anthropic key is set. Free keys allow about 20 scans a day. |
+| `GEMINI_API_KEY` | Report scanning with Gemini. Free keys allow about 20 scans a day. |
 | `CLIENT_ORIGIN`, `PORT` | CORS origin and port. |
 
 Keys stay on the server. Never put them in `client/`.

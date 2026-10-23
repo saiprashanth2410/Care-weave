@@ -20,12 +20,17 @@ export interface ExtractedReportData {
   collectionDate?: string
   reportedDate?: string
   approvedDate?: string
-  results: TestResultItem[]
+  results: ScannedRow[]
   impression?: string
-  rawSource?: string
+  warnings: string[]
 }
 
+export type ScannedRow = TestResultItem & { needsCheck?: boolean; checkReason?: string }
+
+export const SCAN_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+
 export async function parseMedicalDocumentWithAI(file: File): Promise<ExtractedReportData> {
+  if (!SCAN_TYPES.includes(file.type)) throw new Error('Upload a JPG, PNG, WebP or PDF report. Phone photos in HEIC format must be saved as JPG first.')
   if (file.size > 10 * 1024 * 1024) throw new Error('The file must be smaller than 10 MB')
   const token = getToken()
   const res = await fetch('/api/lab/extract', {
@@ -57,6 +62,7 @@ function sanitizeExtractedData(data: Partial<ExtractedReportData>): ExtractedRep
     sampleContainer: data.sampleContainer || undefined,
     results: Array.isArray(data.results) ? data.results : [],
     impression: data.impression || undefined,
+    warnings: Array.isArray(data.warnings) ? data.warnings : [],
   }
 }
 
