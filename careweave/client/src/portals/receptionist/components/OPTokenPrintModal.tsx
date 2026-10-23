@@ -49,9 +49,8 @@ export default function OPTokenPrintModal({
         >
           {/* Header */}
           <div className="text-center border-b border-rule pb-3">
-            <p className="text-sm font-bold tracking-tight uppercase">Dr. Kamakshi Memorial Hospital</p>
+            <p className="text-sm font-bold tracking-tight uppercase">CareWeave</p>
             <p className="text-[10px] text-ink-2">CareWeave Outpatient Department</p>
-            <p className="text-[9px] text-ink-3">Pallikaranai, Chennai · NABL & NABH Accredited</p>
             <div className="my-2 border-t border-dotted border-rule" />
             <p className="text-[11px] uppercase font-bold tracking-wider">Outpatient Consultation Token</p>
           </div>

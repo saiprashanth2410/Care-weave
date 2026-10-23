@@ -7,12 +7,11 @@ const iso = (d: number) => new Date(now.getTime() - d * 86400000).toISOString();
 
 export async function buildSeed() {
   const users = [
-    // Official Hospital Accounts for Firebase Authentication
+    // Staff directory for Firebase sign-in. These accounts have no local password; they sign in only through Firebase.
     {
       id: 'u-reception-com',
       name: 'Maya Patel (Front Desk Officer)',
       email: 'reception@careweave.com',
-      passwordHash: await bcrypt.hash('HospitalPass@2026', 10),
       role: 'receptionist',
       facility: 'CareWeave Front Desk & Triage',
       permissions: ['register', 'triage', 'queue']
@@ -21,7 +20,6 @@ export async function buildSeed() {
       id: 'u-lab-com',
       name: 'Dr. KALA.K MD., DNB (Head of Laboratory)',
       email: 'lab@careweave.com',
-      passwordHash: await bcrypt.hash('HospitalPass@2026', 10),
       role: 'lab',
       facility: 'CareWeave Central Laboratory',
       permissions: ['order', 'collect', 'analyze', 'verify']
@@ -30,7 +28,6 @@ export async function buildSeed() {
       id: 'u-doctor-com',
       name: 'Dr. ANIRBAN LAHA (Consultant Physician)',
       email: 'doctor@careweave.com',
-      passwordHash: await bcrypt.hash('HospitalPass@2026', 10),
       role: 'doctor',
       facility: 'CareWeave General Medicine & OPD',
       permissions: ['consult', 'prescribe', 'diagnose']

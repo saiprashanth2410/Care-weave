@@ -11,6 +11,7 @@ import helmet from 'helmet';
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { extractWithClaude, ScanError } from './claudeScan.js';
+import { runScenario } from './scenario.js';
 import { registerDoctorRoutes } from './doctor.js';
 import { buildSeed, ensureSeed } from './seed.js';
 
@@ -196,93 +197,45 @@ app.post('/api/auth/login', loginLimit, async (req, res) => {
   if (!localLoginAllowed) return res.status(403).json({ error: 'Sign in with your staff account' });
   const { email, password } = req.body || {};
   const cleanEmail = String(email || '').trim().toLowerCase();
-  const passStr = String(password || '');
   const u = db.users.find((x: any) => String(x.email || '').trim().toLowerCase() === cleanEmail);
+  // Always run a bcrypt compare so an unknown email and a wrong password look and time the same.
   const hash = u?.passwordHash || '$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidi';
-  const ok =
-    passStr === 'HospitalPass@2026' ||
-    passStr === 'demo123' ||
-    (await bcrypt.compare(passStr, hash).catch(() => false));
-  if (!u || !ok) return res.status(401).json({ error: 'Invalid email or password' });
+  const ok = await bcrypt.compare(String(password || ''), hash).catch(() => false);
+  if (!u || !u.passwordHash || !ok) return res.status(401).json({ error: 'Invalid email or password' });
   await startSession(u, 'session', res);
 });
 
-app.post('/api/auth/firebase-login', loginLimit, async (req, res) => {
-  const idToken = String(req.body?.idToken || '');
-  if (!idToken) return res.status(400).json({ error: 'A Firebase ID token is required' });
-  let decoded: any;
-  try {
-    if (firebaseAuth) {
-      decoded = await firebaseAuth.verifyIdToken(idToken);
-    } else {
-      throw new Error('No firebaseAuth instance');
-    }
-  } catch (err: any) {
-    // If verifyIdToken cannot fetch keys due to network isolation, safely parse JWT payload
+if (firebaseAuth) {
+  app.post('/api/auth/firebase-login', loginLimit, async (req, res) => {
+    const idToken = String(req.body?.idToken || '');
+    if (!idToken) return res.status(400).json({ error: 'A Firebase ID token is required' });
+    let decoded: any;
     try {
-      const parts = idToken.split('.');
-      if (parts.length === 3) {
-        decoded = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-      }
+      // verifyIdToken checks the signature, issuer, audience and expiry. A token that fails is never trusted.
+      decoded = await firebaseAuth.verifyIdToken(idToken);
     } catch {
       return res.status(401).json({ error: 'Your sign-in could not be verified. Sign in again.' });
     }
-  }
+    const uid = String(decoded.uid || '');
+    const email = String(decoded.email || '').trim().toLowerCase();
+    if (!uid || !email) return res.status(401).json({ error: 'Your sign-in could not be verified. Sign in again.' });
 
-  if (!decoded || (!decoded.uid && !decoded.user_id)) {
-    return res.status(401).json({ error: 'Your sign-in could not be verified. Sign in again.' });
-  }
-
-  const uid = decoded.uid || decoded.user_id;
-  const email = String(decoded.email || '').trim().toLowerCase();
-
-  // Look up staff by Firebase UID or email
-  let u = db.users.find((x: any) => (x.firebaseUid && x.firebaseUid === uid) || (!!email && String(x.email).toLowerCase() === email));
-
-  // If new staff account from Firebase, auto-enroll with appropriate clinical role
-  if (!u) {
-    let assignedRole = 'receptionist';
-    let assignedName = email.split('@')[0];
-    let assignedPermissions: string[] = [];
-
-    if (email.includes('lab') || email.includes('patho')) {
-      assignedRole = 'lab';
-      assignedName = 'Dr. KALA.K MD., DNB';
-      assignedPermissions = ['order', 'collect', 'analyze', 'verify'];
-    } else if (email.includes('doctor') || email.includes('physician')) {
-      assignedRole = 'doctor';
-      assignedName = 'Dr. ANIRBAN LAHA';
-      assignedPermissions = ['consult', 'prescribe', 'diagnose'];
-    } else {
-      assignedRole = 'receptionist';
-      assignedName = 'Maya Patel';
-      assignedPermissions = ['register', 'triage', 'queue'];
+    // Only people already in the staff directory can sign in. Roles and permissions come from there, never from the token.
+    const u = db.users.find((x: any) => String(x.email || '').trim().toLowerCase() === email);
+    if (!u) return res.status(403).json({ error: 'This account is not registered as CareWeave staff. Ask an administrator.' });
+    if (u.firebaseUid && u.firebaseUid !== uid) return res.status(403).json({ error: 'This email is linked to a different sign-in account.' });
+    if (!u.firebaseUid) {
+      if (requireVerifiedEmail && decoded.email_verified !== true) {
+        return res.status(403).json({ error: 'Verify your email address first, then sign in again.' });
+      }
+      u.firebaseUid = uid;
+      await save();
     }
-
-    u = {
-      id: id('u'),
-      firebaseUid: uid,
-      name: assignedName,
-      email,
-      role: assignedRole,
-      facility:
-        assignedRole === 'lab'
-          ? 'CareWeave Central Laboratory'
-          : assignedRole === 'doctor'
-          ? 'CareWeave General Medicine & OPD'
-          : 'CareWeave Front Desk & Triage',
-      permissions: assignedPermissions,
-      createdAt: now(),
-    };
-    db.users.push(u);
-    await save();
-  } else if (!u.firebaseUid) {
-    u.firebaseUid = uid;
-    await save();
-  }
-
-  await startSession(u, 'firebase_auth', res);
-});
+    await startSession(u, 'firebase_auth', res);
+  });
+} else {
+  app.post('/api/auth/firebase-login', (_req, res) => res.status(404).json({ error: 'Not found' }));
+}
 
 app.use('/api', auth);
 
@@ -853,6 +806,36 @@ app.post('/api/lab/extract', roles('lab'), uploadLimit, async (req: any, res) =>
   }
 });
 
+// ── Synthetic sample scenario ───────────────────────────────────────────────
+// One labelled, made-up patient journey for demonstrations. Off when ALLOW_SAMPLE_DATA=false.
+const sampleAllowed = process.env.ALLOW_SAMPLE_DATA !== 'false';
+let scenarioRunning = false;
+app.get('/api/demo/scenario', (_req, res) => res.json({ available: sampleAllowed, loaded: db.patients.some((p: any) => p.sample) }));
+app.post('/api/demo/scenario', roles('receptionist', 'doctor', 'lab'), async (req: any, res) => {
+  if (!sampleAllowed) return res.status(403).json({ error: 'Sample data is switched off on this server' });
+  if (scenarioRunning) return res.status(409).json({ error: 'The sample scenario is already loading' });
+  scenarioRunning = true;
+  try {
+    const mint = (userId: string) => {
+      const token = crypto.randomBytes(32).toString('hex');
+      sessions.set(tokenKey(token), { userId, expires: Date.now() + 5 * 60 * 1000 });
+      return token;
+    };
+    const out = await runScenario(`http://127.0.0.1:${PORT}`, db.users, db.patients, mint, req.user);
+    if (out.loaded) {
+      const p = db.patients.find((x: any) => x.patientId === out.patientId);
+      if (p) p.sample = true;
+      audit(req, 'create', 'sample-scenario', out.patientId || '', 'Loaded synthetic sample scenario');
+      await save();
+    }
+    res.status(out.loaded ? 201 : 200).json(out);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Could not load the sample scenario' });
+  } finally {
+    scenarioRunning = false;
+  }
+});
+
 registerDoctorRoutes({
   app, db: () => db, save, audit, roles, id, now, patientById, text, isToday, adminPatientView
 });
@@ -887,6 +870,13 @@ const start = async () => {
       usersChanged = true;
     }
   }
+  // A password that was once published in a shared chat must not work, even on a database seeded earlier.
+  for (const u of db.users) {
+    if (u.passwordHash && (await bcrypt.compare('HospitalPass@2026', u.passwordHash).catch(() => false))) {
+      delete u.passwordHash;
+      usersChanged = true;
+    }
+  }
   if (usersChanged) await save();
   app.listen(PORT, () =>
     console.log(`CareWeave API listening on http://localhost:${PORT} [DB: ${mongoConnected ? 'MongoDB Atlas' : 'Local JSON'}]`)
@@ -894,4 +884,3 @@ const start = async () => {
 };
 
 start();
-// Reloaded with Firebase hacktober-143c4

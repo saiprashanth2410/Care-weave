@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
+import SampleScenario from '@/components/SampleScenario'
 import { clearSession, type SessionUser } from '@/auth/session'
 
 const NAV = [
@@ -76,7 +77,7 @@ export default function LabLayout({ user }: { user: SessionUser }) {
 
       <div className="flex min-w-0 flex-col">
         <div className="hidden items-center justify-between border-b border-rule bg-surface px-8 py-3 lg:flex">
-          <p className="text-xs font-semibold uppercase tracking-wider text-accent-ink">Laboratory</p>
+          <p className="flex items-center gap-4 text-xs font-semibold uppercase tracking-wider text-accent-ink">Laboratory <SampleScenario className="[&_button]:min-h-8 [&_button]:border [&_button]:border-rule [&_button]:px-2 [&_button]:text-xs [&_button]:normal-case [&_button]:tracking-normal" /></p>
           <p className="flex items-center gap-4 text-sm text-ink-2">
             <span><span className="font-semibold text-ink">{user.name}</span> · {user.facility ?? 'Laboratory'}</span>
             <button onClick={signOut} className="min-h-11 px-2 text-sm font-semibold text-accent-ink underline underline-offset-2">Sign out</button>

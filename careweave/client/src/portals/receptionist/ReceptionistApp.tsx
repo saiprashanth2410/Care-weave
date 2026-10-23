@@ -8,10 +8,10 @@ import {
 } from './icons';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from './api';
+import SampleScenario from '@/components/SampleScenario';
 import OPTokenPrintModal from './components/OPTokenPrintModal';
 import DoctorSlotMatrix from './components/DoctorSlotMatrix';
-import ReceptionAIScannerModal, { type ExtractedReceptionData } from './components/ReceptionAIScannerModal';
-import type { AdminPatientRecord, Appointment, Dashboard, Doctor, Patient, User } from './types';
+import type { ExtractedReceptionData, AdminPatientRecord, Appointment, Dashboard, Doctor, Patient, User } from './types';
 import './styles.css';
 
 // ─── UTILITIES & HELPERS ───────────────────────────────────────────────────
@@ -95,7 +95,6 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [registeredPatientToBook, setRegisteredPatientToBook] = useState<Patient | null>(null);
 
   // New Clinical Reception Features
-  const [showAIScanner, setShowAIScanner] = useState(false);
   const [printAppointment, setPrintAppointment] = useState<Appointment | null>(null);
   const [printTokenIndex, setPrintTokenIndex] = useState(1);
   const [prefilledPatient, setPrefilledPatient] = useState<ExtractedReceptionData | null>(null);
@@ -208,6 +207,8 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               <span>{currentTime} · {new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
             </div>
 
+            <SampleScenario className="btn-soft" />
+
             <Link
               to="/lab/overview"
               className="btn-soft"
@@ -217,14 +218,6 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               <span>Laboratory portal</span>
             </Link>
 
-            <button
-              className="btn-soft"
-              onClick={() => setShowAIScanner(true)}
-              style={{ fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}
-              title="Scan Doctor Prescription Slip or Patient ID"
-            >
-              <span>AI scanner</span>
-            </button>
 
             <button
               className="btn-soft"
@@ -347,17 +340,6 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
         />
       )}
 
-      {showAIScanner && (
-        <ReceptionAIScannerModal
-          onClose={() => setShowAIScanner(false)}
-          onAutoFill={(extracted) => {
-            setShowAIScanner(false);
-            setPrefilledPatient(extracted);
-            setShowRegisterModal(true);
-            notify(`AI extracted details for ${extracted.name}`);
-          }}
-        />
-      )}
 
       {printAppointment && (
         <OPTokenPrintModal

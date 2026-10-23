@@ -13,6 +13,7 @@ import type {
   LabOrder, Patient, PatientRecord, Referral, User
 } from './types';
 import PortalBoundary from './PortalBoundary';
+import SampleScenario from '@/components/SampleScenario';
 import './styles.css';
 
 const fmtDate = (v?: string) => v ? new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
@@ -128,6 +129,7 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
           </div>
 
           <div className="top-actions">
+            <SampleScenario className="action-pill" />
             <button
               className="icon-button"
               onClick={() => { setRefresh(v => v + 1); notify('Clinical data refreshed'); }}

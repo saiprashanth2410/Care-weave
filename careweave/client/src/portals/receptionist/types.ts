@@ -82,3 +82,16 @@ export type Dashboard = {
   appointments: Appointment[];
   recent: AuditLog[];
 };
+
+/** Details a registration form can be pre-filled with. */
+export interface ExtractedReceptionData {
+  name: string
+  dob: string
+  age: number
+  gender: 'M' | 'F' | 'O'
+  phone: string
+  doctorName: string
+  department: string
+  reason: string
+  emergencyContact?: string
+}
