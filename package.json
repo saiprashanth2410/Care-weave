@@ -2,9 +2,13 @@
   "name": "hacktober-fest",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "careweave/client",
+    "careweave/server"
+  ],
   "scripts": {
     "dev": "cd careweave/client && npm run dev",
-    "build": "cd careweave/client && npm run build",
+    "build": "cd careweave/client && npm install && npm run build",
     "lint": "cd careweave/client && npm run lint",
     "preview": "cd careweave/client && npm run preview",
     "server": "cd careweave/server && npm run dev",
