@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
-  calculateAgeFromDob,
   createLabOrder,
   getDoctors,
   getLabOrders,
@@ -35,7 +34,7 @@ export default function Orders() {
   const [newVisitNo, setNewVisitNo] = useState('')
   const [newOpIp, setNewOpIp] = useState<'OP' | 'IP'>('IP')
   const [newPatientAge, setNewPatientAge] = useState<number | ''>('')
-  const [newPatientGender, setNewPatientGender] = useState<'M' | 'F' | 'O'>('F')
+  const [newPatientGender, setNewPatientGender] = useState<'' | 'M' | 'F' | 'O'>('')
   const [newTestName, setNewTestName] = useState<string>(Object.keys(TEST_TEMPLATES)[0])
   const [newDoctor, setNewDoctor] = useState('')
   const [doctors, setDoctors] = useState<string[]>([])
@@ -47,6 +46,8 @@ export default function Orders() {
   const [patientSearchResults, setPatientSearchResults] = useState<RegisteredPatient[]>([])
   const [selectedPatientRef, setSelectedPatientRef] = useState<RegisteredPatient | null>(null)
   const [isSearchingPatient, setIsSearchingPatient] = useState(false)
+  const [selectedEncounterId, setSelectedEncounterId] = useState('')
+  const [externalOrder, setExternalOrder] = useState(false)
 
   useEffect(() => {
     getDoctors()
@@ -87,8 +88,9 @@ export default function Orders() {
     setSelectedPatientRef(p)
     setNewPatientName(p.name)
     setNewUhid(p.patientId)
-    setNewPatientAge(calculateAgeFromDob(p.dob))
-    setNewPatientGender(p.gender || 'F')
+    setNewPatientAge(p.ageYears)
+    setSelectedEncounterId(p.encounters[0]?.id ?? '')
+    setExternalOrder(false)
     setNewOpIp('OP')
     setPatientSearchQuery('')
     setPatientSearchResults([])
@@ -130,10 +132,14 @@ export default function Orders() {
 
   const handleCreateOrder = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newPatientName.trim() || !newDoctor || newPatientAge === '') return
+    if (!newPatientName.trim() || !newDoctor || newPatientAge === '' || !newPatientGender) return
+    if (!selectedPatientRef && !externalOrder) return
+    if (selectedPatientRef && !selectedEncounterId) return
     const created = await createLabOrder({
       patientName: newPatientName.trim(),
-      patientId: selectedPatientRef?.id || undefined,
+      patientId: selectedPatientRef?.patientId,
+      encounterId: selectedPatientRef ? selectedEncounterId : undefined,
+      external: !selectedPatientRef,
       patientUhid: newUhid.trim() || selectedPatientRef?.patientId || undefined,
       visitNo: newVisitNo.trim() || undefined,
       opIp: newOpIp,
@@ -149,6 +155,9 @@ export default function Orders() {
     setSelectedOrder(created)
     setShowNewModal(false)
     setSelectedPatientRef(null)
+    setSelectedEncounterId('')
+    setExternalOrder(false)
+    setNewPatientGender('')
     setNewPatientName('')
     setNewUhid('')
     setNewVisitNo('')
@@ -546,7 +555,7 @@ export default function Orders() {
                     </div>
                     {patientSearchResults.map((p) => (
                       <button
-                        key={p.id || p.patientId}
+                        key={p.patientId}
                         type="button"
                         onClick={() => handleSelectPatient(p)}
                         className="w-full text-left p-2.5 hover:bg-paper/80 border-b border-rule last:border-b-0 flex items-center justify-between"
@@ -555,7 +564,7 @@ export default function Orders() {
                           <p className="text-sm font-bold text-ink">{p.name}</p>
                           <p className="font-mono text-xs text-ink-2">
                             UHID: <span className="text-accent-ink font-bold">{p.patientId}</span>
-                            {p.phone && ` · Tel: ${p.phone}`}
+                            {` · ${p.ageYears}y`}
                           </p>
                         </div>
                         <span className="text-xs bg-accent/10 border border-accent/30 text-accent-ink font-semibold px-2 py-0.5">
@@ -578,9 +587,26 @@ export default function Orders() {
                     </button>
                   </div>
                 ) : (
-                  <p className="mt-1 text-[11px] text-ink-3">
-                    Patients registered at Front Desk appear here automatically. Or enter walk-in details below.
-                  </p>
+                  <label className="mt-2 flex min-h-11 items-center gap-2 text-xs text-ink-2">
+                    <input type="checkbox" checked={externalOrder} onChange={(e) => setExternalOrder(e.target.checked)} />
+                    <span>External requisition: this patient is not registered at the front desk. Enter the details below.</span>
+                  </label>
+                )}
+                {selectedPatientRef && (
+                  <div className="mt-2">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-ink-3 mb-1">Visit (encounter) *</label>
+                    <select
+                      required
+                      value={selectedEncounterId}
+                      onChange={(e) => setSelectedEncounterId(e.target.value)}
+                      className="w-full min-h-11 border border-rule bg-paper px-3 text-sm text-ink"
+                    >
+                      {selectedPatientRef.encounters.length === 0 && <option value="">No visits on record, register one at the front desk</option>}
+                      {selectedPatientRef.encounters.map((en) => (
+                        <option key={en.id} value={en.id}>{en.date} {en.time} · {en.doctorName}</option>
+                      ))}
+                    </select>
+                  </div>
                 )}
               </div>
 
@@ -595,6 +621,7 @@ export default function Orders() {
                     required
                     placeholder="e.g. Meera Natarajan"
                     value={newPatientName}
+                    readOnly={!!selectedPatientRef}
                     onChange={(e) => setNewPatientName(e.target.value)}
                     className="w-full min-h-11 border border-rule bg-paper px-3 text-sm text-ink font-medium"
                   />
@@ -610,14 +637,17 @@ export default function Orders() {
                       min={1}
                       max={120}
                       value={newPatientAge}
+                      readOnly={!!selectedPatientRef}
                       onChange={(e) => setNewPatientAge(e.target.value === '' ? '' : Number(e.target.value))}
                       className="w-16 min-h-11 border border-rule bg-paper px-2 text-sm text-ink text-center"
                     />
                     <select
+                      required
                       value={newPatientGender}
-                      onChange={(e) => setNewPatientGender(e.target.value as 'M' | 'F' | 'O')}
+                      onChange={(e) => setNewPatientGender(e.target.value as '' | 'M' | 'F' | 'O')}
                       className="flex-1 min-h-11 border border-rule bg-paper px-2 text-sm text-ink"
                     >
+                      <option value="">Select</option>
                       <option value="M">Male</option>
                       <option value="F">Female</option>
                       <option value="O">Other</option>

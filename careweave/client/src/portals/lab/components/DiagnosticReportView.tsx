@@ -233,6 +233,24 @@ export default function DiagnosticReportView({ order, onClose, onPrint, facility
           </div>
         </section>
 
+        {(order.observedAt || (order.amendments?.length ?? 0) > 0) && (
+          <section className="mt-4 border-t border-slate-300 pt-2 text-[11px] text-slate-700">
+            {order.observedAt && <p>Observed on analyzer: {formatDate(order.observedAt)}</p>}
+            {(order.amendments?.length ?? 0) > 0 && (
+              <div className="mt-1">
+                <p className="font-bold">Amended {order.amendments!.length} time(s) after first submission.</p>
+                <ul className="list-disc pl-4">
+                  {order.amendments!.map((a) => (
+                    <li key={a.id}>
+                      {formatDate(a.at)} by {a.byName}: {a.reason} ({a.changes.map((c) => `${c.parameter} ${c.before ? c.before.value : 'new'} -> ${c.after.value}`).join('; ')})
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
+        )}
+
         {/* ===================== SIGNATURES BLOCK ===================== */}
         <section className="mt-8 border-t border-slate-300 pt-4">
           <div className="flex items-end justify-between px-4 sm:px-12">

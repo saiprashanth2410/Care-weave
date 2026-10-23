@@ -59,6 +59,7 @@ export default function AIScannerModal({ onClose, onImportSuccess }: AIScannerMo
     try {
       // 1. Create the requisition in the system
       const created = await createLabOrder({
+        external: true,
         patientName: data.patientName,
         patientUhid: data.patientUhid,
         visitNo: data.visitNo,
