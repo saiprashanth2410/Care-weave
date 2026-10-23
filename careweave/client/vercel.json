@@ -3,7 +3,10 @@
     {
       "source": "/api/:path*",
       "destination": "https://hacktoberfest-rfpw.onrender.com/api/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
-
