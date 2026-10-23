@@ -210,6 +210,18 @@ async function main() {
     check('an unmatched record never appears on a chart', !(after.timeline.some((e: any) => e.reference === 'B-2')));
 
 
+    // ---- sample scenario ----
+    const sc = await call('POST', '/api/demo/scenario', rec, {});
+    check('sample scenario loads through the real API', sc.status === 201 && sc.json.loaded === true, JSON.stringify(sc.json).slice(0, 200));
+    const sp = (await call('GET', '/api/patients', rec)).json.find((p: any) => p.patientId === sc.json.patientId);
+    const spRec = (await call('GET', `/api/patients/${sp?.id}/record`, doc)).json;
+    check('the sample patient has a released result on the timeline', spRec.chart?.some((c: any) => c.test === 'HbA1c'));
+    const waiting = (await call('GET', '/api/lab/orders', lab)).json.data.find((o: any) => o.id === sc.json.waitingOrder);
+    check('one sample order waits for verification', waiting?.status === 'awaiting_verification');
+    check('the waiting order cannot be verified by the person who entered it', (await call('PATCH', `/api/lab/orders/${waiting.id}`, lab, { status: 'released' })).status === 403);
+    check('the sample import produced a duplicate and a conflict', (await call('GET', '/api/reconciliation/cases', doc)).json.filter((k: any) => ['duplicate', 'conflict'].includes(k.type)).length >= 2);
+    check('loading the sample twice does nothing', (await call('POST', '/api/demo/scenario', rec, {})).json.loaded === false);
+
     // ---- sign-in hardening (local mode) ----
     check('firebase-login does not exist when Firebase is off', (await call('POST', '/api/auth/firebase-login', undefined, { email: 'doctor@careweave.test' })).status === 404);
     check('the old hard-coded passwords no longer work', (await call('POST', '/api/auth/login', undefined, { email: 'doctor@careweave.test', password: 'HospitalPass@2026' })).status === 401);
