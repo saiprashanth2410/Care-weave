@@ -31,6 +31,8 @@ export default function Overview() {
   }, [])
 
   const count = (...s: LabOrderStatus[]) => orders?.filter((o) => s.includes(o.status)).length ?? 0
+  // A failed load must never read as "0 orders": show a dash instead.
+  const shown = (...s: LabOrderStatus[]) => (error ? '–' : orders && count(...s))
   const chart = useMemo(
     () => PIPELINE.map((s) => ({ key: s, name: STATUS_META[s].label, value: count(s) })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -59,18 +61,20 @@ export default function Overview() {
       )}
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6" aria-label="Order counts">
-        <Stat icon={ClipboardList} label="Incoming requests" value={orders && count('requested')} to="/lab/orders" tone="slate" />
-        <Stat icon={Hourglass} label="Awaiting collection" value={orders && count('collection_pending')} to="/lab/samples" tone="amber" />
-        <Stat icon={TestTube2} label="In processing" value={orders && count('collected', 'processing')} to="/lab/samples" tone="indigo" />
-        <Stat icon={ShieldCheck} label="Awaiting verification" value={orders && count('awaiting_verification')} to="/lab/verification" tone="violet" />
-        <Stat icon={CheckCircle2} label="Completed reports" value={orders && count('verified', 'released')} to="/lab/orders" tone="green" />
-        <Stat icon={AlertTriangle} label="Needs recollection" value={orders && count('recollect_required')} to="/lab/samples" tone="rose" />
+        <Stat icon={ClipboardList} label="Incoming requests" value={shown('requested')} to="/lab/orders" tone="slate" />
+        <Stat icon={Hourglass} label="Awaiting collection" value={shown('collection_pending')} to="/lab/samples" tone="amber" />
+        <Stat icon={TestTube2} label="In processing" value={shown('collected', 'processing')} to="/lab/samples" tone="indigo" />
+        <Stat icon={ShieldCheck} label="Awaiting verification" value={shown('awaiting_verification')} to="/lab/verification" tone="violet" />
+        <Stat icon={CheckCircle2} label="Completed reports" value={shown('verified', 'released')} to="/lab/orders" tone="green" />
+        <Stat icon={AlertTriangle} label="Needs recollection" value={shown('recollect_required')} to="/lab/samples" tone="rose" />
       </section>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
         <Card title="Order pipeline" subtitle="Number of orders at each stage">
           {!orders ? (
             <Skeleton className="h-60" />
+          ) : error ? (
+            <Empty text="Order data is unavailable." />
           ) : (
             <div className="h-64" role="img" aria-label="Bar chart of orders per workflow stage">
               <ResponsiveContainer width="100%" height="100%">
@@ -92,6 +96,8 @@ export default function Overview() {
         <Card title="Needs attention" subtitle="Urgent orders and recollections">
           {!orders ? (
             <Skeleton className="h-60" />
+          ) : error ? (
+            <Empty text="Order data is unavailable." />
           ) : attention.length === 0 ? (
             <Empty text="Nothing urgent right now." />
           ) : (
@@ -119,6 +125,8 @@ export default function Overview() {
       >
         {!orders ? (
           <Skeleton className="h-48" />
+        ) : error ? (
+          <Empty text="Order data is unavailable." />
         ) : recent.length === 0 ? (
           <Empty text="No test orders yet." />
         ) : (
@@ -163,7 +171,7 @@ const TONES = {
   rose: 'bg-rose-50 text-rose-600',
 }
 
-function Stat({ icon: Icon, label, value, to, tone }: { icon: LucideIcon; label: string; value: number | null | undefined; to: string; tone: keyof typeof TONES }) {
+function Stat({ icon: Icon, label, value, to, tone }: { icon: LucideIcon; label: string; value: number | string | null | undefined; to: string; tone: keyof typeof TONES }) {
   return (
     <Link to={to} className="group rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition hover:border-teal-500/50 hover:shadow-sm">
       <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg ${TONES[tone]}`}>
