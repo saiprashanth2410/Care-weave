@@ -121,7 +121,7 @@ export default function Overview() {
       <Card
         title="Latest orders"
         subtitle="Most recently requested tests"
-        action={<Link to="/lab/orders" className="-my-2 flex items-center gap-1 py-2 pl-3 text-xs font-semibold text-teal-600 hover:underline">View all <ArrowUpRight size={12} /></Link>}
+        action={<Link to="/lab/orders" className="-my-3 flex items-center gap-1 py-3 pl-3 text-xs font-semibold text-teal-600 hover:underline">View all <ArrowUpRight size={12} /></Link>}
       >
         {!orders ? (
           <Skeleton className="h-48" />
