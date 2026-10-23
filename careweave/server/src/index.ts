@@ -13,6 +13,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { extractWithClaude, ScanError } from './claudeScan.js';
 import { runScenario } from './scenario.js';
 import { registerDoctorRoutes } from './doctor.js';
+import { importMedicines, searchMedicines } from './medicines.js';
 import { buildSeed, ensureSeed } from './seed.js';
 
 // Everything the server reads or writes lives next to the server code, whichever folder it was started from.
@@ -849,6 +850,14 @@ app.post('/api/demo/scenario', roles('receptionist', 'doctor', 'lab'), async (re
   }
 });
 
+app.get('/api/medicines/search', roles('doctor'), async (req: any, res) => {
+  try {
+    res.json(await searchMedicines(String(req.query.q ?? ''), 15, mongoConnected));
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Medicine search failed' });
+  }
+});
+
 registerDoctorRoutes({
   app, db: () => db, save, audit, roles, id, now, patientById, text, isToday, adminPatientView
 });
@@ -861,6 +870,7 @@ app.use((err: any, _req: any, res: any, _next: any) => {
 const start = async () => {
   await initMongo();
   if (mongoConnected) {
+    importMedicines().catch((err) => console.warn('Medicine import failed:', err?.message));
     db = await loadFromMongo();
     if (!db.users.length) {
       db = await buildSeed();

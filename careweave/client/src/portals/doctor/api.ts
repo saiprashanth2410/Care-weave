@@ -85,6 +85,7 @@ export const api={
   verifyLabResult:(id:string)=>request<any>(`/api/lab-results/${id}/verify`,{method:'POST'}),
 
   // Prescriptions & E-Prescribing
+  searchMedicines:(q:string)=>request<{id:string;name:string;brand:string;generic:string;strength:string;form:string;route:string}[]>(`/api/medicines/search?q=${encodeURIComponent(q)}`),
   createPrescription:(body:any)=>request<Prescription>('/api/prescriptions',{method:'POST',body:JSON.stringify(body)}),
   updatePrescription:(id:string,body:{status?:string;refills?:number;discontinueReason?:string})=>
     request<Prescription>(`/api/prescriptions/${id}`,{method:'PATCH',body:JSON.stringify(body)}),

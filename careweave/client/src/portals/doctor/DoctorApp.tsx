@@ -2443,6 +2443,16 @@ function OrderLabModal({ patient: initPatient, onClose, onSaved }: { patient?: P
   const [clinicalIndication, setClinicalIndication] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [suggestions, setSuggestions] = useState<Awaited<ReturnType<typeof api.searchMedicines>>>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  // Type-ahead over the medicine catalogue (MongoDB `medicines` collection).
+  useEffect(() => {
+    const q = form.medicine.trim();
+    if (!showSuggestions || q.length < 2) return setSuggestions([]);
+    const t = setTimeout(() => api.searchMedicines(q).then(setSuggestions).catch(() => setSuggestions([])), 250);
+    return () => clearTimeout(t);
+  }, [form.medicine, showSuggestions]);
 
   useEffect(() => {
     if (!initPatient) api.patients().then(setPatients).catch(() => {});
@@ -2661,9 +2671,34 @@ function PrescribeModal({ patient: initPatient, onClose, onSaved }: { patient?: 
           </select>
         </label>
 
-        <label>
+        <label style={{ position: 'relative' }}>
           Drug Name & Formulation
-          <input required value={form.medicine} onChange={e => setForm({ ...form, medicine: e.target.value })} />
+          <input
+            required
+            autoComplete="off"
+            placeholder="Type a brand or generic name…"
+            value={form.medicine}
+            onChange={e => { setForm({ ...form, medicine: e.target.value }); setShowSuggestions(true); }}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+          />
+          {showSuggestions && suggestions.length > 0 && (
+            <div style={{ position: 'absolute', zIndex: 20, left: 0, right: 0, top: '100%', maxHeight: 260, overflowY: 'auto', background: '#fff', border: '1px solid #cbd5e1', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,.15)' }}>
+              {suggestions.map(m => (
+                <div
+                  key={m.id}
+                  style={{ padding: '8px 10px', cursor: 'pointer', fontSize: 13, borderBottom: '1px solid #f1f5f9' }}
+                  onMouseDown={e => {
+                    e.preventDefault();
+                    setForm(f => ({ ...f, medicine: m.name, dosage: m.strength || f.dosage, route: m.route || f.route }));
+                    setShowSuggestions(false);
+                  }}
+                >
+                  <b>{m.brand}</b> <span className="muted">{m.generic}</span>
+                  <div className="muted" style={{ fontSize: 11 }}>{[m.strength, m.form].filter(Boolean).join(' · ')}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </label>
 
         <label>
