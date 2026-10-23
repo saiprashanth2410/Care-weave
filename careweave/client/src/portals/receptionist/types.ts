@@ -1,4 +1,4 @@
-export type Role = 'receptionist';
+export type Role = 'receptionist' | 'lab' | 'doctor';
 
 export type AppointmentStatus =
   | 'Scheduled'
@@ -52,6 +52,7 @@ export type Appointment = {
 
 export type AdminPatientRecord = Patient & {
   appointments: Appointment[];
+  labOrders?: any[];
 };
 
 export type AuditLog = {

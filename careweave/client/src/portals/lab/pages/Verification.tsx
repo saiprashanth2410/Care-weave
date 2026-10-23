@@ -8,7 +8,7 @@ export default function Verification() {
   const [orders, setOrders] = useState<LabOrder[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedOrder, setSelectedOrder] = useState<LabOrder | null>(null)
-  const [verifierName, setVerifierName] = useState('Dr. KALA.K MD., DNB., DipRCPath')
+  const [verifierName, setVerifierName] = useState('')
   const [pathNotes, setPathNotes] = useState('')
   const [searchParams] = useSearchParams()
 
@@ -27,6 +27,7 @@ export default function Verification() {
           if (match) openReview(match)
         }
       })
+      .catch(() => {}) // the layout banner reports the failure
       .finally(() => setLoading(false))
   }, [searchParams])
 
@@ -221,7 +222,7 @@ export default function Verification() {
         </div>
       </div>
 
-      {/* Pathologist Clinical Report & Verification Modal (Dr. Kamakshi Memorial Hospital Format) */}
+      {/* Pathologist Clinical Report & Verification Modal  */}
       {selectedOrder && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-deep/80 p-2 sm:p-6 print:p-0">
           {selectedOrder.status === 'awaiting_verification' && (

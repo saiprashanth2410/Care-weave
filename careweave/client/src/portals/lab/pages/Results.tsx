@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { getLabOrders, recordTestResults, TEST_TEMPLATES } from '../api'
+import AIScannerModal from '../components/AIScannerModal'
 import StatusBadge from '../components/StatusBadge'
 import type { LabOrder, ResultFlag, TestResultItem } from '../types'
 
@@ -11,6 +12,7 @@ export default function Results() {
   const [results, setResults] = useState<TestResultItem[]>([])
   const [techNotes, setTechNotes] = useState('')
   const [saveMessage, setSaveMessage] = useState('')
+  const [showScanner, setShowScanner] = useState(false)
   const [searchParams] = useSearchParams()
 
   const selectOrder = (order: LabOrder) => {
@@ -44,6 +46,7 @@ export default function Results() {
 
         if (candidate) selectOrder(candidate)
       })
+      .catch(() => {}) // the layout banner reports the failure
       .finally(() => setLoading(false))
   }, [searchParams])
 
@@ -186,9 +189,18 @@ export default function Results() {
 
               {/* Analyte Parameters Entry Table */}
               <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold uppercase tracking-wider text-ink">Analyte Measurements</h3>
-                  <p className="text-xs text-ink-3">Values checked automatically against biological reference intervals</p>
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-semibold uppercase tracking-wider text-ink">Analyte Measurements</h3>
+                    <p className="text-xs text-ink-3">Values checked automatically against biological reference intervals</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowScanner(true)}
+                    className="flex min-h-9 items-center gap-1.5 rounded-sm border border-accent bg-accent/10 px-3 text-xs font-bold uppercase tracking-wider text-accent-ink hover:bg-accent hover:text-surface"
+                  >
+                    Scan to fill results
+                  </button>
                 </div>
 
                 <div className="overflow-x-auto border border-rule">
@@ -280,6 +292,18 @@ export default function Results() {
             </div>
           )}
         </div>
+      )}
+
+      {/* AI Document Vision Scanner Modal */}
+      {showScanner && (
+        <AIScannerModal
+          onClose={() => setShowScanner(false)}
+          onImportSuccess={(newOrder) => {
+            setOrders((prev) => [newOrder, ...prev])
+            selectOrder(newOrder)
+            setShowScanner(false)
+          }}
+        />
       )}
     </div>
   )
