@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { parseMedicalDocumentWithAI, type ExtractedReportData } from '../services/aiScanner'
+import { parseMedicalDocumentWithAI, type ExtractedReportData, type ScannedRow } from '../services/aiScanner'
 import type { LabOrder } from '../types'
 import { createLabOrder, updateOrderStatus } from '../api'
 
@@ -14,10 +14,11 @@ export default function AIScannerModal({ onClose, onImportSuccess }: AIScannerMo
   const [step, setStep] = useState<ScanStep>('upload')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string>('')
-  const [scanMessage, setScanMessage] = useState('Initializing AI Clinical Document Vision...')
+  const [scanMessage, setScanMessage] = useState('Reading the document')
   const [data, setData] = useState<ExtractedReportData | null>(null)
   const [importing, setImporting] = useState(false)
   const [scanError, setScanError] = useState('')
+  const [importError, setImportError] = useState('')
 
   const runExtraction = async (file: File) => {
     setScanError('')
@@ -53,8 +54,19 @@ export default function AIScannerModal({ onClose, onImportSuccess }: AIScannerMo
     }
   }
 
+  const updateRow = (i: number, patch: Partial<ScannedRow>) =>
+    setData((d) => d && { ...d, results: d.results.map((r, j) => (j === i ? { ...r, ...patch, needsCheck: false, checkReason: '' } : r)) })
+  const removeRow = (i: number) => setData((d) => d && { ...d, results: d.results.filter((_, j) => j !== i) })
+  const addRow = () =>
+    setData((d) => d && { ...d, results: [...d.results, { parameter: '', value: '', unit: '', referenceRange: '', flag: 'normal' }] })
+
   const handleImportToSystem = async () => {
     if (!data) return
+    setImportError('')
+    const rows = data.results.filter((r) => r.parameter.trim() && r.value.trim())
+    if (!data.patientName.trim()) return setImportError('Enter the patient name before sending.')
+    if (!data.testName.trim()) return setImportError('Enter the test name before sending.')
+    if (!rows.length) return setImportError('There are no results to send. Add at least one result with a value.')
     setImporting(true)
     try {
       // 1. Create the requisition in the system
@@ -76,11 +88,13 @@ export default function AIScannerModal({ onClose, onImportSuccess }: AIScannerMo
       // 2. Scanned values are a draft. They go to the verification queue, never straight to released.
       await updateOrderStatus(created.id, 'collected')
       const fullyUpdated = await updateOrderStatus(created.id, 'awaiting_verification', {
-        results: data.results,
+        results: rows.map(({ needsCheck, checkReason, ...r }) => r),
         technicianNotes: 'Values read from a scanned report. Check each one against the original before verifying.',
       })
 
       onImportSuccess(fullyUpdated)
+    } catch (err) {
+      setImportError((err as Error).message || 'Could not send the results. Nothing was released; try again.')
     } finally {
       setImporting(false)
     }
@@ -96,11 +110,11 @@ export default function AIScannerModal({ onClose, onImportSuccess }: AIScannerMo
               <span className="rounded bg-accent/15 px-2 py-0.5 text-xs font-bold text-accent-ink uppercase tracking-wider">
                 AI Document Vision Scanner
               </span>
-              <span className="font-mono text-xs text-ink-3">Powered by Gemini Multimodal API</span>
+              <span className="font-mono text-xs text-ink-3">Draft only: a person must check it</span>
             </div>
-            <h2 className="text-xl font-bold text-ink mt-1">Automatic Diagnostic Report & Prescription Parser</h2>
+            <h2 className="text-xl font-bold text-ink mt-1">Scan a laboratory report</h2>
             <p className="text-xs text-ink-2">
-              Upload any medical report photo, PDF, or hospital slip. AI extracts demographics, tests, parameters, and flags automatically.
+              Upload a report photo or PDF. The scanner reads what is printed; you correct anything it got wrong before it goes to the verification queue.
             </p>
           </div>
           <button
@@ -126,14 +140,14 @@ export default function AIScannerModal({ onClose, onImportSuccess }: AIScannerMo
               onDrop={handleDrop}
               className="border-2 border-dashed border-accent/60 bg-paper/50 p-8 text-center hover:bg-paper transition"
             >
-                            <p className="text-sm font-bold text-ink">Drag & Drop Doctor Prescription / Hospital Report</p>
-              <p className="text-xs text-ink-3 mt-1">Supports JPG, PNG, WebP, Smartphone Photos & Scans</p>
+                            <p className="text-sm font-bold text-ink">Drag and drop a laboratory report</p>
+              <p className="text-xs text-ink-3 mt-1">JPG, PNG, WebP or PDF, up to 10 MB</p>
 
               <label className="mt-4 inline-flex min-h-11 cursor-pointer items-center rounded-sm bg-accent px-6 text-xs font-bold text-surface hover:bg-accent-ink uppercase tracking-wider">
                 Browse File or Camera
                 <input
                   type="file"
-                  accept="image/*,application/pdf"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
                   onChange={handleFileChange}
                   className="hidden"
                 />
@@ -275,7 +289,15 @@ export default function AIScannerModal({ onClose, onImportSuccess }: AIScannerMo
                 </span>
               </div>
 
-              <div className="max-h-60 overflow-y-auto border border-rule">
+              {data.warnings.length > 0 && (
+                <ul role="alert" className="mb-2 space-y-0.5 border border-warn bg-surface px-3 py-2 text-xs text-ink">
+                  {data.warnings.map((w) => (
+                    <li key={w}>⚠ {w}</li>
+                  ))}
+                </ul>
+              )}
+
+              <div className="max-h-72 overflow-y-auto border border-rule">
                 <table className="w-full text-left text-xs">
                   <thead className="sticky top-0 bg-paper border-b border-rule text-[11px] uppercase font-bold text-ink-3">
                     <tr>
@@ -283,34 +305,36 @@ export default function AIScannerModal({ onClose, onImportSuccess }: AIScannerMo
                       <th className="py-2 pr-2">Result</th>
                       <th className="py-2 pr-2">Units</th>
                       <th className="py-2 pr-2">Reference Range</th>
-                      <th className="py-2 pr-3">Evaluation</th>
+                      <th className="py-2 pr-2">Flag</th>
+                      <th className="py-2 pr-3"><span className="sr-only">Remove</span></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-rule bg-surface">
                     {data.results.map((r, i) => (
-                      <tr key={i} className="hover:bg-paper/40">
-                        <td className="py-2 pl-3 pr-2 font-medium text-ink">{r.parameter}</td>
-                        <td className="py-2 pr-2 font-mono font-bold text-ink">{r.value}</td>
-                        <td className="py-2 pr-2 font-mono text-ink-3">{r.unit || '—'}</td>
-                        <td className="py-2 pr-2 font-mono text-ink-2">{r.referenceRange}</td>
-                        <td className="py-2 pr-3">
-                          {r.flag === 'critical' ? (
-                            <span className="border border-alert bg-alert text-surface px-1.5 py-0.2 text-[10px] font-bold uppercase">
-                              Critical Panic
-                            </span>
-                          ) : r.flag === 'abnormal' ? (
-                            <span className="border border-warn bg-warn text-surface px-1.5 py-0.2 text-[10px] font-bold uppercase">
-                              Abnormal *
-                            </span>
-                          ) : (
-                            <span className="text-[11px] text-ink-3">Normal</span>
-                          )}
+                      <tr key={i} className={r.needsCheck ? 'bg-warn/10' : 'hover:bg-paper/40'}>
+                        <td className="py-1 pl-3 pr-2">
+                          <input aria-label="Parameter" value={r.parameter} onChange={(e) => updateRow(i, { parameter: e.target.value })} className="w-full border border-rule bg-surface px-1 py-0.5 font-medium text-ink" />
+                          {r.needsCheck && <div className="mt-0.5 text-[10px] font-semibold text-warn">Check: {r.checkReason}</div>}
+                        </td>
+                        <td className="py-1 pr-2"><input aria-label="Result" value={r.value} onChange={(e) => updateRow(i, { value: e.target.value })} className="w-20 border border-rule bg-surface px-1 py-0.5 font-mono font-bold text-ink" /></td>
+                        <td className="py-1 pr-2"><input aria-label="Units" value={r.unit} onChange={(e) => updateRow(i, { unit: e.target.value })} className="w-20 border border-rule bg-surface px-1 py-0.5 font-mono text-ink-2" /></td>
+                        <td className="py-1 pr-2"><input aria-label="Reference range" value={r.referenceRange} onChange={(e) => updateRow(i, { referenceRange: e.target.value })} className="w-28 border border-rule bg-surface px-1 py-0.5 font-mono text-ink-2" /></td>
+                        <td className="py-1 pr-2">
+                          <select aria-label="Flag" value={r.flag || 'normal'} onChange={(e) => updateRow(i, { flag: e.target.value as ScannedRow['flag'] })} className="border border-rule bg-surface px-1 py-0.5 text-xs">
+                            <option value="normal">Normal</option>
+                            <option value="abnormal">Abnormal</option>
+                            <option value="critical">Critical</option>
+                          </select>
+                        </td>
+                        <td className="py-1 pr-3">
+                          <button type="button" aria-label={`Remove ${r.parameter || 'row'}`} onClick={() => removeRow(i)} className="px-1 text-ink-3 hover:text-alert">✕</button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+              <button type="button" onClick={addRow} className="mt-2 text-xs font-semibold text-accent-ink underline">+ Add a result the scanner missed</button>
             </div>
 
             {/* Impression Note */}
@@ -319,6 +343,10 @@ export default function AIScannerModal({ onClose, onImportSuccess }: AIScannerMo
                 <strong>Extracted Clinical Impression: </strong>
                 {data.impression}
               </div>
+            )}
+
+            {importError && (
+              <p role="alert" className="border border-alert bg-surface px-3 py-2 text-sm text-alert">{importError}</p>
             )}
 
             {/* Bottom Actions */}

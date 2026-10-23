@@ -2443,17 +2443,6 @@ function OrderLabModal({ patient: initPatient, onClose, onSaved }: { patient?: P
   const [clinicalIndication, setClinicalIndication] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [suggestions, setSuggestions] = useState<Awaited<ReturnType<typeof api.searchMedicines>>>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-
-  // Type-ahead over the medicine catalogue (MongoDB `medicines` collection).
-  useEffect(() => {
-    const q = form.medicine.trim();
-    if (!showSuggestions || q.length < 2) return setSuggestions([]);
-    const t = setTimeout(() => api.searchMedicines(q).then(setSuggestions).catch(() => setSuggestions([])), 250);
-    return () => clearTimeout(t);
-  }, [form.medicine, showSuggestions]);
-
   useEffect(() => {
     if (!initPatient) api.patients().then(setPatients).catch(() => {});
   }, [initPatient]);
@@ -2582,6 +2571,17 @@ function PrescribeModal({ patient: initPatient, onClose, onSaved }: { patient?: 
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [suggestions, setSuggestions] = useState<Awaited<ReturnType<typeof api.searchMedicines>>>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  // Type-ahead over the medicine catalogue (MongoDB `medicines` collection).
+  useEffect(() => {
+    const q = form.medicine.trim();
+    if (!showSuggestions || q.length < 2) return setSuggestions([]);
+    const t = setTimeout(() => api.searchMedicines(q).then(setSuggestions).catch(() => setSuggestions([])), 250);
+    return () => clearTimeout(t);
+  }, [form.medicine, showSuggestions]);
+
 
   useEffect(() => {
     if (!initPatient) api.patients().then(setPatients).catch(() => {});
