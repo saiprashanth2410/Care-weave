@@ -17,6 +17,12 @@ body {
   color: #0f172a;
 }
 
+/* Visible keyboard focus everywhere, including on the navy sidebar. */
+:focus-visible {
+  outline: 2px solid var(--color-teal-500);
+  outline-offset: 2px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }

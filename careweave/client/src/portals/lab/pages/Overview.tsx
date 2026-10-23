@@ -76,11 +76,11 @@ export default function Overview() {
           ) : error ? (
             <Empty text="Order data is unavailable." />
           ) : (
-            <div className="h-64" role="img" aria-label="Bar chart of orders per workflow stage">
+            <div className="h-72" role="img" aria-label="Bar chart of orders per workflow stage">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chart} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
-                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} stroke="#94a3b8" />
-                  <YAxis type="category" dataKey="name" width={138} tick={{ fontSize: 12 }} stroke="#94a3b8" tickLine={false} />
+                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} stroke="#64748b" />
+                  <YAxis type="category" dataKey="name" width={138} tick={{ fontSize: 12 }} stroke="#64748b" tickLine={false} />
                   <Tooltip cursor={{ fill: '#f1f5f9' }} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
                   <Bar dataKey="value" name="Orders" radius={[0, 6, 6, 0]} isAnimationActive={false}>
                     {chart.map((d) => (
