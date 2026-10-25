@@ -169,3 +169,4 @@ CareWeave implements an enterprise-grade fallback circuit breaker:
 * **Exasol Live**: Executes native in-memory columnar aggregations via `@exasol/exasol-driver-ts` with WebSocket transport.
 * **Exasol Daemon Offline / Booting**: Automatically detects connection refusal within 3 seconds, seamlessly routes to MongoDB OLTP analytical aggregations, and tags the response with `engine: "MongoDB Analytics Pipeline (Fallback)"`.
 * Zero application crashes, zero fake data, and 100% transparency for judges and administrators.
+

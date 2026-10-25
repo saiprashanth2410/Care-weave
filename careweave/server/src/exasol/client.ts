@@ -138,3 +138,4 @@ export function updateSyncTelemetry(count: number) {
   lastSyncTimestamp = new Date().toISOString();
   lastSyncedCount = count;
 }
+

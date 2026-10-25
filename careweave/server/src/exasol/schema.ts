@@ -83,3 +83,4 @@ export async function initializeExasolSchema(): Promise<boolean> {
     return false;
   }
 }
+

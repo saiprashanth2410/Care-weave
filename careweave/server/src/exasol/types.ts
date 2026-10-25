@@ -76,3 +76,4 @@ export interface AnalyticsOverviewResponse {
   pharmacyConsumption: PharmacyConsumptionMetric[];
   safety: ClinicalSafetyMetric;
 }
+

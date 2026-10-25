@@ -60,3 +60,4 @@ export function registerExasolAnalyticsRoutes({ app, db, roles, audit }: Analyti
     }
   });
 }
+
