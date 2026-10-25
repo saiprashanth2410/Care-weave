@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "dev": "cd careweave/client && npm run dev",
-    "build": "cd careweave/client && npm install && npm run build",
+    "build": "cd careweave/client && npm install --include=optional && npm run build",
     "lint": "cd careweave/client && npm run lint",
     "preview": "cd careweave/client && npm run preview",
     "server": "cd careweave/server && npm run dev",
@@ -16,5 +16,14 @@
     "check-db": "cd careweave/server && npm run check-db",
     "medlink:dev": "cd medlink && env -u INIT_CWD npm run dev",
     "medlink:build": "cd medlink && env -u INIT_CWD npm run build"
+  },
+  "optionalDependencies": {
+    "@rolldown/binding-darwin-arm64": "1.2.15",
+    "@rolldown/binding-darwin-x64": "1.2.15",
+    "@rolldown/binding-linux-arm64-gnu": "1.2.15",
+    "@rolldown/binding-linux-arm64-musl": "1.2.15",
+    "@rolldown/binding-linux-x64-gnu": "1.2.15",
+    "@rolldown/binding-linux-x64-musl": "1.2.15",
+    "@rolldown/binding-win32-x64-msvc": "1.2.15"
   }
 }
