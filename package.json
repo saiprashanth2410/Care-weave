@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "dev": "cd careweave/client && npm run dev",
-    "build": "cd careweave/client && npm install --include=optional && npm run build",
+    "build": "cd careweave/client && npm install --include=optional @rolldown/binding-linux-x64-gnu && npm run build",
     "lint": "cd careweave/client && npm run lint",
     "preview": "cd careweave/client && npm run preview",
     "server": "cd careweave/server && npm run dev",

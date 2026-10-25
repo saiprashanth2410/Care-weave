@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd careweave/client && npm install --include=optional && npm run build",
+  "buildCommand": "cd careweave/client && npm install --include=optional @rolldown/binding-linux-x64-gnu && npm run build",
   "outputDirectory": "careweave/client/dist",
   "framework": "vite",
   "rewrites": [
