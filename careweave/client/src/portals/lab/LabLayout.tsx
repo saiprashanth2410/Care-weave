@@ -111,7 +111,10 @@ export default function LabLayout({ user }: { user: SessionUser }) {
 function Brand() {
   return (
     <div className="px-5 py-5">
-      <img src="/careweave-logo.png" alt="CareWeave" className="w-36 rounded-sm" />
+      <div className="flex items-center gap-3">
+        <img src="/careweave-mark.png" alt="" className="h-10 w-10 rounded-sm" />
+        <p className="text-base font-bold leading-none tracking-tight">CareWeave</p>
+      </div>
     </div>
   )
 }

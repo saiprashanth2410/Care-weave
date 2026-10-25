@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Activity, CalendarDays, Check, ChevronRight, ClipboardList, FileText, FlaskConical, HeartPulse, LayoutDashboard, LogOut, Menu, RefreshCw, Stethoscope, Users } from './icons';
+import { Activity, CalendarDays, Check, ClipboardList, FileText, FlaskConical, HeartPulse, LayoutDashboard, LogOut, Menu, RefreshCw, Stethoscope, Users } from './icons';
 import { api } from './api';
 import type { Patient, User } from './types';
 import { useNavigate, Link } from 'react-router-dom';
@@ -66,7 +66,8 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
     <div className={`app-shell ${collapsed ? 'nav-collapsed' : ''}`}>
       <aside className="sidebar">
         <div className="side-brand">
-          <img src="/careweave-logo.png" alt="CareWeave" className="brand-logo" />
+          <img src="/careweave-mark.png" alt="" className="brand-logo" />
+          <span>CareWeave</span>
         </div>
 
         <nav>
@@ -107,7 +108,7 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
           </button>
           <div className="breadcrumb">
             <span>Doctor Portal</span>
-            <ChevronRight size={14} />
+            <span className="crumb-sep">/</span>
             <b>{nav.find(n => n[0] === section)?.[1]}</b>
           </div>
 

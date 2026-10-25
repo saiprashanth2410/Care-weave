@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Activity,
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
@@ -168,9 +167,7 @@ export default function AnalyticsApp() {
            >
               <ArrowLeft size={16} />
             </button>
-            <div className="flex h-9 w-9 items-center justify-center rounded-sm bg-deep text-surface">
-              <Activity size={18} strokeWidth={2.5} />
-            </div>
+            <img src="/careweave-mark.png" alt="" className="h-9 w-9 rounded-sm" />
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-bold tracking-tight text-ink">CareWeave</h1>
