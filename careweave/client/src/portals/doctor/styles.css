@@ -118,7 +118,5 @@
 .dx .med-option:hover{background:var(--soft)}
 .dx .med-option small{display:block;font-size:11px;color:var(--muted)}
 
-/* Sidebar toggle sits in the sidebar on desktop; the topbar one remains for the mobile drawer */
-.side-menu-button { align-self: flex-start; margin: 0 0 14px 10px; }
-@media (min-width: 761px) { .top-menu-button { display: none; } }
-@media (max-width: 760px) { .side-menu-button { display: none; } }
+/* The sidebar is text-only (no icons), so it stays open on desktop; the toggle is only for the mobile drawer */
+@media (min-width: 761px) { .top-menu-button { display: none !important; } }
