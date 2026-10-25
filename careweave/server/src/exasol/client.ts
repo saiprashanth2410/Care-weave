@@ -38,7 +38,6 @@ export function getExasolDriver(): ExasolDriver {
     port: cfg.port,
     user: cfg.user,
     password: cfg.password,
-    schema: cfg.schema,
     autocommit: true,
     clientName: 'CareWeave-Analytics-Engine',
     clientVersion: '1.0.0',
@@ -53,12 +52,33 @@ export function getExasolDriver(): ExasolDriver {
   return activeDriver;
 }
 
+let connectingDriver: ExasolDriver | null = null;
+
+/**
+ * The driver only talks to Exasol after connect(); do it once per driver instance.
+ */
+export async function getConnectedExasolDriver(): Promise<ExasolDriver> {
+  const driver = getExasolDriver();
+  if (connectingDriver !== driver) {
+    await driver.connect();
+    // The schema is created by initializeExasolSchema() on first sync, so opening it may fail before then.
+    await driver.execute(`OPEN SCHEMA ${getExasolConfig().schema}`).catch(() => undefined);
+    connectingDriver = driver;
+  }
+  return driver;
+}
+
 /**
  * Tests whether Exasol Personal is reachable and authenticates cleanly.
  */
 export async function pingExasol(): Promise<boolean> {
   try {
-    const driver = getExasolDriver();
+    const driver = await Promise.race([
+      getConnectedExasolDriver(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Exasol connection timed out (3000ms)')), 3000)
+      ),
+    ]);
     const result = await Promise.race([
       driver.query('SELECT 1 AS HEALTH_CHECK;'),
       new Promise<never>((_, reject) =>
@@ -76,8 +96,18 @@ export async function pingExasol(): Promise<boolean> {
  * Executes a SQL query against Exasol with safe error handling and timeout.
  */
 export async function queryExasol<T = any>(sql: string): Promise<T[]> {
-  const driver = getExasolDriver();
   try {
+    const driver = await getConnectedExasolDriver();
+    // DDL and DML (CREATE, MERGE, OPEN SCHEMA...) return no result set, so the driver wants execute() for them.
+    if (!/^\s*(select|with)\b/i.test(sql)) {
+      await Promise.race([
+        driver.execute(sql),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Exasol statement timed out (8000ms)')), 8000)
+        ),
+      ]);
+      return [];
+    }
     const res = await Promise.race([
       driver.query(sql),
       new Promise<never>((_, reject) =>

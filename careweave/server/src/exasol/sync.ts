@@ -3,7 +3,7 @@ import { initializeExasolSchema } from './schema.js';
 
 // Escape string literal for safe SQL insert
 function sqlStr(str: any): string {
-  if (str === null || str === undefined) return 'NULL';
+  if (str === null || str === undefined) return 'CAST(NULL AS VARCHAR(256))';
   return `'${String(str).replace(/'/g, "''").replace(/\\/g, '\\\\')}'`;
 }
 
@@ -14,11 +14,12 @@ function sqlDate(dateStr: any): string {
   return `'${d.toISOString().split('T')[0]}'`;
 }
 
+// A bare NULL is typed BOOLEAN in Exasol, which cannot be compared with a TIMESTAMP column, so cast it.
 function sqlTimestamp(dateStr: any): string {
-  if (!dateStr) return 'NULL';
+  if (!dateStr) return 'CAST(NULL AS TIMESTAMP)';
   const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return 'NULL';
-  return `'${d.toISOString().replace('T', ' ').substring(0, 19)}'`;
+  if (isNaN(d.getTime())) return 'CAST(NULL AS TIMESTAMP)';
+  return `CAST('${d.toISOString().replace('T', ' ').substring(0, 19)}' AS TIMESTAMP)`;
 }
 
 export interface SyncResult {
