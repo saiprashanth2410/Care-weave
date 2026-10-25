@@ -28,8 +28,8 @@ None of this is exotic. It happens because every desk keeps its own copy of the 
 
 | | |
 |---|---|
-| **Demo walkthrough** | [`careweave/DEMO.md`](careweave/DEMO.md): a three-minute click-by-click script for judges |
-| **Demo video and pitch deck** | Scripted demo video, 12-slide deck and the script to rebuild them (kept alongside this project; link to be added by the team) |
+| **Demo walkthrough** | [`DEMO.md`](DEMO.md): pitch-deck outline, a three-minute demo script and a judge checklist |
+| **Demo video and pitch deck** | Links to be added once recorded and exported. The outline and script are in [`DEMO.md`](DEMO.md) |
 | **Live site** | Frontend on Vercel, API on Render (configured in [`vercel.json`](vercel.json)) |
 
 > **Tip for judges:** sign in as Front Desk or Doctor and press **Load sample scenario (synthetic)** in the top bar. It creates the synthetic patient *Priya Raman* with a penicillin allergy, an encounter, released and pending lab results, and an outside-hospital report that has been imported three times (clean, duplicate, conflicting). It only runs once.
@@ -204,6 +204,18 @@ npm test
 
 ---
 
+## Deployment
+
+The frontend is a static Vite build; the API is a Node/Express server. They can be hosted separately.
+
+1. **API (any Node host, for example Render):** root directory `careweave/server`, build `npm install`, start `npm start` (it listens on `PORT`). Set the environment variables from [`.env.example`](.env.example): at least `MONGODB_URI`, `MONGODB_DB`, `CLIENT_ORIGIN` (the frontend's URL), and `FIREBASE_PROJECT_ID` or `ALLOW_LOCAL_LOGIN=true`. `GEMINI_API_KEY` is only needed for report scanning. Set `ALLOW_SAMPLE_DATA=false` for anything other than a demo.
+2. **Frontend (Vercel):** the repository root has a [`vercel.json`](vercel.json) that builds `careweave/client` and rewrites `/api/*` to the API. Point that rewrite at your API's URL, or import the repo into Vercel and set the same project settings.
+3. **Check it:** open `<api-url>/api/health`; it should report `"atlasConnected": true`.
+
+**Exasol is not part of the hosted deployment.** Exasol Personal runs on your own machine (default `localhost:8563`), which a hosted API cannot reach. A hosted copy therefore shows the analytics page with the amber "Not computed by Exasol" banner, which is the intended honest behaviour. To demonstrate Exasol, run the project locally with Exasol running ([`EXASOL_SETUP.md`](EXASOL_SETUP.md)), or point `EXASOL_HOST` at an Exasol instance the API can reach.
+
+---
+
 ## Troubleshooting
 
 - **Login works but data looks empty:** check that the server is connected to the database you expect. `/api/health` tells you whether MongoDB Atlas is connected.
@@ -225,3 +237,9 @@ We would rather say these out loud than have you find them:
 - This is a demonstration build with synthetic data. We make no claims about clinical accuracy, regulatory compliance, or real hospital interoperability.
 
 -
+
+---
+
+## License
+
+MIT. See [`LICENSE`](LICENSE).
