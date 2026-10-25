@@ -67,3 +67,7 @@ wheels/
 *.log
 *.sqlite3
 
+# Lockfiles (avoid cross-platform optional dependency bugs on Linux/Mac)
+package-lock.json
+
+
