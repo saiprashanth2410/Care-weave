@@ -4,6 +4,7 @@
 > **Project:** CareWeave — Unified Clinical Hospital Records & In-Memory Analytics Engine  
 > **Team:** Saiprashanth T, Suriya Sudhakar, Dhivya Dharshini C S  
 > **Repository:** https://github.com/saiprashanth2410/Care-weave  
+> **Demo Video:** [`demo_video.mp4`](demo_video.mp4) (Included directly in repository root)  
 
 ---
 
