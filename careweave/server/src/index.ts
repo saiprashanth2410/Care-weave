@@ -64,7 +64,7 @@ const now = () => new Date().toISOString();
 const id = (prefix: string) => `${prefix}-${crypto.randomBytes(4).toString('hex')}`;
 
 // Every collection lives in MongoDB when connected. The JSON file is only an offline fallback.
-const COLLECTIONS = ['users', 'patients', 'appointments', 'labOrders', 'auditLogs', 'sessions', 'encounters', 'vitals', 'referrals', 'carePlans', 'prescriptions', 'externalRecords', 'cases'] as const;
+const COLLECTIONS = ['users', 'patients', 'appointments', 'labOrders', 'auditLogs', 'sessions', 'encounters', 'vitals', 'referrals', 'carePlans', 'prescriptions', 'externalRecords', 'cases', 'syntheticHistory'] as const;
 
 // What each document looked like the last time it was written, so a save sends only what changed.
 const written = new Map<string, Map<string, string>>();
@@ -484,6 +484,9 @@ app.patch('/api/appointments/:id', roles('receptionist', 'doctor'), async (req: 
     if (status === a.status) return res.status(409).json({ error: `Patient is already marked as ${status}` });
     a.status = status;
     if ((status === 'Checked In' || status === 'Waiting') && !a.checkedInAt) a.checkedInAt = now();
+    // Analytics measures the wait as check-in to the start of the consultation, so both moments are recorded.
+    if (status === 'In Consultation' && !a.startedAt) a.startedAt = now();
+    if (status === 'Completed' && !a.completedAt) a.completedAt = now();
   }
   if (date || time) {
     if (!['Scheduled'].includes(a.status) && !status) {
@@ -703,9 +706,15 @@ app.patch('/api/lab/orders/:id', roles('lab'), async (req: any, res) => {
     }
     // Finalising is a separate permission, and never by the person who entered the results.
     if (o.status === 'awaiting_verification' && ['processing', 'verified', 'released', 'recollect_required'].includes(status)) {
-      if (!can(req, 'verify')) return res.status(403).json({ error: 'Only an account with verification permission can do this' });
+      if (!can(req, 'verify')) {
+        audit(req, 'blocked', 'labOrder', o.id, 'Maker-checker: user without verification permission tried to finalise a result');
+        await save();
+        return res.status(403).json({ error: 'Only an account with verification permission can do this' });
+      }
     }
     if (['verified', 'released'].includes(status) && o.processedById && o.processedById === req.user.id) {
+      audit(req, 'blocked', 'labOrder', o.id, 'Maker-checker: the person who entered the results tried to verify them');
+      await save();
       return res.status(403).json({ error: 'The person who entered the results cannot verify them. Ask another verifier.' });
     }
   }
@@ -833,7 +842,7 @@ registerScanRoutes({ app, roles, uploadLimit, text, audit, save, mongoConnected:
 registerDoctorRoutes({
   app, db: () => db, save, audit, roles, id, now, patientById, text, isToday, adminPatientView, mongoConnected: () => mongoConnected
 });
-registerExasolAnalyticsRoutes({ app, db: () => db, roles, audit });
+registerExasolAnalyticsRoutes({ app, db: () => db, roles, audit, save, sampleAllowed });
 
 app.use((err: any, _req: any, res: any, _next: any) => {
   console.error(err);

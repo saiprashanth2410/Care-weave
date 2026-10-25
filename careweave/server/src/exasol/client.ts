@@ -95,7 +95,7 @@ export async function pingExasol(): Promise<boolean> {
 /**
  * Executes a SQL query against Exasol with safe error handling and timeout.
  */
-export async function queryExasol<T = any>(sql: string): Promise<T[]> {
+export async function queryExasol<T = any>(sql: string, timeoutMs = 8000): Promise<T[]> {
   try {
     const driver = await getConnectedExasolDriver();
     // DDL and DML (CREATE, MERGE, OPEN SCHEMA...) return no result set, so the driver wants execute() for them.
@@ -103,7 +103,7 @@ export async function queryExasol<T = any>(sql: string): Promise<T[]> {
       await Promise.race([
         driver.execute(sql),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Exasol statement timed out (8000ms)')), 8000)
+          setTimeout(() => reject(new Error(`Exasol statement timed out (${timeoutMs}ms)`)), timeoutMs)
         ),
       ]);
       return [];
@@ -111,18 +111,15 @@ export async function queryExasol<T = any>(sql: string): Promise<T[]> {
     const res: any = await Promise.race([
       driver.query(sql),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Exasol query timed out (8000ms)')), 8000)
+        setTimeout(() => reject(new Error(`Exasol query timed out (${timeoutMs}ms)`)), timeoutMs)
       ),
     ]);
 
-    // Format driver query results into standard JSON objects
-    if (!res || !res.columns || !res.rows) return [];
-    const colNames = res.columns.map((c: any) => c.name.toLowerCase());
-    return res.rows.map((row: any[]) => {
+    // The driver returns a QueryResult object; its rows are keyed by column name. Keys are lower-cased for the mappers.
+    const rows = res?.getRows?.() ?? [];
+    return rows.map((row: Record<string, unknown>) => {
       const obj: any = {};
-      colNames.forEach((name: string, i: number) => {
-        obj[name] = row[i];
-      });
+      for (const [k, v] of Object.entries(row)) obj[k.toLowerCase()] = v;
       return obj as T;
     });
   } catch (err: any) {
@@ -139,28 +136,37 @@ export async function getAnalyticsEngineStatus(): Promise<ExasolConnectionStatus
   const isAlive = await pingExasol();
 
   if (isAlive) {
+    let rowCounts: ExasolConnectionStatus['rowCounts'];
+    try {
+      const r = (await queryExasol<any>(
+        `SELECT (SELECT COUNT(*) FROM ${cfg.schema}.FACT_PATIENT_VISITS) AS "visits", (SELECT COUNT(*) FROM ${cfg.schema}.FACT_LAB_ORDERS_TAT) AS "labOrders", (SELECT COUNT(*) FROM ${cfg.schema}.FACT_PHARMACY_PRESCRIPTIONS) AS "prescriptions" FROM DUAL`
+      ))[0];
+      rowCounts = { visits: Number(r.visits), labOrders: Number(r.laborders), prescriptions: Number(r.prescriptions) };
+    } catch {
+      // The tables do not exist until the first sync.
+    }
     return {
       connected: true,
       engine: 'Exasol In-Memory Columnar (Live)',
       host: cfg.host,
       port: cfg.port,
       schema: cfg.schema,
-      lastSyncAt: lastSyncTimestamp || new Date().toISOString(),
+      lastSyncAt: lastSyncTimestamp || undefined,
       totalRecordsSynced: lastSyncedCount,
-      message: 'Exasol Personal high-performance in-memory analytics engine active',
+      rowCounts,
+      message: rowCounts ? 'Connected to Exasol. Figures below are computed by Exasol.' : 'Connected to Exasol, but no data has been synced yet. Press Sync to Exasol.',
     };
   }
 
   return {
     connected: false,
-    engine: 'MongoDB Analytics Pipeline (Fallback)',
+    engine: 'Application Store (Exasol offline)',
     host: cfg.host,
     port: cfg.port,
     schema: cfg.schema,
     lastSyncAt: lastSyncTimestamp || undefined,
     totalRecordsSynced: lastSyncedCount,
-    message:
-      'Exasol daemon not detected on port 8563. Running with MongoDB OLTP analytics fallback. Start local Exasol to activate in-memory columnar queries.',
+    message: `Exasol is not reachable at ${cfg.host}:${cfg.port}. The figures below are computed by the application from its own records, not by Exasol.`,
   };
 }
 

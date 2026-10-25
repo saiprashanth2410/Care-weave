@@ -10,7 +10,9 @@
     "import-medicines": "tsx scripts/import-medicines.ts",
     "check-db": "tsx src/check-db.ts",
     "test": "tsx --test src/*.test.ts",
-    "test:acceptance": "tsx scripts/acceptance.ts"
+    "test:acceptance": "tsx scripts/acceptance.ts",
+    "test:exasol": "tsx scripts/exasol-parity.ts",
+    "demo:scale": "tsx scripts/exasol-scale-demo.ts"
   },
   "type": "module",
   "private": true,
