@@ -183,7 +183,7 @@ export function DoctorOverview({
           <div className="card intelligence-card">
             <div className="card-head">
               <div>
-                <h3>Record Intelligence & Alerts</h3>
+                <h3>Record Review & Alerts</h3>
                 <p className="muted">Multi-facility clinical provenance signals</p>
               </div>
               <div className="spark"><Activity size={17} /></div>

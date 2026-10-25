@@ -173,9 +173,9 @@ export default function AnalyticsApp() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-bold tracking-tight text-ink">CareWeave Intelligence</h1>
+                <h1 className="text-base font-bold tracking-tight text-ink">CareWeave</h1>
               </div>
-              <p className="text-[11px] text-ink-3">High-Performance In-Memory Healthcare Analytics</p>
+              
             </div>
           </div>
 
@@ -321,7 +321,7 @@ export default function AnalyticsApp() {
                 }`}
              >
                 <Pill size={16} />
-                <span>Pharmacy Intelligence</span>
+                <span>Pharmacy</span>
               </button>
               <button
                 onClick={() => setActiveTab('sql')}
