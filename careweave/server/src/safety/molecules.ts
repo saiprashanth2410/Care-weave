@@ -136,7 +136,7 @@ export function dailyDoseMg(drug: string, molecules: string[], dosage = '', freq
 const classOf = (molecule: string) => Object.entries(CLASSES).find(([, list]) => list.includes(molecule))?.[0];
 
 const dayMs = 86400000;
-const durationDays = (s: unknown) => {
+export const durationDays = (s: unknown) => {
   const m = String(s ?? '').toLowerCase().match(/(\d+)\s*(day|week|month)/);
   return m ? Number(m[1]) * ({ day: 1, week: 7, month: 30 }[m[2] as 'day'] ?? 1) : 0;
 };

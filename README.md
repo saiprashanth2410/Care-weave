@@ -60,11 +60,15 @@ None of this is exotic. It happens because every desk keeps its own copy of the 
 - **Conflict and duplicate detection:** the same report imported twice, or the same test with different values, is shown side by side with the evidence. Originals are preserved and nothing is overwritten silently.
 - **Optimistic concurrency:** revision locks (`rev`) stop two staff members from silently overwriting each other's edits.
 
-### 5. High-Performance Healthcare Analytics (Exasol Personal)
-- **Hospital Operations Hub:** Real-time patient volume trends, department workload distribution, and consultation wait-time funnels.
-- **Diagnostic Turnaround Time (TAT):** Accurate SLA tracking (urgent 45m vs routine 120m) across pathology panels with critical flag metrics.
-- **Pharmacy Intelligence:** Drug consumption velocity, brand-to-generic substitution analysis, and automated stock runout forecasting.
-- **Dual Engine Resiliency:** Executes parameterized SQL on **Exasol Personal** in-memory columnar database with zero-downtime MongoDB OLTP fallback. Full setup in [`EXASOL_SETUP.md`](EXASOL_SETUP.md).
+### 5. Healthcare Analytics on Exasol Personal
+- **Hospital Operations:** daily visits with a 7-day moving average (an Exasol window function), department workload, and waiting time (check-in to start of consultation, measured only where both moments were recorded).
+- **Diagnostic Turnaround Time:** ordered to verified, per test, with average, 90th percentile (`PERCENTILE_CONT`) and SLA compliance. Orders that are not verified yet have **no** turnaround and are counted as pending, never as finished. A second view shows where the time goes (order to collection, collection to verification).
+- **Pharmacy:** estimated units per medicine (doses per day times course days) and a 30-day **demand estimate**. Stock on hand is not recorded, so no stock-out is predicted.
+- **Honest sourcing:** the page states whether figures were computed by Exasol or, when Exasol is unreachable, by the application itself. A failed sync is reported as a failure. A successful sync means the rows were loaded and counted back from Exasol.
+- **SQL Inspector:** shows the exact SQL behind the dashboard with the rows returned and the milliseconds Exasol took, from the request that loaded the page.
+- **Reproducible demo data:** "Load 30-day sample history" adds a fixed-seed, clearly synthetic history (about 900 records) to the analytics only; it is kept apart from the records the portals show and is disclosed on the page.
+
+Setup and the exact table design are in [`EXASOL_SETUP.md`](EXASOL_SETUP.md).
 
 ---
 
@@ -185,6 +189,14 @@ npm run test:acceptance
 # Server unit tests (physiological bounds, schema validation, medicine parser)
 npm test
 
+# Exasol analytics: loads synthetic rows into a throwaway schema and checks that
+# the SQL on Exasol and the same metrics computed in code agree (skips if Exasol is not running)
+cd ../server
+npm run test:exasol
+
+# Exasol at scale: 5 million synthetic visit rows generated inside Exasol, then the dashboard's kinds of queries timed
+npm run demo:scale
+
 # Frontend tests
 cd ../client
 npm test
@@ -207,7 +219,9 @@ We would rather say these out loud than have you find them:
 
 - PDF import for external records is not built yet; JSON and CSV work.
 - Gemma/Gemini scanning needs an API key with quota, and scanned results are drafts that a person must check.
-- In the **E-Prescriptions** page, the patient dropdown inside the "New E-Prescription" modal does not accept a selection (its option values use the patient name while the handler looks up by id). Prescribing from the patient chart, where the patient is preselected, works.
+- Analytics assumptions you should know: a visit's department is inferred from its stated reason; the lab SLA targets (routine 120 min, urgent 45 min) are configurable assumptions (`LAB_SLA_ROUTINE_MINUTES`, `LAB_SLA_URGENT_MINUTES`); prescription quantities are estimated from dose frequency and course length because dispensing is not recorded; there is no stock data, so there is no stock-out prediction.
+- Waiting time exists only for visits that were moved to "In Consultation" after check-in. Visits without both moments are left out of averages, and the page counts them.
+- The Exasol analytics tables are a copy: press **Sync to Exasol** to refresh them. Safety counts (allergy and duplicate-therapy blocks, maker-checker blocks) come from the application's audit trail.
 - This is a demonstration build with synthetic data. We make no claims about clinical accuracy, regulatory compliance, or real hospital interoperability.
 
 ---

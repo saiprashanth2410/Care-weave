@@ -25,18 +25,19 @@
 * **Unified Clinical Records:** Three role-based portals (Receptionist, Pathologist, Physician) sharing a synchronized backbone.
 * **Gemma 4 Multimodal Scanner:** AI vision scans messy paper reports into structured lab values with strict **Maker-Checker** human verification.
 * **Safety Guardrails:** 94,000-drug formulary with automated allergy family conflict blocks (e.g., blocking Amoxicillin for Penicillin-allergic patients).
-* **Exasol Personal In-Memory Engine:** Columnar analytical store executing sub-second queries over diagnostic turnaround times (TAT), outpatient wait funnels, and pharmacy stockout forecasts.
+* **Exasol Personal In-Memory Engine:** Columnar analytical store running window functions and percentiles over diagnostic turnaround times (TAT), outpatient waiting times and prescribing volume. Every figure is labelled as measured or estimated.
 
 ### Slide 4: Dual-Database Strategy (HTAP)
 * **MongoDB Atlas (OLTP):** High-throughput transactional writes for admissions, token queuing, encounters, and audit logs.
 * **Exasol Personal (OLAP):** Columnar in-memory analytical engine for real-time aggregation across thousands of visits and lab tests.
 * **Idempotent Data Pipeline:** Safe SQL `MERGE` data replication that prevents duplicate records and handles network retry seamlessly.
-* **Circuit Breaker:** Automatic fallback to MongoDB aggregation pipeline if Exasol daemon is offline, guaranteeing 100% uptime.
+* **Honest fallback:** if Exasol is offline the page says so and shows figures computed by the application, and a failed sync is reported as failed. Nothing is passed off as Exasol output.
 
-### Slide 5: Real-World Hospital Operational Intelligence
-* **OPD Volume & Workload Distribution:** Live hourly visit volume curves across Cardiology, General Medicine, Pediatrics, and Orthopedics.
-* **Diagnostic SLA Auditing:** Urgent lab orders benchmarked against 45-min SLA targets vs Routine 120-min targets.
-* **Pharmacy Depletion Modeling:** Consumption velocity tracking with runout forecasting to avoid stockouts of life-saving medicines.
+### Slide 5: What the Analytics Show
+* **Waiting time by department:** the sample history is built so Cardiology patients wait noticeably longer than General Medicine; the table shows the measured averages.
+* **Diagnostic SLA auditing:** turnaround is measured from order to verification, with the 90th percentile next to the average. Orders still in progress are not counted.
+* **Where lab time goes:** order to collection versus collection to verification, so a bottleneck has a location.
+* **Prescribing demand:** estimated units per medicine and a labelled 30-day demand estimate. Stock levels are not recorded, so no stock-out is claimed.
 
 ### Slide 6: Live Product Demo Walkthrough
 * *Refer to 3-minute demo script below.*
@@ -48,8 +49,9 @@
 * **Security & Privacy:** Synthetic data only, role-based JWT authentication, tamper-evident audit logs, zero client-side credential exposure.
 
 ### Slide 8: Impact & Future Roadmap
-* **Impact:** 60% reduction in diagnostic report turnaround time, elimination of prescription allergy incidents, zero duplicate entry errors.
-* **Next Milestones:** FHIR R4 interoperability for ABDM (Ayushman Bharat Digital Mission) integration, automated batch ETL pipelines, and predictive bed-occupancy modeling.
+* **What we can show today:** two safety gates (allergy and same-molecule duplicate prescriptions), maker-checker lab verification, and analytics whose every number can be traced to a query.
+* **What we have not measured:** we make no claim about reduced turnaround or fewer incidents; this is a demo build on synthetic data.
+* **Next Milestones:** stock and dispensing data so demand can become a real stock forecast, FHIR R4 interoperability for ABDM, scheduled ETL instead of a manual sync button.
 
 ---
 
@@ -74,15 +76,13 @@
   > "Now Dr. Arun opens Priya's chart. Notice how Priya's verified lipid results and allergy history are instantly visible.
   > Let's try to prescribe Amoxicillin. Instantly, CareWeave's safety engine blocks the order with an audible warning: Priya has a documented Penicillin allergy! The doctor cannot prescribe without explicitly documenting an override justification. Every blocked attempt is permanently audit-logged for patient safety."
 
-### **[1:55 - 2:40] Scene 4: Exasol In-Memory Analytics Dashboard**
-* **Visual:** Click "Exasol Analytics" button in the top navigation -> Open `/analytics`.
+### **[1:55 - 2:40] Scene 4: Exasol Analytics (the strongest moment)**
+* **Visual:** Click "Exasol Analytics" in the top navigation. Click **Load 30-day sample history**, then **Sync to Exasol**. Open the Lab tab, then the SQL Inspector.
 * **Script:**
-  > "While clinicians treat patients, CareWeave synchronizes transactional operational events into **Exasol Personal** using an idempotent SQL MERGE pipeline.
-  > Welcome to the CareWeave Intelligence Hub, running live on Exasol Personal on my Apple Silicon M1.
-  > In the Hospital Operations tab, hospital leadership tracks hourly patient footfalls and department bottlenecks in sub-seconds.
-  > Under Diagnostic Turnaround Time, we monitor our pathology department against strict SLAs — our Urgent orders are averaging 38 minutes against a 45-minute target!
-  > In the Pharmacy tab, Exasol's columnar engine analyzes drug depletion rates and forecasts which antibiotic stocks will run out within 72 hours.
-  > We can click the 'Exasol SQL Inspector' tab to inspect the exact live SQL query running against our Exasol schema."
+  > "Everything we just did is data. One click loads a clearly synthetic thirty-day history, and the sync loads it into **Exasol Personal** with an idempotent SQL MERGE, then counts the rows back from Exasol before it says it succeeded.
+  > The banner tells us these figures are computed by Exasol. Under Operations, the department table shows Cardiology patients waiting much longer than General Medicine. That gap is a staffing question.
+  > In the lab tab, turnaround runs from order to verification. Compare the average with the 90th percentile and the SLA compliance column, and look at the stage cards: most of the time sits between collection and verification. Orders still in progress are not counted as if they were done.
+  > Now the SQL Inspector: this is the exact SQL that just ran, with rows returned and milliseconds. Window functions for the moving average, PERCENTILE_CONT for the p90. We also ran the same kinds of queries on five million synthetic rows: on my laptop each answered in under half a second."
 
 ### **[2:40 - 3:00] Scene 5: Conclusion & Vision**
 * **Visual:** CareWeave Architecture Slide / GitHub Repository.
@@ -94,10 +94,8 @@
 
 ## Part 3: Live Demo Checklist for Judges
 
-1. **Verify Exasol Connection:**
-   - Run `curl http://localhost:4000/api/analytics/health`
-   - Response: `{"connected": true, "engine": "Exasol Personal (In-Memory Columnar)", ...}`
-2. **One-Click Data Sync:**
-   - In `/analytics`, click **"Sync to Exasol"** to trigger SQL `MERGE` pipeline.
-3. **Inspect Real SQL Queries:**
-   - Switch to the **Exasol SQL Inspector** tab in `/analytics` to see the exact queries executing against `CAREWEAVE_ANALYTICS`.
+1. **Start Exasol, then the server and client** (see `EXASOL_SETUP.md`). Optional: `ALLOW_LOCAL_LOGIN=true` for the demo accounts.
+2. **Verify the connection:** `curl http://localhost:4000/api/analytics/health` returns `"connected": true` and the engine `Exasol In-Memory Columnar (Live)`. If Exasol is down it says `Application Store (Exasol offline)`, and the analytics page shows an amber banner saying the figures are not from Exasol.
+3. **Load the data:** in `/analytics` press **Load 30-day sample history** (synthetic, fixed seed) and then **Sync to Exasol**. The confirmation shows row counts read back from Exasol.
+4. **Inspect:** the **Exasol SQL Inspector** tab lists the exact SQL that ran, the rows it returned and the time it took.
+5. **Prove it:** `cd careweave/server && npm run test:exasol` checks that Exasol's SQL results equal the same metrics computed in code, and that sync is idempotent and mirrors deletions. `npm run demo:scale` times the same kinds of queries over 5 million synthetic rows generated inside Exasol.

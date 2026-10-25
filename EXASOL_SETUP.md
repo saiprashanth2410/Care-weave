@@ -164,9 +164,12 @@ Open `http://localhost:5173/analytics` or sign in and click the **"Exasol Analyt
 
 ---
 
-## 5. Circuit Breaker & Fallback Architecture
-CareWeave implements an enterprise-grade fallback circuit breaker:
-* **Exasol Live**: Executes native in-memory columnar aggregations via `@exasol/exasol-driver-ts` with WebSocket transport.
-* **Exasol Daemon Offline / Booting**: Automatically detects connection refusal within 3 seconds, seamlessly routes to MongoDB OLTP analytical aggregations, and tags the response with `engine: "MongoDB Analytics Pipeline (Fallback)"`.
-* Zero application crashes, zero fake data, and 100% transparency for judges and administrators.
+## 5. Fallback behaviour
+If Exasol is not reachable, the analytics page does **not** pretend otherwise:
 
+* The engine pill reads `Application Store (Exasol offline)` and an amber banner says the figures are computed by the application, not by Exasol.
+* The application computes the same metrics from its own records (the same code the tests compare against Exasol's SQL). With no records, it shows empty tables; it never fills in numbers.
+* `POST /api/analytics/sync` returns HTTP 502 with an error and `success: false`, and nothing is reported as synced. A sync is reported successful only after Exasol accepted the load and the row counts read back from Exasol equal the source.
+* The SQL Inspector marks each query "not run on Exasol".
+
+Tables are created on the first sync, and an older table is upgraded in place (missing columns are added). The tables are a copy of the application's data, rebuilt by the sync: records deleted in the application are removed from Exasol on the next sync.

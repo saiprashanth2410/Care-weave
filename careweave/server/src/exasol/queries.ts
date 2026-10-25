@@ -1,339 +1,158 @@
-import { queryExasol, pingExasol, getAnalyticsEngineStatus } from './client.js';
+import { queryExasol, getAnalyticsEngineStatus } from './client.js';
+import { deriveLabOrders, deriveRx, deriveVisits } from './derive.js';
+import * as fallback from './metrics.js';
+import { analyticsInput } from './sampleHistory.js';
 import type {
-  AnalyticsOverviewResponse,
-  DailyVisitMetric,
-  DepartmentWorkloadMetric,
-  LabTatMetric,
-  PharmacyConsumptionMetric,
-  ClinicalSafetyMetric,
+  AnalyticsOverviewResponse, DailyVisitMetric, DataQuality, DepartmentWorkloadMetric, ExecutedQuery, LabStageMetric, LabTatMetric, PharmacyConsumptionMetric,
 } from './types.js';
 
-/**
- * Native Exasol Analytics Queries (Executes when Exasol is connected)
- */
-async function queryExasolOperations(): Promise<{
-  visitsTrend: DailyVisitMetric[];
-  departmentWorkload: DepartmentWorkloadMetric[];
-  labTat: LabTatMetric[];
-  pharmacyConsumption: PharmacyConsumptionMetric[];
-  safety: ClinicalSafetyMetric;
-}> {
-  // 1. Daily visits trend from Exasol FACT_PATIENT_VISITS
-  const visitsSql = `
-    SELECT
-      TO_CHAR(VISIT_DATE, 'YYYY-MM-DD') AS "date",
-      COUNT(*) AS "totalVisits",
-      COUNT(CASE WHEN STATUS = 'completed' THEN 1 END) AS "completed",
-      COUNT(CASE WHEN STATUS = 'checked-in' THEN 1 END) AS "checkedIn",
-      COUNT(CASE WHEN STATUS = 'scheduled' THEN 1 END) AS "scheduled",
-      COUNT(CASE WHEN STATUS = 'cancelled' THEN 1 END) AS "cancelled"
-    FROM FACT_PATIENT_VISITS
-    GROUP BY VISIT_DATE
-    ORDER BY VISIT_DATE ASC
-    LIMIT 30;
-  `;
-  const rawVisits = await queryExasol<any>(visitsSql);
-  const visitsTrend: DailyVisitMetric[] = rawVisits.map((r) => ({
-    date: r.date,
-    totalVisits: Number(r.totalvisits || 0),
-    completed: Number(r.completed || 0),
-    checkedIn: Number(r.checkedin || 0),
-    scheduled: Number(r.scheduled || 0),
-    cancelled: Number(r.cancelled || 0),
-  }));
+type Metrics = Pick<AnalyticsOverviewResponse, 'visitsTrend' | 'departmentWorkload' | 'labTat' | 'labStages' | 'pharmacyConsumption' | 'dataQuality'>;
 
-  // 2. Department Workload
-  const deptSql = `
-    SELECT
-      DEPARTMENT AS "department",
-      COUNT(*) AS "visitCount",
-      ROUND(AVG(COALESCE(WAIT_TIME_MINUTES, 15))) AS "avgWaitMinutes",
-      COUNT(DISTINCT DOCTOR_NAME) AS "activeDoctors"
-    FROM FACT_PATIENT_VISITS
-    GROUP BY DEPARTMENT
-    ORDER BY "visitCount" DESC;
-  `;
-  const rawDept = await queryExasol<any>(deptSql);
-  const departmentWorkload: DepartmentWorkloadMetric[] = rawDept.map((r) => ({
-    department: r.department || 'General Medicine',
-    visitCount: Number(r.visitcount || 0),
-    avgWaitMinutes: Number(r.avgwaitminutes || 15),
-    activeDoctors: Number(r.activedoctors || 1),
-  }));
+const n = (v: any): number | null => (v === null || v === undefined || v === '' ? null : Number(v));
+const n0 = (v: any) => Number(v ?? 0);
 
-  // 3. Lab Turnaround Time (TAT) Analytics
-  const labSql = `
-    SELECT
-      TEST_NAME AS "testName",
-      DEPARTMENT AS "department",
-      PRIORITY AS "priority",
-      COUNT(*) AS "totalOrders",
-      ROUND(AVG(TAT_MINUTES)) AS "avgTatMinutes",
-      ROUND(AVG(SLA_TARGET_MINUTES)) AS "slaTargetMinutes",
-      ROUND((COUNT(CASE WHEN WITHIN_SLA THEN 1 END) * 100.0) / NULLIF(COUNT(*), 0), 1) AS "withinSlaPercent",
-      SUM(COALESCE(CRITICAL_FLAG_COUNT, 0)) AS "criticalCount"
-    FROM FACT_LAB_ORDERS_TAT
-    GROUP BY TEST_NAME, DEPARTMENT, PRIORITY
-    ORDER BY "totalOrders" DESC
-    LIMIT 15;
-  `;
-  const rawLab = await queryExasol<any>(labSql);
-  const labTat: LabTatMetric[] = rawLab.map((r) => ({
-    testName: r.testname,
-    department: r.department,
-    priority: r.priority as any,
-    totalOrders: Number(r.totalorders || 0),
-    avgTatMinutes: Number(r.avgtatminutes || 45),
-    slaTargetMinutes: Number(r.slatargetminutes || 120),
-    withinSlaPercent: Number(r.withinslapercent || 100),
-    criticalCount: Number(r.criticalcount || 0),
-  }));
+/** The analytical SQL. Exposed so the SQL Inspector shows exactly what runs, not a copy that can drift. */
+export const SQL = {
+  visits: `SELECT * FROM (
+  SELECT TO_CHAR(d.VISIT_DATE, 'YYYY-MM-DD') AS "date", d.TOTAL AS "totalVisits", d.COMPLETED AS "completed", d.IN_CLINIC AS "inClinic",
+         d.SCHEDULED AS "scheduled", d.CANCELLED AS "cancelled",
+         ROUND(AVG(d.TOTAL) OVER (ORDER BY d.VISIT_DATE ROWS BETWEEN 6 PRECEDING AND CURRENT ROW), 1) AS "movingAvg7"
+  FROM (
+    SELECT VISIT_DATE, COUNT(*) AS TOTAL,
+           COUNT(CASE WHEN STATUS = 'completed' THEN 1 END) AS COMPLETED,
+           COUNT(CASE WHEN STATUS IN ('checked-in', 'waiting', 'in-consultation') THEN 1 END) AS IN_CLINIC,
+           COUNT(CASE WHEN STATUS = 'scheduled' THEN 1 END) AS SCHEDULED,
+           COUNT(CASE WHEN STATUS IN ('cancelled', 'no-show') THEN 1 END) AS CANCELLED
+    FROM FACT_PATIENT_VISITS GROUP BY VISIT_DATE
+  ) d
+) ORDER BY "date" DESC LIMIT 30`,
+  departments: `SELECT DEPARTMENT AS "department", COUNT(*) AS "visitCount",
+       ROUND(AVG(WAIT_TIME_MINUTES), 1) AS "avgWaitMinutes", COUNT(WAIT_TIME_MINUTES) AS "waitSamples",
+       COUNT(DISTINCT DOCTOR_NAME) AS "activeDoctors"
+FROM FACT_PATIENT_VISITS
+GROUP BY DEPARTMENT
+ORDER BY "visitCount" DESC`,
+  labTat: `SELECT TEST_NAME AS "testName", DEPARTMENT AS "department", PRIORITY AS "priority",
+       COUNT(*) AS "totalOrders", COUNT(TAT_MINUTES) AS "completedOrders",
+       ROUND(AVG(TAT_MINUTES), 1) AS "avgTatMinutes",
+       ROUND(PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY TAT_MINUTES), 1) AS "p90TatMinutes",
+       MAX(SLA_TARGET_MINUTES) AS "slaTargetMinutes",
+       ROUND(100 * COUNT(CASE WHEN WITHIN_SLA THEN 1 END) / NULLIF(COUNT(TAT_MINUTES), 0), 1) AS "withinSlaPercent",
+       SUM(CRITICAL_FLAG_COUNT) AS "criticalCount"
+FROM FACT_LAB_ORDERS_TAT
+GROUP BY TEST_NAME, DEPARTMENT, PRIORITY
+ORDER BY "totalOrders" DESC LIMIT 15`,
+  labStages: `SELECT ROUND(AVG(CASE WHEN COLLECTED_AT >= CREATED_AT THEN SECONDS_BETWEEN(COLLECTED_AT, CREATED_AT) / 60 END), 1) AS "orderToCollectMinutes",
+       COUNT(CASE WHEN COLLECTED_AT >= CREATED_AT THEN 1 END) AS "orderToCollectSamples",
+       ROUND(AVG(CASE WHEN VERIFIED_AT >= COLLECTED_AT THEN SECONDS_BETWEEN(VERIFIED_AT, COLLECTED_AT) / 60 END), 1) AS "collectToVerifyMinutes",
+       COUNT(CASE WHEN VERIFIED_AT >= COLLECTED_AT THEN 1 END) AS "collectToVerifySamples"
+FROM FACT_LAB_ORDERS_TAT`,
+  pharmacy: `SELECT p.MEDICINE_NAME AS "medicineName", MAX(p.GENERIC_NAME) AS "genericName", MAX(p.FORM) AS "form",
+       SUM(p.QUANTITY) AS "totalQuantityPrescribed", COUNT(*) AS "prescriptionCount",
+       COUNT(*) - COUNT(p.QUANTITY) AS "unknownQuantityCount",
+       ROUND(SUM(p.QUANTITY) / w.DAYS, 2) AS "avgDailyUnits",
+       ROUND(SUM(p.QUANTITY) / w.DAYS * 30) AS "projectedDemand30d",
+       w.DAYS AS "observationDays"
+FROM FACT_PHARMACY_PRESCRIPTIONS p
+CROSS JOIN (SELECT GREATEST(7, DAYS_BETWEEN(MAX(PRESCRIBED_DATE), MIN(PRESCRIBED_DATE)) + 1) AS DAYS FROM FACT_PHARMACY_PRESCRIPTIONS) w
+GROUP BY p.MEDICINE_NAME, w.DAYS
+ORDER BY "totalQuantityPrescribed" DESC NULLS LAST, "prescriptionCount" DESC LIMIT 15`,
+  quality: `SELECT (SELECT COUNT(*) FROM FACT_PATIENT_VISITS WHERE WAIT_TIME_MINUTES IS NULL) AS "visitsWithoutWaitTime",
+       (SELECT COUNT(*) FROM FACT_LAB_ORDERS_TAT WHERE TAT_MINUTES IS NULL) AS "labOrdersPending",
+       (SELECT COUNT(*) FROM FACT_PHARMACY_PRESCRIPTIONS WHERE QUANTITY IS NULL) AS "prescriptionsWithoutQuantity"
+FROM DUAL`,
+};
 
-  // 4. Pharmacy Consumption & Stock Runout Analytics
-  const rxSql = `
-    SELECT
-      MEDICINE_NAME AS "medicineName",
-      MAX(GENERIC_NAME) AS "genericName",
-      MAX(FORM) AS "form",
-      SUM(QUANTITY) AS "totalQuantityPrescribed",
-      COUNT(*) AS "prescriptionCount",
-      ROUND(500 - (SUM(QUANTITY) * 0.8)) AS "estimatedDaysRemaining"
-    FROM FACT_PHARMACY_PRESCRIPTIONS
-    GROUP BY MEDICINE_NAME
-    ORDER BY "totalQuantityPrescribed" DESC
-    LIMIT 15;
-  `;
-  const rawRx = await queryExasol<any>(rxSql);
-  const pharmacyConsumption: PharmacyConsumptionMetric[] = rawRx.map((r) => {
-    const remaining = Math.max(5, Number(r.estimateddaysremaining || 30));
-    return {
-      medicineName: r.medicinename,
-      genericName: r.genericname || 'Generic Compound',
-      form: r.form || 'Tablet',
-      totalQuantityPrescribed: Number(r.totalquantityprescribed || 0),
-      prescriptionCount: Number(r.prescriptioncount || 0),
-      estimatedDaysRemaining: remaining,
-      stockStatus: remaining < 15 ? 'critical-low' : remaining < 35 ? 'reorder-soon' : 'adequate',
-    };
-  });
+const TITLES: Record<keyof typeof SQL, string> = {
+  visits: 'Daily outpatient volume with a 7-day moving average (window function)',
+  departments: 'Department workload and waiting time',
+  labTat: 'Lab turnaround vs SLA: average, 90th percentile (PERCENTILE_CONT), SLA compliance',
+  labStages: 'Where lab time goes: order to collection, collection to verification',
+  pharmacy: 'Prescribing volume and 30-day demand estimate',
+  quality: 'Data quality: records that cannot be measured',
+};
 
-  // 5. Clinical Safety & Quality Indicators
-  const safetySql = `
-    SELECT
-      (SELECT COUNT(*) FROM FACT_PHARMACY_PRESCRIPTIONS) AS "totalPrescriptions",
-      (SELECT COUNT(CASE WHEN ALLERGY_ALERT_TRIGGERED THEN 1 END) FROM FACT_PHARMACY_PRESCRIPTIONS) AS "allergyInterceptCount",
-      (SELECT SUM(COALESCE(CRITICAL_FLAG_COUNT, 0)) FROM FACT_LAB_ORDERS_TAT) AS "criticalLabFlagCount"
-    FROM DUAL;
-  `;
-  const rawSafety = (await queryExasol<any>(safetySql))[0] || {};
-  const safety: ClinicalSafetyMetric = {
-    totalPrescriptions: Number(rawSafety.totalprescriptions || 0),
-    allergyInterceptCount: Number(rawSafety.allergyinterceptcount || 0),
-    criticalLabFlagCount: Number(rawSafety.criticallabflagcount || 0),
-    unverifiedReleaseAttemptsBlocked: 2, // Maker-checker blocks recorded
+async function runExasol(): Promise<{ metrics: Metrics; queries: ExecutedQuery[] }> {
+  const queries: ExecutedQuery[] = [];
+  const run = async (id: keyof typeof SQL) => {
+    const t = Date.now();
+    const rows = await queryExasol<any>(SQL[id]);
+    queries.push({ id, title: TITLES[id], sql: SQL[id], engine: 'exasol', rows: rows.length, ms: Date.now() - t });
+    return rows;
   };
 
-  return { visitsTrend, departmentWorkload, labTat, pharmacyConsumption, safety };
-}
-
-/**
- * MongoDB Data Stream Fallback (Computes equivalent metrics directly from MongoDB OLTP)
- */
-function queryFallbackOperations(db: any): {
-  visitsTrend: DailyVisitMetric[];
-  departmentWorkload: DepartmentWorkloadMetric[];
-  labTat: LabTatMetric[];
-  pharmacyConsumption: PharmacyConsumptionMetric[];
-  safety: ClinicalSafetyMetric;
-} {
-  const appointments: any[] = db?.appointments || [];
-  const labOrders: any[] = db?.labOrders || [];
-  const prescriptions: any[] = db?.prescriptions || [];
-  const auditLogs: any[] = db?.auditLogs || [];
-
-  // 1. Visits trend by date
-  const visitMap = new Map<string, { total: number; completed: number; checkedIn: number; scheduled: number; cancelled: number }>();
-  for (const a of appointments) {
-    const d = a.date || new Date().toISOString().split('T')[0];
-    const curr = visitMap.get(d) || { total: 0, completed: 0, checkedIn: 0, scheduled: 0, cancelled: 0 };
-    curr.total++;
-    if (a.status === 'completed') curr.completed++;
-    else if (a.status === 'checked-in') curr.checkedIn++;
-    else if (a.status === 'scheduled') curr.scheduled++;
-    else if (a.status === 'cancelled') curr.cancelled++;
-    visitMap.set(d, curr);
-  }
-
-  // Populate benchmark dates if empty for clean demo curves
-  if (visitMap.size === 0) {
-    const today = new Date();
-    for (let i = 6; i >= 0; i--) {
-      const dt = new Date(today);
-      dt.setDate(today.getDate() - i);
-      const ds = dt.toISOString().split('T')[0];
-      visitMap.set(ds, {
-        total: 12 + Math.floor(Math.random() * 8),
-        completed: 10 + Math.floor(Math.random() * 6),
-        checkedIn: 2 + Math.floor(Math.random() * 2),
-        scheduled: 1,
-        cancelled: Math.floor(Math.random() * 2),
-      });
-    }
-  }
-
-  const visitsTrend: DailyVisitMetric[] = Array.from(visitMap.entries())
-    .map(([date, v]) => ({
-      date,
-      totalVisits: v.total,
-      completed: v.completed,
-      checkedIn: v.checkedIn,
-      scheduled: v.scheduled,
-      cancelled: v.cancelled,
-    }))
-    .sort((a, b) => a.date.localeCompare(b.date));
-
-  // 2. Department workload
-  const deptMap = new Map<string, { count: number; waitSum: number; doctors: Set<string> }>();
-  for (const a of appointments) {
-    const dept = a.reason?.toLowerCase().includes('cardio') ? 'Cardiology' : 'General Medicine';
-    const c = deptMap.get(dept) || { count: 0, waitSum: 0, doctors: new Set() };
-    c.count++;
-    c.waitSum += 15;
-    if (a.doctorName) c.doctors.add(a.doctorName);
-    deptMap.set(dept, c);
-  }
-
-  if (deptMap.size === 0) {
-    deptMap.set('General Medicine', { count: 34, waitSum: 510, doctors: new Set(['Dr. Anirban Laha', 'Dr. Sarah Khan']) });
-    deptMap.set('Biochemistry', { count: 28, waitSum: 320, doctors: new Set(['Dr. Kamakshi Pathologist']) });
-    deptMap.set('Hematology', { count: 22, waitSum: 240, doctors: new Set(['Dr. Kamakshi Pathologist']) });
-    deptMap.set('Cardiology', { count: 14, waitSum: 280, doctors: new Set(['Dr. Ramesh Gupta']) });
-  }
-
-  const departmentWorkload: DepartmentWorkloadMetric[] = Array.from(deptMap.entries()).map(([dept, val]) => ({
-    department: dept,
-    visitCount: val.count,
-    avgWaitMinutes: Math.round(val.waitSum / Math.max(1, val.count)),
-    activeDoctors: Math.max(1, val.doctors.size),
+  const visitsTrend: DailyVisitMetric[] = (await run('visits')).reverse().map((r) => ({
+    date: r.date, totalVisits: n0(r.totalvisits), completed: n0(r.completed), inClinic: n0(r.inclinic), scheduled: n0(r.scheduled), cancelled: n0(r.cancelled), movingAvg7: n0(r.movingavg7),
   }));
-
-  // 3. Lab Turnaround Time (TAT)
-  const labMap = new Map<string, { count: number; tatSum: number; sla: number; critical: number; dept: string; prio: 'routine' | 'urgent' }>();
-  for (const o of labOrders) {
-    const name = o.testName || 'Comprehensive Metabolic Panel';
-    const cur = labMap.get(name) || { count: 0, tatSum: 0, sla: o.priority === 'urgent' ? 45 : 120, critical: 0, dept: o.department || 'Biochemistry', prio: o.priority || 'routine' };
-    cur.count++;
-    cur.tatSum += 38;
-    if (Array.isArray(o.results)) {
-      cur.critical += o.results.filter((r: any) => r.flag === 'critical' || r.flag === 'abnormal').length;
-    }
-    labMap.set(name, cur);
-  }
-
-  if (labMap.size === 0) {
-    labMap.set('Complete Blood Count (CBC)', { count: 18, tatSum: 648, sla: 120, critical: 3, dept: 'Hematology', prio: 'routine' });
-    labMap.set('Lipid Profile', { count: 14, tatSum: 686, sla: 120, critical: 2, dept: 'Biochemistry', prio: 'routine' });
-    labMap.set('Glycated Hemoglobin (HbA1c)', { count: 12, tatSum: 480, sla: 120, critical: 4, dept: 'Biochemistry', prio: 'routine' });
-    labMap.set('Cardiac Troponin I', { count: 6, tatSum: 168, sla: 45, critical: 1, dept: 'Biochemistry', prio: 'urgent' });
-  }
-
-  const labTat: LabTatMetric[] = Array.from(labMap.entries()).map(([testName, val]) => {
-    const avg = Math.round(val.tatSum / Math.max(1, val.count));
-    return {
-      testName,
-      department: val.dept,
-      priority: val.prio,
-      totalOrders: val.count,
-      avgTatMinutes: avg,
-      slaTargetMinutes: val.sla,
-      withinSlaPercent: avg <= val.sla ? 94.5 : 82.0,
-      criticalCount: val.critical,
-    };
-  });
-
-  // 4. Pharmacy Consumption
-  const rxMap = new Map<string, { qty: number; count: number; generic: string; form: string }>();
-  for (const rx of prescriptions) {
-    for (const m of rx.medications || []) {
-      const name = m.name || m.brand || 'Paracetamol 500mg';
-      const cur = rxMap.get(name) || { qty: 0, count: 0, generic: m.generic || 'Paracetamol', form: m.form || 'Tablet' };
-      cur.qty += Number(m.quantity || 10);
-      cur.count++;
-      rxMap.set(name, cur);
-    }
-  }
-
-  if (rxMap.size === 0) {
-    rxMap.set('Metformin Hydrochloride 500mg', { qty: 140, count: 14, generic: 'Metformin', form: 'Tablet' });
-    rxMap.set('Atorvastatin Calcium 20mg', { qty: 110, count: 11, generic: 'Atorvastatin', form: 'Tablet' });
-    rxMap.set('Amoxicillin + Clavulanate 625mg', { qty: 85, count: 9, generic: 'Amoxicillin / Clavulanate', form: 'Tablet' });
-    rxMap.set('Pantoprazole Sodium 40mg', { qty: 70, count: 7, generic: 'Pantoprazole', form: 'Capsule' });
-    rxMap.set('Azithromycin 500mg', { qty: 45, count: 5, generic: 'Azithromycin', form: 'Tablet' });
-  }
-
-  const pharmacyConsumption: PharmacyConsumptionMetric[] = Array.from(rxMap.entries()).map(([medicineName, val]) => {
-    const daysRemaining = Math.max(8, Math.round(500 - val.qty * 2.5));
-    return {
-      medicineName,
-      genericName: val.generic,
-      form: val.form,
-      totalQuantityPrescribed: val.qty,
-      prescriptionCount: val.count,
-      estimatedDaysRemaining: daysRemaining,
-      stockStatus: daysRemaining < 15 ? 'critical-low' : daysRemaining < 35 ? 'reorder-soon' : 'adequate',
-    };
-  });
-
-  // 5. Clinical Safety
-  const allergyIntercepts = auditLogs.filter((a: any) => a.action === 'allergy-blocked').length;
-  const criticalFlagsCount = labTat.reduce((acc, curr) => acc + curr.criticalCount, 0);
-
-  const safety: ClinicalSafetyMetric = {
-    totalPrescriptions: Math.max(15, prescriptions.length),
-    allergyInterceptCount: Math.max(1, allergyIntercepts),
-    criticalLabFlagCount: Math.max(6, criticalFlagsCount),
-    unverifiedReleaseAttemptsBlocked: 2,
+  const departmentWorkload: DepartmentWorkloadMetric[] = (await run('departments')).map((r) => ({
+    department: r.department, visitCount: n0(r.visitcount), avgWaitMinutes: n(r.avgwaitminutes), waitSamples: n0(r.waitsamples), activeDoctors: n0(r.activedoctors),
+  }));
+  const labTat: LabTatMetric[] = (await run('labTat')).map((r) => ({
+    testName: r.testname, department: r.department, priority: r.priority, totalOrders: n0(r.totalorders), completedOrders: n0(r.completedorders),
+    pendingOrders: n0(r.totalorders) - n0(r.completedorders), avgTatMinutes: n(r.avgtatminutes), p90TatMinutes: n(r.p90tatminutes),
+    slaTargetMinutes: n0(r.slatargetminutes), withinSlaPercent: n(r.withinslapercent), criticalCount: n0(r.criticalcount),
+  }));
+  const s = (await run('labStages'))[0] || {};
+  const labStages: LabStageMetric = {
+    orderToCollectMinutes: n(s.ordertocollectminutes), orderToCollectSamples: n0(s.ordertocollectsamples),
+    collectToVerifyMinutes: n(s.collecttoverifyminutes), collectToVerifySamples: n0(s.collecttoverifysamples),
   };
-
-  return { visitsTrend, departmentWorkload, labTat, pharmacyConsumption, safety };
+  const pharmacyConsumption: PharmacyConsumptionMetric[] = (await run('pharmacy')).map((r) => ({
+    medicineName: r.medicinename, genericName: r.genericname, form: r.form || '—', totalQuantityPrescribed: n(r.totalquantityprescribed),
+    prescriptionCount: n0(r.prescriptioncount), unknownQuantityCount: n0(r.unknownquantitycount), avgDailyUnits: n(r.avgdailyunits),
+    projectedDemand30d: n(r.projecteddemand30d), observationDays: n0(r.observationdays),
+  }));
+  const q = (await run('quality'))[0] || {};
+  const dataQuality: DataQuality = { visitsWithoutWaitTime: n0(q.visitswithoutwaittime), labOrdersPending: n0(q.laborderspending), prescriptionsWithoutQuantity: n0(q.prescriptionswithoutquantity) };
+  return { metrics: { visitsTrend, departmentWorkload, labTat, labStages, pharmacyConsumption, dataQuality }, queries };
 }
 
-/**
- * Main analytics controller: Automatically routes queries to Exasol In-Memory engine
- * or MongoDB live fallback.
- */
+function runFallback(db: any): { metrics: Metrics; queries: ExecutedQuery[]; rx: ReturnType<typeof deriveRx>; labs: ReturnType<typeof deriveLabOrders> } {
+  const input = analyticsInput(db);
+  const visits = deriveVisits(input.appointments);
+  const labs = deriveLabOrders(input.labOrders);
+  const rx = deriveRx(input.prescriptions);
+  const metrics: Metrics = {
+    visitsTrend: fallback.visitsTrend(visits), departmentWorkload: fallback.departmentWorkload(visits), labTat: fallback.labTat(labs), labStages: fallback.labStages(labs),
+    pharmacyConsumption: fallback.pharmacyConsumption(rx),
+    dataQuality: { visitsWithoutWaitTime: visits.filter((v) => v.waitMinutes === null).length, labOrdersPending: labs.filter((o) => o.tatMinutes === null).length, prescriptionsWithoutQuantity: rx.filter((r) => r.quantity === null).length },
+  };
+  const queries = (Object.keys(SQL) as (keyof typeof SQL)[]).map((id) => ({
+    id, title: TITLES[id], sql: SQL[id], engine: 'application-store' as const, rows: 0, ms: 0,
+    note: 'Not executed on Exasol: it is offline. The application computed the same figures in code.',
+  }));
+  return { metrics, queries, rx, labs };
+}
+
+/** Runs the analytics on Exasol when it is reachable. If it is not, or a query fails, the application computes the figures itself and says so. */
 export async function getAnalyticsOverview(db: any): Promise<AnalyticsOverviewResponse> {
   const status = await getAnalyticsEngineStatus();
+  const local = runFallback(db);
+  let metrics = local.metrics, queries = local.queries;
+  let source: AnalyticsOverviewResponse['source'] = { live: false, engine: status.engine, fallbackReason: 'Exasol is not reachable.' };
 
-  let metrics;
   if (status.connected) {
     try {
-      metrics = await queryExasolOperations();
-    } catch {
-      metrics = queryFallbackOperations(db);
+      const r = await runExasol();
+      metrics = r.metrics; queries = r.queries;
+      source = { live: true, engine: status.engine };
+    } catch (err: any) {
+      source = { live: false, engine: 'Application Store (Exasol offline)', fallbackReason: `Exasol is connected but a query failed (${err?.message || err}). Press Sync to Exasol to create or refresh the tables.` };
     }
-  } else {
-    metrics = queryFallbackOperations(db);
   }
 
-  const totalPatients = db?.patients?.length || 28;
-  const totalVisits = metrics.visitsTrend.reduce((acc, v) => acc + v.totalVisits, 0);
-  const avgLabTat = Math.round(
-    metrics.labTat.reduce((acc, l) => acc + l.avgTatMinutes, 0) / Math.max(1, metrics.labTat.length)
-  );
-  const criticalAlertsCount = metrics.safety.criticalLabFlagCount + metrics.safety.allergyInterceptCount;
-  const topPrescribedMedicine = metrics.pharmacyConsumption[0]?.medicineName || 'Metformin 500mg';
-
+  const safety = fallback.safety(db, local.labs, local.rx);
+  const done = metrics.labTat.filter((l) => l.avgTatMinutes !== null);
+  const doneOrders = done.reduce((a, l) => a + l.completedOrders, 0);
   return {
-    status,
+    status, source: { ...source, syntheticRecords: analyticsInput(db).syntheticRecords },
     summary: {
-      totalPatients,
-      totalVisits,
-      avgLabTatMinutes: avgLabTat,
-      criticalAlertsCount,
-      topPrescribedMedicine,
+      totalPatients: db?.patients?.length ?? 0,
+      totalVisits: metrics.visitsTrend.reduce((a, v) => a + v.totalVisits, 0),
+      avgLabTatMinutes: doneOrders ? Math.round((done.reduce((a, l) => a + l.avgTatMinutes! * l.completedOrders, 0) / doneOrders) * 10) / 10 : null,
+      criticalAlertsCount: safety.criticalLabResults + safety.allergyBlocks + safety.duplicateTherapyBlocks,
+      topPrescribedMedicine: metrics.pharmacyConsumption[0]?.medicineName ?? null,
     },
-    ...metrics,
+    ...metrics, safety, queries, generatedAt: new Date().toISOString(),
   };
 }
-
