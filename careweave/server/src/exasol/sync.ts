@@ -201,3 +201,4 @@ export async function syncDataToExasol(db: any): Promise<SyncResult> {
     };
   }
 }
+
