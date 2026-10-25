@@ -18,15 +18,16 @@ import { importMedicines } from './medicines.js';
 import { buildSeed, ensureSeed } from './seed.js';
 
 // Everything the server reads or writes lives next to the server code, whichever folder it was started from.
+const isVercel = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 const SERVER_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 loadEnv({ path: path.join(SERVER_DIR, '.env') });
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
-const DATA = path.join(SERVER_DIR, 'data/careweave.json');
+const DATA = isVercel ? '/tmp/careweave.json' : path.join(SERVER_DIR, 'data/careweave.json');
 
-app.use(helmet());
-app.use(cors({ origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173' }));
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '14mb' })); // 10 MB scan images arrive base64-encoded
 
 // Small in-memory limiter: enough to slow password guessing and runaway uploads on one server.
@@ -740,7 +741,7 @@ app.patch('/api/lab/orders/:id', roles('lab'), async (req: any, res) => {
 });
 
 // ── Report files ────────────────────────────────────────────────────────────
-const UPLOADS = path.join(SERVER_DIR, 'uploads');
+const UPLOADS = isVercel ? '/tmp/uploads' : path.join(SERVER_DIR, 'uploads');
 const FILE_TYPES: Record<string, { ext: string; magic: number[] }> = {
   'application/pdf': { ext: 'pdf', magic: [0x25, 0x50, 0x44, 0x46] },
   'image/png': { ext: 'png', magic: [0x89, 0x50, 0x4e, 0x47] },
@@ -837,37 +838,50 @@ app.use((err: any, _req: any, res: any, _next: any) => {
   res.status(500).json({ error: 'Unexpected server error' });
 });
 
-const start = async () => {
-  await initMongo();
-  if (mongoConnected) {
-    await ensureIndexes();
-    importMedicines().catch((err) => console.warn('Medicine import failed:', err?.message));
-    db = await loadFromMongo();
-    if (!db.users.length) {
-      db = await buildSeed();
-      await save();
+let initPromise: Promise<void> | null = null;
+export async function ensureInitialized() {
+  if (initPromise) return initPromise;
+  initPromise = (async () => {
+    await initMongo();
+    if (mongoConnected) {
+      await ensureIndexes();
+      importMedicines().catch((err) => console.warn('Medicine import failed:', err?.message));
+      db = await loadFromMongo();
+      if (!db.users.length) {
+        db = await buildSeed();
+        await save();
+      }
+    } else {
+      db = await ensureSeed(DATA);
     }
-  } else {
-    db = await ensureSeed(DATA);
-  }
-  for (const c of COLLECTIONS) db[c] ||= [];
-  for (const x of db.sessions) if (x.expires > Date.now()) sessions.set(x.id, { userId: x.userId, expires: x.expires });
-  // Databases seeded before a role existed still need that role's demo account.
-  const seeded = (await buildSeed()).users;
-  const missing = seeded.filter((u: any) => !db.users.some((x: any) => x.email === u.email));
-  let usersChanged = missing.length > 0;
-  db.users.push(...missing);
-  for (const seed of (await buildSeed()).users) {
-    const existing = db.users.find((u: any) => u.email === seed.email);
-    if (existing && JSON.stringify(existing.permissions || []) !== JSON.stringify((seed as any).permissions || [])) {
-      existing.permissions = (seed as any).permissions || [];
-      usersChanged = true;
+    for (const c of COLLECTIONS) db[c] ||= [];
+    for (const x of db.sessions) if (x.expires > Date.now()) sessions.set(x.id, { userId: x.userId, expires: x.expires });
+    // Databases seeded before a role existed still need that role's demo account.
+    const seeded = (await buildSeed()).users;
+    const missing = seeded.filter((u: any) => !db.users.some((x: any) => x.email === u.email));
+    let usersChanged = missing.length > 0;
+    db.users.push(...missing);
+    for (const seed of (await buildSeed()).users) {
+      const existing = db.users.find((u: any) => u.email === seed.email);
+      if (existing && JSON.stringify(existing.permissions || []) !== JSON.stringify((seed as any).permissions || [])) {
+        existing.permissions = (seed as any).permissions || [];
+        usersChanged = true;
+      }
     }
-  }
-  if (usersChanged) await save();
-  app.listen(PORT, () =>
-    console.log(`CareWeave API listening on http://localhost:${PORT} [DB: ${mongoConnected ? 'MongoDB Atlas' : 'Local JSON'}]`)
-  );
-};
+    if (usersChanged) await save();
+  })();
+  return initPromise;
+}
 
-start();
+export { app };
+export default app;
+
+if (!isVercel) {
+  ensureInitialized().then(() => {
+    app.listen(PORT, () =>
+      console.log(`CareWeave API listening on http://localhost:${PORT} [DB: ${mongoConnected ? 'MongoDB Atlas' : 'Local JSON'}]`)
+    );
+  }).catch((err) => {
+    console.error('Failed to start CareWeave API:', err);
+  });
+}
