@@ -29,7 +29,8 @@ None of this is exotic. It happens because every desk keeps its own copy of the 
 | | |
 |---|---|
 | **Demo walkthrough** | [`DEMO.md`](DEMO.md): pitch-deck outline, a three-minute demo script and a judge checklist |
-| **Demo video and pitch deck** | Links to be added once recorded and exported. The outline and script are in [`DEMO.md`](DEMO.md) |
+| **Demo video** | [`demo_video.mp4`](demo_video.mp4): Three-minute video walkthrough of CareWeave |
+| **Pitch deck & script** | [`DEMO.md`](DEMO.md): Complete pitch-deck outline, demo script, and judge checklist |
 | **Live site** | Frontend on Vercel, API on Render (configured in [`vercel.json`](vercel.json)) |
 
 > **Tip for judges:** sign in as Front Desk or Doctor and press **Load sample scenario (synthetic)** in the top bar. It creates the synthetic patient *Priya Raman* with a penicillin allergy, an encounter, released and pending lab results, and an outside-hospital report that has been imported three times (clean, duplicate, conflicting). It only runs once.
@@ -237,7 +238,6 @@ We would rather say these out loud than have you find them:
 - This is a demonstration build with synthetic data. We make no claims about clinical accuracy, regulatory compliance, or real hospital interoperability.
 
 -
-
 ---
 
 ## License
