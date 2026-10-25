@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, FileText } from '../icons';
 import { api } from '../api';
-import type { Patient } from '../types';
+import type { CollisionAlert, DuplicateOverride, Patient } from '../types';
 import { Modal } from '../components';
 import { MedicineInput } from './MedicineInput';
+import { DuplicateTherapyModal } from './DuplicateTherapyModal';
 
 export function PrescribeModal({ patient: initPatient, onClose, onSaved }: { patient?: Patient; onClose: () => void; onSaved: () => void }) {
   const [patients, setPatients] = useState<Patient[]>(initPatient ? [initPatient] : []);
@@ -39,8 +40,27 @@ export function PrescribeModal({ patient: initPatient, onClose, onSaved }: { pat
   const [allergyBlock, setAllergyBlock] = useState('');
   const [overrideReason, setOverrideReason] = useState('');
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Duplicate therapy: the same molecule under another brand. Checked when a medicine is chosen, and again by the server on submit.
+  const [collision, setCollision] = useState<CollisionAlert[] | null>(null);
+  const [dupOverride, setDupOverride] = useState<DuplicateOverride | null>(null);
+  const blockedOnSubmit = useRef(false);
+
+  const checkDuplicates = async (medicine: string, dosage: string, frequency: string) => {
+    if (!selectedPatient || medicine.trim().length < 3) return;
+    try {
+      const r = await api.validatePrescription({ patientId: selectedPatient.id, medicine, dosage, frequency });
+      if (r.alerts.some(a => a.severity === 'HIGH_COLLISION')) setCollision(r.alerts);
+    } catch { /* the server checks again when the prescription is signed */ }
+  };
+  const cancelOrder = () => {
+    blockedOnSubmit.current = false;
+    setCollision(null);
+    setDupOverride(null);
+    setForm(f => ({ ...f, medicine: '' }));
+  };
+
+  const submit = async (e?: React.FormEvent, override: DuplicateOverride | null = dupOverride) => {
+    e?.preventDefault();
     if (!selectedPatient) return setError('Please select a patient');
     if (allergyBlock && overrideReason.trim().length < 5) return setError('Give a reason (at least 5 characters) to prescribe despite the allergy.');
     setBusy(true);
@@ -49,11 +69,16 @@ export function PrescribeModal({ patient: initPatient, onClose, onSaved }: { pat
       await api.createPrescription({
         patientId: selectedPatient.id,
         ...form,
-        ...(allergyBlock ? { allergyOverrideReason: overrideReason.trim() } : {})
+        ...(allergyBlock ? { allergyOverrideReason: overrideReason.trim() } : {}),
+        ...(override ? { duplicateOverride: override } : {})
       });
       onSaved();
     } catch (err: any) {
-      if (String(err.message).startsWith('Allergy on record')) {
+      if (err.body?.code === 'DUPLICATE_THERAPY') {
+        blockedOnSubmit.current = true;
+        setCollision(err.body.alerts);
+        setError('');
+      } else if (String(err.message).startsWith('Allergy on record')) {
         setAllergyBlock(err.message);
         setError('');
       } else {
@@ -81,7 +106,7 @@ export function PrescribeModal({ patient: initPatient, onClose, onSaved }: { pat
             >
               <option value="">Choose patient…</option>
               {patients.map(p => (
-                <option key={p.id} value={p.name}>{p.name} ({p.patientId})</option>
+                <option key={p.id} value={p.id}>{p.name} ({p.patientId})</option>
               ))}
             </select>
           )}
@@ -106,7 +131,9 @@ export function PrescribeModal({ patient: initPatient, onClose, onSaved }: { pat
             onChange={e => {
               const found = popularMeds.find(m => m.name === e.target.value);
               if (found) {
+                setDupOverride(null);
                 setForm(f => ({ ...f, medicine: found.name, dosage: found.dose, route: found.route, frequency: found.freq }));
+                checkDuplicates(found.name, found.dose, found.freq);
               }
             }}
           >
@@ -119,8 +146,8 @@ export function PrescribeModal({ patient: initPatient, onClose, onSaved }: { pat
 
         <MedicineInput
           value={form.medicine}
-          onChange={medicine => { setForm({ ...form, medicine }); setAllergyBlock(''); }}
-          onPick={m => { setAllergyBlock(''); setForm(f => ({ ...f, medicine: m.name, dosage: m.strength || f.dosage, route: m.route || f.route })); }}
+          onChange={medicine => { setForm({ ...form, medicine }); setAllergyBlock(''); setDupOverride(null); }}
+          onPick={m => { setAllergyBlock(''); setDupOverride(null); setForm(f => ({ ...f, medicine: m.name, dosage: m.strength || f.dosage, route: m.route || f.route })); checkDuplicates(m.name, m.strength || form.dosage, form.frequency); }}
         />
 
         <label>
@@ -169,6 +196,14 @@ export function PrescribeModal({ patient: initPatient, onClose, onSaved }: { pat
           </button>
         </div>
       </form>
+      {collision && (
+        <DuplicateTherapyModal
+          alerts={collision}
+          dosage={form.dosage}
+          onCancel={cancelOrder}
+          onOverride={o => { setDupOverride(o); setCollision(null); if (blockedOnSubmit.current) { blockedOnSubmit.current = false; submit(undefined, o); } }}
+        />
+      )}
     </Modal>
   );
 }

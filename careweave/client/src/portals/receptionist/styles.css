@@ -1847,6 +1847,10 @@ tbody tr:hover {
 /* The sidebar is text-only (no icons), so it stays open on desktop; the toggle is only for the mobile drawer */
 @media (min-width: 761px) { .top-menu-button { display: none !important; } }
 
-.brand-logo { width: 150px; height: auto; border-radius: 3px; display: block; }
-.nav-collapsed .brand-logo { width: 40px; }
-@media (max-width: 760px) { .nav-collapsed .brand-logo { width: 150px; } }
+.brand-logo { width: 38px; height: 38px; border-radius: 3px; display: block; flex-shrink: 0; }
+.side-brand span { display: inline; }
+.nav-collapsed .side-brand span { display: none; }
+@media (max-width: 760px) { .nav-collapsed .side-brand span { display: inline; } }
+
+.breadcrumb span, .breadcrumb b { white-space: nowrap; flex-shrink: 0; }
+.breadcrumb .crumb-sep { color: #c3cac2; }

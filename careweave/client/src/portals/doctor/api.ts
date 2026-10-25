@@ -1,5 +1,6 @@
 import type {
   AdminPatientRecord,
+  CollisionAlert,
   Allergy,
   Appointment,
   CarePlan,
@@ -18,7 +19,7 @@ import type {
 const json=async<T>(res:Response):Promise<T>=>{
   const body=await res.json().catch(()=>({}));
   if(res.status===401){localStorage.removeItem('cw_token');window.location.assign('/login');}
-  if(!res.ok)throw new Error(body.error||'Request failed');
+  if(!res.ok)throw Object.assign(new Error(body.error||'Request failed'),{body,status:res.status});
   return body;
 };
 
@@ -86,6 +87,7 @@ export const api={
 
   // Prescriptions & E-Prescribing
   searchMedicines:(q:string)=>request<{id:string;name:string;brand:string;generic:string;strength:string;form:string;route:string}[]>(`/api/medicines/search?q=${encodeURIComponent(q)}`),
+  validatePrescription:(body:{patientId:string;medicine:string;dosage?:string;frequency?:string})=>request<{alerts:CollisionAlert[];blocking:boolean}>('/api/encounters/validate-prescription',{method:'POST',body:JSON.stringify(body)}),
   createPrescription:(body:any)=>request<Prescription>('/api/prescriptions',{method:'POST',body:JSON.stringify(body)}),
   updatePrescription:(id:string,body:{status?:string;refills?:number;discontinueReason?:string})=>
     request<Prescription>(`/api/prescriptions/${id}`,{method:'PATCH',body:JSON.stringify(body)}),

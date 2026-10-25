@@ -108,7 +108,7 @@ export async function queryExasol<T = any>(sql: string): Promise<T[]> {
       ]);
       return [];
     }
-    const res = await Promise.race([
+    const res: any = await Promise.race([
       driver.query(sql),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('Exasol query timed out (8000ms)')), 8000)

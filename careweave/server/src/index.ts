@@ -831,7 +831,7 @@ app.post('/api/demo/scenario', roles('receptionist', 'doctor', 'lab'), async (re
 
 registerScanRoutes({ app, roles, uploadLimit, text, audit, save, mongoConnected: () => mongoConnected });
 registerDoctorRoutes({
-  app, db: () => db, save, audit, roles, id, now, patientById, text, isToday, adminPatientView
+  app, db: () => db, save, audit, roles, id, now, patientById, text, isToday, adminPatientView, mongoConnected: () => mongoConnected
 });
 registerExasolAnalyticsRoutes({ app, db: () => db, roles, audit });
 

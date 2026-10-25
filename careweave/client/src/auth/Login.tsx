@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Activity, AlertTriangle, CalendarCheck, Eye, EyeOff, FlaskConical, Scan, ShieldCheck, Sparkles, Users, Zap } from 'lucide-react'
+import { AlertTriangle, CalendarCheck, Eye, EyeOff, FlaskConical, Scan, ShieldCheck, Sparkles, Users, Zap } from 'lucide-react'
 import { firebaseConfigured, firebaseResetPassword, firebaseSignIn } from './firebase'
 import { authConfig, HOME, signIn, signInWithFirebaseToken } from './session'
 
@@ -128,9 +128,7 @@ function LoginInner() {
           <div className="relative z-10 w-full max-w-[390px]">
             <div className="w-full rounded-2xl border border-slate-700/60 bg-[#151c2c] p-7 shadow-sm sm:p-9">
               <div className="mb-6 flex flex-col items-center">
-                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-teal-600 text-white shadow-sm">
-                  <Activity size={22} strokeWidth={2.4} />
-                </div>
+                <img src="/careweave-mark.png" alt="" className="mb-3 h-12 w-12 rounded-sm" />
                 <h1 className="text-xl font-bold tracking-tight text-slate-100">CareWeave</h1>
                 <p className="mt-1 text-xs text-slate-400">Staff sign in</p>
               </div>
@@ -217,7 +215,7 @@ function LoginInner() {
 
           <div className="relative z-10 flex min-h-screen flex-col justify-between px-16 py-10 xl:px-20">
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-600 to-teal-800 text-white shadow-lg shadow-teal-900/20"><Activity size={22} strokeWidth={2.4} /></div>
+              <img src="/careweave-mark.png" alt="" className="h-11 w-11 rounded-sm" />
               <div>
                 <p className="text-xl font-bold tracking-tight text-slate-100">CareWeave</p>
                 <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-teal-300/70">Unified records</p>

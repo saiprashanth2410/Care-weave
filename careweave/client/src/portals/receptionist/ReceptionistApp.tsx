@@ -130,7 +130,8 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
       {/* Sidebar */}
       <aside className="sidebar">
         <div className="side-brand">
-          <img src="/careweave-logo.png" alt="CareWeave" className="brand-logo" />
+          <img src="/careweave-mark.png" alt="" className="brand-logo" />
+          <span>CareWeave</span>
         </div>
 
         <span className="nav-section-title">Front Desk Operations</span>
@@ -188,7 +189,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
 
           <div className="breadcrumb">
             <span>Reception Desk</span>
-            <ChevronRight size={14} />
+            <span className="crumb-sep">/</span>
             <b>{navItems.find(n => n.id === section)?.label}</b>
           </div>
 

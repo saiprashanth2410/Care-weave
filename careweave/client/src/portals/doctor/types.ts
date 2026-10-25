@@ -199,3 +199,16 @@ export type Dashboard={
   cases:any[];
   recent:any[];
 };
+
+export type CollisionAlert = {
+  severity: 'HIGH_COLLISION' | 'SAME_CLASS_WARNING';
+  prescribedDrug: { name: string; brand: string; generic: string };
+  conflictingDrug: {
+    name: string; brand: string; generic: string;
+    source: 'IN_HOUSE_ENCOUNTER' | 'EXTERNAL_RECONCILED_RECORD';
+    prescribedDate: string; prescribingDoctor?: string; facility?: string;
+  };
+  matchedMolecules: string[];
+  clinicalWarning: string;
+};
+export type DuplicateOverride = { overrideReason: string; acknowledgedRisks: boolean };

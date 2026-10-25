@@ -1,41 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 90" width="420" height="90" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600">
   <defs>
-    <linearGradient id="cwWeaveGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#14b8a6" />
-      <stop offset="50%" stop-color="#0d9488" />
-      <stop offset="100%" stop-color="#0f766e" />
-    </linearGradient>
-    <linearGradient id="cwWeaveGrad2" x1="0%" y1="100%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#38bdf8" />
-      <stop offset="100%" stop-color="#0284c7" />
-    </linearGradient>
-    <filter id="logoGlow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#0d9488" flood-opacity="0.3"/>
-    </filter>
+    <linearGradient id="g1" gradientUnits="userSpaceOnUse" x1="-60" y1="-100" x2="60" y2="100"><stop offset="0" stop-color="#14b8a6"/><stop offset="1" stop-color="#0c6b6d"/></linearGradient>
+    <linearGradient id="g2" gradientUnits="userSpaceOnUse" x1="100" y1="-60" x2="-100" y2="60"><stop offset="0" stop-color="#5eead4"/><stop offset="1" stop-color="#0e7490"/></linearGradient>
   </defs>
-
-  <!-- Emblem Icon on Left -->
-  <g transform="translate(15, 10)">
-    <rect width="70" height="70" rx="18" fill="#151c2c" stroke="#334155" stroke-width="1.5" />
-    <g filter="url(#logoGlow)">
-      <!-- Vertical Weave Strand -->
-      <path d="M35 15 C30 24, 28 30, 28 35 C28 40, 30 46, 35 55 C40 46, 42 40, 42 35 C42 30, 40 24, 35 15 Z" fill="url(#cwWeaveGrad1)" opacity="0.95" />
-      <!-- Horizontal Cross & ECG Pulse -->
-      <path d="M16 35 C22 35, 26 35, 30 35 L33 24 L37 46 L40 35 C44 35, 48 35, 54 35" stroke="url(#cwWeaveGrad2)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
-      <!-- Central Core Node -->
-      <circle cx="35" cy="35" r="3.5" fill="#ffffff" />
-      <circle cx="35" cy="35" r="1.5" fill="#0d9488" />
-    </g>
+  <rect width="600" height="600" fill="#f6f7f3"/>
+  <g transform="translate(300 220)" fill="none" stroke-linecap="butt">
+    <rect x="-38" y="-100" width="76" height="200" rx="38" stroke="url(#g1)" stroke-width="22"/>
+    <rect x="-100" y="-38" width="200" height="76" rx="38" stroke="url(#g2)" stroke-width="22"/>
+    <!-- vertical loop passes over the horizontal one at top-right and bottom-left -->
+    <path d="M38 -62 V-14" stroke="#f6f7f3" stroke-width="30"/>
+    <path d="M38 -58 V-18" stroke="url(#g1)" stroke-width="22"/>
+    <path d="M-38 14 V62" stroke="#f6f7f3" stroke-width="30"/>
+    <path d="M-38 18 V58" stroke="url(#g1)" stroke-width="22"/>
   </g>
-
-  <!-- Brand Typography -->
-  <text x="105" y="48" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="34" font-weight="800" letter-spacing="-0.5" fill="#f8fafc">
-    Care<tspan fill="#14b8a6">Weave</tspan>
-  </text>
-  
-  <!-- Subtitle Tagline -->
-  <text x="107" y="68" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="11.5" font-weight="600" letter-spacing="2.5" fill="#94a3b8" text-transform="uppercase">
-    UNIFIED CLINICAL RECORDS
-  </text>
+  <text x="300" y="450" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="64" font-weight="700" fill="#14231f" letter-spacing="-1">CareWeave</text>
+  <text x="300" y="492" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="20" fill="#56655f" letter-spacing="4">UNIFIED RECORDS</text>
 </svg>
-

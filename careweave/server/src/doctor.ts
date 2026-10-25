@@ -1,6 +1,8 @@
 import type { Express } from 'express';
 import crypto from 'node:crypto';
 import { checksum, findIssues, matchPatient, type Identity, type Issue } from './reconcile.js';
+import { searchMedicines } from './medicines.js';
+import { checkDuplicateTherapy } from './safety/molecules.js';
 
 // Doctor portal API. Every route checks the role here on the server, and patient data is only
 // reachable for a patient the doctor is linked to (an appointment assigned to them, or their own encounter).
@@ -17,6 +19,7 @@ export type Ctx = {
   text: (v: any, max?: number) => string;
   isToday: (d: string) => boolean;
   adminPatientView: (p: any) => any;
+  mongoConnected?: () => boolean;
 };
 
 const STATUS_FOR_DOCTOR: Record<string, string> = {
@@ -436,6 +439,29 @@ export function registerDoctorRoutes(c: Ctx) {
   });
 
   // ── prescriptions ─────────────────────────────────────────────────────────
+  // Duplicate-therapy check: the same active molecule under another brand, in-house or from a linked outside record.
+  const duplicateAlerts = (p: any, medicine: string, dosage: string, frequency: string) =>
+    checkDuplicateTherapy({
+      medicine, dosage, frequency,
+      prescriptions: db().prescriptions.filter((r: any) => r.patientId === p.id),
+      externalRecords: db().externalRecords.filter((r: any) => r.patientId === p.id),
+      // A bare brand name such as "Dolo" is looked up in the catalogue to find its generic composition.
+      resolve: async (name) => {
+        const first = name.trim().split(/[\s-]+/)[0].toLowerCase();
+        const hit = (await searchMedicines(name, 3, c.mongoConnected?.() ?? false)).find((m) => m.brand.toLowerCase().startsWith(first));
+        return hit?.generic;
+      },
+    });
+
+  app.post('/api/encounters/validate-prescription', roles('doctor'), async (req: any, res) => {
+    const p = patientFor(req, res, req.body?.patientId);
+    if (!p) return;
+    const medicine = text(req.body?.medicine, 200);
+    if (!medicine) return res.status(400).json({ error: 'Name the medicine to check' });
+    const alerts = await duplicateAlerts(p, medicine, text(req.body?.dosage, 80), text(req.body?.frequency, 80));
+    res.json({ alerts, blocking: alerts.some((a) => a.severity === 'HIGH_COLLISION') });
+  });
+
   app.post('/api/prescriptions', roles('doctor'), async (req: any, res) => {
     const p = patientFor(req, res, req.body?.patientId);
     if (!p) return;
@@ -450,14 +476,29 @@ export function registerDoctorRoutes(c: Ctx) {
       await save();
       return res.status(409).json({ error: `Allergy on record: ${allergy.allergen} (${allergy.severity}). Choose another medicine, or send an override reason.` });
     }
+    const alerts = await duplicateAlerts(p, medicine, dosage, frequency);
+    const high = alerts.filter((x) => x.severity === 'HIGH_COLLISION');
+    const ov = b.duplicateOverride;
+    const overrideOk = !!ov && ov.acknowledgedRisks === true && text(ov.overrideReason, 500).length >= 15;
+    const molecules = [...new Set(high.flatMap((x) => x.matchedMolecules))].join(', ');
+    if (high.length && !overrideOk) {
+      audit(req, 'blocked', 'prescription', p.id, `Duplicate therapy: ${medicine} repeats ${molecules} already given as ${high.map((x) => x.conflictingDrug.name).join('; ')}`);
+      await save();
+      return res.status(409).json({
+        error: `Duplicate therapy: ${molecules} is already being taken. Cancel, or send an override reason of at least 15 characters and acknowledge the risks.`,
+        code: 'DUPLICATE_THERAPY', alerts, overrideRequired: { overrideReason: 'string (min 15 characters)', acknowledgedRisks: true },
+      });
+    }
     const r = {
       id: id('rx'), patientId: p.id, encounterId: enc.id, medicine, dosage, route: text(b.route, 40), frequency,
       duration: text(b.duration, 60), instructions: text(b.instructions, 500), refills: Math.max(0, Math.min(12, Number(b.refills) || 0)),
       status: 'Active', date: now(), source: 'CareWeave Clinic', prescribingClinician: req.user.name, imported: false,
-      allergyOverrideReason: allergy ? text(b.allergyOverrideReason, 300) : undefined
+      allergyOverrideReason: allergy ? text(b.allergyOverrideReason, 300) : undefined,
+      duplicateOverride: high.length ? { reason: text(ov.overrideReason, 500), acknowledgedRisks: true, molecules: high.flatMap((x) => x.matchedMolecules), conflictsWith: high.map((x) => x.conflictingDrug.name) } : undefined
     };
     db().prescriptions.unshift(r);
     audit(req, 'create', 'prescription', r.id, `${medicine} ${dosage}${allergy ? ' (allergy override)' : ''}`);
+    if (high.length) audit(req, 'override', 'prescription', r.id, `Duplicate therapy override for ${molecules}: ${text(ov.overrideReason, 500)}`);
     await save();
     res.status(201).json(r);
   });

@@ -121,6 +121,36 @@
 /* The sidebar is text-only (no icons), so it stays open on desktop; the toggle is only for the mobile drawer */
 @media (min-width: 761px) { .top-menu-button { display: none !important; } }
 
-.brand-logo { width: 150px; height: auto; border-radius: 3px; display: block; }
-.nav-collapsed .brand-logo { width: 40px; }
-@media (max-width: 760px) { .nav-collapsed .brand-logo { width: 150px; } }
+.brand-logo { width: 38px; height: 38px; border-radius: 3px; display: block; flex-shrink: 0; }
+.side-brand span { display: inline; }
+.nav-collapsed .side-brand span { display: none; }
+@media (max-width: 760px) { .nav-collapsed .side-brand span { display: inline; } }
+
+/* Keep the user chip and Sign out in view on long pages */
+.dx .sidebar { position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+@media (max-width: 760px) { .dx .sidebar { position: fixed; } }
+
+.breadcrumb span, .breadcrumb b { white-space: nowrap; flex-shrink: 0; }
+.breadcrumb .crumb-sep { color: #c3cac2; }
+
+/* Duplicate therapy interceptor */
+.dx .dup{display:grid;gap:16px}
+.dx .dup-case{display:grid;gap:12px}
+.dx .dup-banner{margin:0;padding:12px 14px;border:1px solid #a3341f;background:#f6f7f3;color:#a3341f;font-size:14px;line-height:1.45}
+.dx .dup-compare{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.dx .dup-card{border:1px solid var(--line);background:#f6f7f3;padding:14px;display:grid;gap:6px;align-content:start}
+.dx .dup-card.existing{border-color:#a3341f}
+.dx .dup-card.attempted{border-color:#7d5200}
+.dx .dup-card h3{margin:0;font-size:17px;color:#14231f}
+.dx .dup-tag{margin:0;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#56655f}
+.dx .dup-generic{margin:0;font-size:13px;color:#3a4a44}
+.dx .dup-badge{justify-self:start;border:1px solid #0c6b6d;color:#084e50;font-size:11px;font-weight:700;padding:2px 8px}
+.dx .dup-card dl{margin:4px 0 0;display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:12px}
+.dx .dup-card dt{color:#56655f}.dx .dup-card dd{margin:0;color:#14231f;font-weight:600}
+.dx .dup-warning{margin:0;font-size:13px;line-height:1.5;color:#3a4a44}
+.dx .dup-reason{display:grid;gap:6px;font-weight:700;font-size:13px}
+.dx .dup-reason textarea{min-height:76px}
+.dx .dup-reason small{justify-self:end;color:#a3341f;font-weight:600}.dx .dup-reason small.ok{color:#084e50}
+.dx .dup-ack{display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.4}
+.dx .dup-ack input{margin-top:3px}
+@media(max-width:640px){.dx .dup-compare{grid-template-columns:1fr}}
