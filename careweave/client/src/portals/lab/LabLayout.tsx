@@ -9,6 +9,7 @@ const NAV = [
   { to: '/lab/samples', label: 'Sample Tracking' },
   { to: '/lab/results', label: 'Result Entry' },
   { to: '/lab/verification', label: 'Verification Queue' },
+  { to: '/analytics', label: 'Exasol Analytics' },
 ]
 
 export default function LabLayout({ user }: { user: SessionUser }) {

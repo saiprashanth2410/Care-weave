@@ -3,6 +3,7 @@
 > One clinical platform where the front desk, the lab and the doctor finally work from the same patient record.
 
 [![ExaThon India 2026](https://img.shields.io/badge/ExaThon_India-2026-brightgreen.svg)](https://www.exasol.com)
+[![Analytics: Exasol Personal](https://img.shields.io/badge/Analytics-Exasol_Personal_In--Memory-blueviolet.svg)](EXASOL_SETUP.md)
 [![Built with Gemma 4](https://img.shields.io/badge/Vision_AI-Gemma_4-blue.svg)](https://ai.google.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -60,16 +61,23 @@ None of this is exotic. It happens because every desk keeps its own copy of the 
 - **Conflict and duplicate detection:** the same report imported twice, or the same test with different values, is shown side by side with the evidence. Originals are preserved and nothing is overwritten silently.
 - **Optimistic concurrency:** revision locks (`rev`) stop two staff members from silently overwriting each other's edits.
 
+### 5. High-Performance Healthcare Analytics (Exasol Personal)
+- **Hospital Operations Hub:** Real-time patient volume trends, department workload distribution, and consultation wait-time funnels.
+- **Diagnostic Turnaround Time (TAT):** Accurate SLA tracking (urgent 45m vs routine 120m) across pathology panels with critical flag metrics.
+- **Pharmacy Intelligence:** Drug consumption velocity, brand-to-generic substitution analysis, and automated stock runout forecasting.
+- **Dual Engine Resiliency:** Executes parameterized SQL on **Exasol Personal** in-memory columnar database with zero-downtime MongoDB OLTP fallback. Full setup in [`EXASOL_SETUP.md`](EXASOL_SETUP.md).
+
 ---
 
 ## How the pieces fit
 
 ```
   Front Desk ─┐
-  Laboratory ─┼──►  Express API (roles, validation, audit log)  ──►  MongoDB
-  Doctor ─────┘            │
-                           ├── Gemma 4 / Gemini (report scanning, draft only)
-                           └── Matching + reconciliation engine
+  Laboratory ─┼──►  Express API (roles, validation, audit log)  ──►  MongoDB (OLTP)
+  Doctor ─────┘            │                                            │
+                           ├── Gemma 4 / Gemini (report scan)           ▼ (Sync)
+                           ├── Matching + reconciliation       Exasol Personal (OLAP)
+                           └── Analytics Engine ◄───────────────────────┘
 ```
 
 - One React app serves all three portals. Routes are guarded in the UI for convenience only; **the server checks the role on every request.**
@@ -82,12 +90,13 @@ None of this is exotic. It happens because every desk keeps its own copy of the 
 
 | Layer | What we used |
 |---|---|
-| Frontend | React 19, TypeScript, Vite, Tailwind CSS, Lucide icons |
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS, Lucide icons, Recharts |
 | Backend | Node.js, Express, TypeScript, Zod validation |
-| Database | MongoDB (Atlas or local `mongod`) |
-| AI | Google Gemma 4 via the Interactions API, falling back to Gemini Flash |
+| OLTP Database | MongoDB Atlas (Cloud Cluster) |
+| OLAP Analytics | **Exasol Personal** (In-Memory Columnar Engine via `@exasol/exasol-driver-ts`) |
+| AI Vision | Google Gemma 4 via Interactions API, falling back to Gemini Flash |
 | Auth | Firebase Authentication, plus optional local demo sign-in for development |
-| Tests | Vitest and React Testing Library on the client, `tsx --test` and an acceptance script on the server |
+| Tests | Vitest and React Testing Library on the client, `tsx --test` on the server |
 
 ---
 

@@ -16,6 +16,7 @@ import { runScenario } from './scenario.js';
 import { registerDoctorRoutes } from './doctor.js';
 import { importMedicines } from './medicines.js';
 import { buildSeed, ensureSeed } from './seed.js';
+import { registerExasolAnalyticsRoutes } from './exasol/routes.js';
 
 // Everything the server reads or writes lives next to the server code, whichever folder it was started from.
 const isVercel = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
@@ -832,6 +833,7 @@ registerScanRoutes({ app, roles, uploadLimit, text, audit, save, mongoConnected:
 registerDoctorRoutes({
   app, db: () => db, save, audit, roles, id, now, patientById, text, isToday, adminPatientView
 });
+registerExasolAnalyticsRoutes({ app, db: () => db, roles, audit });
 
 app.use((err: any, _req: any, res: any, _next: any) => {
   console.error(err);

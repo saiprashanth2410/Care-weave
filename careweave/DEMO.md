@@ -28,8 +28,13 @@ It runs once. Set `ALLOW_SAMPLE_DATA=false` on a real deployment.
 2. **Doctor (40 s).** Open Priya Raman. Show the unified timeline: appointment, encounter, released HbA1c. Order a lab test: it needs an encounter, and a doctor sees lab values only after release. Save a short SOAP note, then try to prescribe amoxicillin: the allergy guard (penicillin family) blocks it until an override reason is given.
 3. **Lab (40 s).** Sign in as the lab assistant. Open the lipid profile that is waiting. Try to release it: refused, because the person who entered the values cannot verify them.
 4. **Lab, second pair of eyes (20 s).** Sign in as the verifier and release it. Back as the doctor, the result is on the timeline.
-5. **Reconciliation (40 s).** As the doctor open External Records Review. Show the duplicate and the conflict side by side. Nothing was overwritten or deleted. Explain the matching rule: identifier plus one more field, a name and date of birth alone never link.
-6. **Audit (10 s).** Every step above is in the audit log with who, what and when.
+5. **Reconciliation (30 s).** As the doctor open External Records Review. Show the duplicate and the conflict side by side. Nothing was overwritten or deleted. Explain the matching rule: identifier plus one more field, a name and date of birth alone never link.
+6. **Exasol Healthcare Analytics (45 s).** Click **Exasol Analytics** in the top header. Show the real-time engine status pill (`Exasol In-Memory Columnar`). Demonstrate:
+   - Hospital Operations: Outpatient visit volume trends and department workload distribution.
+   - Lab Turnaround Time (TAT): SLA compliance comparing actual processing minutes against 45m urgent / 120m routine SLAs.
+   - Pharmacy Intelligence: Drug consumption velocity and stock runout forecasting.
+   - Click **Exasol SQL Inspector** tab to show judges the exact in-memory columnar SQL queries executing on Exasol.
+7. **Audit (10 s).** Every clinical and sync action is tracked in the immutable audit log with actor ID, timestamp, and entity details.
 
 ## Say plainly
 

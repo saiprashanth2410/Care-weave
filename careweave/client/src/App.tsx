@@ -10,6 +10,7 @@ import Overview from '@/portals/lab/pages/Overview'
 import Results from '@/portals/lab/pages/Results'
 import Samples from '@/portals/lab/pages/Samples'
 import Verification from '@/portals/lab/pages/Verification'
+import AnalyticsApp from '@/portals/analytics/AnalyticsApp'
 
 export default function App() {
   return (
@@ -38,6 +39,9 @@ export default function App() {
         <Route path="results" element={<Results />} />
         <Route path="verification" element={<Verification />} />
       </Route>
+
+      {/* Exasol Healthcare Analytics Hub */}
+      <Route path="/analytics" element={<AnalyticsApp />} />
 
       <Route path="/terms" element={<Terms />} />
       <Route path="/privacy" element={<Privacy />} />

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Activity, CalendarDays, Check, ChevronRight, ClipboardList, FileText, FlaskConical, HeartPulse, LayoutDashboard, LogOut, Menu, RefreshCw, ShieldCheck, Stethoscope, Users } from './icons';
 import { api } from './api';
 import type { Patient, User } from './types';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { initials } from './helpers';
 import { DoctorOverview } from './pages/DoctorOverview';
 import { DoctorAppointments } from './pages/DoctorAppointments';
@@ -123,6 +123,14 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
 
           <div className="top-actions">
             <SampleScenario className="action-pill" />
+            <Link
+              to="/analytics"
+              className="action-pill"
+              style={{ textDecoration: 'none', color: '#0c6b6d', borderColor: '#0c6b6d', fontWeight: 600 }}
+              title="Exasol Healthcare Analytics Dashboard"
+            >
+              Exasol Analytics
+            </Link>
             <button
               className="icon-button"
               onClick={() => { setRefresh(v => v + 1); notify('Clinical data refreshed'); }}
