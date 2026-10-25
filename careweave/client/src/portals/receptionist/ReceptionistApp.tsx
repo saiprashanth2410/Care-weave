@@ -134,14 +134,6 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
           <span>CareWeave</span>
         </div>
 
-        <div className="workspace-badge">
-          <span className="role-dot"></span>
-          <div>
-            <b>Front Desk Reception</b>
-            <small>CareWeave Health</small>
-          </div>
-        </div>
-
         <span className="nav-section-title">Front Desk Operations</span>
         <nav>
           {navItems.map(item => {

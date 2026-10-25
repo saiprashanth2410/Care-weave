@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Activity, CalendarDays, Check, ChevronRight, ClipboardList, FileText, FlaskConical, HeartPulse, LayoutDashboard, LogOut, Menu, RefreshCw, ShieldCheck, Stethoscope, Users } from './icons';
+import { Activity, CalendarDays, Check, ChevronRight, ClipboardList, FileText, FlaskConical, HeartPulse, LayoutDashboard, LogOut, Menu, RefreshCw, Stethoscope, Users } from './icons';
 import { api } from './api';
 import type { Patient, User } from './types';
 import { useNavigate, Link } from 'react-router-dom';
@@ -68,15 +68,6 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
         <div className="side-brand">
           <div className="brand-mark"><Stethoscope size={21} /></div>
           <span>CareWeave</span>
-        </div>
-
-        <div className="workspace-switch">
-          <span className="role-dot doctor" style={{ width: 10, height: 10 }}></span>
-          <div>
-            <b style={{ color: '#14231f' }}>Doctor Portal</b>
-            <small>CareWeave Clinical EHR</small>
-          </div>
-          <ShieldCheck size={15} style={{ color: '#56655f' }} />
         </div>
 
         <nav>
