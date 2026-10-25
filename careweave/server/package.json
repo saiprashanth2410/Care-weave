@@ -15,6 +15,7 @@
     "demo:scale": "tsx scripts/exasol-scale-demo.ts"
   },
   "type": "module",
+  "license": "MIT",
   "private": true,
   "dependencies": {
     "@exasol/exasol-driver-ts": "^0.8.1",
