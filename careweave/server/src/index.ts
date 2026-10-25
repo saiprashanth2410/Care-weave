@@ -27,7 +27,9 @@ const app = express();
 const PORT = Number(process.env.PORT || 4000);
 const DATA = isVercel ? '/tmp/careweave.json' : path.join(SERVER_DIR, 'data/careweave.json');
 
-app.use(helmet({ contentSecurityPolicy: false }));
+if (!isVercel) {
+  app.use(helmet({ contentSecurityPolicy: false }));
+}
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '14mb' })); // 10 MB scan images arrive base64-encoded
 

@@ -1,18 +1,18 @@
 {
-  "buildCommand": "cd careweave/client && npm install --include=optional @rolldown/binding-linux-x64-gnu && npm run build",
+  "buildCommand": "cd careweave/server && npm run build && cd ../client && npm install --include=optional @rolldown/binding-linux-x64-gnu && npm run build",
   "outputDirectory": "careweave/client/dist",
   "framework": "vite",
   "rewrites": [
     {
       "source": "/api",
-      "destination": "/api"
+      "destination": "/api/index.ts"
     },
     {
       "source": "/api/(.*)",
-      "destination": "/api"
+      "destination": "/api/index.ts"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ]

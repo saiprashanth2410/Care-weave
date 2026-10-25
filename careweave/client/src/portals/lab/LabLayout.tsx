@@ -112,7 +112,7 @@ function Brand() {
   return (
     <div className="px-5 py-5">
       <div className="flex items-center gap-3">
-        <img src="/careweave-mark.png" alt="" className="h-10 w-10 rounded-sm" />
+        <img src="/careweave-mark-transparent.png" alt="" className="h-10 w-10" />
         <p className="text-base font-bold leading-none tracking-tight">CareWeave</p>
       </div>
     </div>

@@ -14,6 +14,7 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 dist/
+!careweave/server/dist/
 build/
 .next/
 out/
@@ -30,6 +31,7 @@ ENV/
 build/
 develop-eggs/
 dist/
+!careweave/server/dist/
 downloads/
 eggs/
 .eggs/
@@ -37,6 +39,7 @@ lib/
 lib64/
 parts/
 sdist/
+!careweave/server/dist/
 var/
 wheels/
 *.egg-info/
