@@ -210,6 +210,15 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
             <SampleScenario className="btn-soft" />
 
             <Link
+              to="/analytics"
+              className="btn-soft"
+              style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700, color: '#0f766e', borderColor: '#0f766e' }}
+              title="Open Exasol Hospital Analytics & Intelligence Dashboard"
+            >
+              <span>Exasol Analytics</span>
+            </Link>
+
+            <Link
               to="/lab/overview"
               className="btn-soft"
               style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700 }}
