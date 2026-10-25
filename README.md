@@ -28,9 +28,9 @@ None of this is exotic. It happens because every desk keeps its own copy of the 
 
 | | |
 |---|---|
-| **Demo walkthrough** | [`DEMO.md`](DEMO.md): pitch-deck outline, a three-minute demo script and a judge checklist |
 | **Demo video** | [`demo_video.mp4`](demo_video.mp4): Three-minute video walkthrough of CareWeave |
-| **Pitch deck & script** | [`DEMO.md`](DEMO.md): Complete pitch-deck outline, demo script, and judge checklist |
+| **Pitch deck** | [`CareWeave.pptx`](CareWeave.pptx): Official 10-slide presentation deck for ExaThon India 2026 |
+| **Demo walkthrough & script** | [`DEMO.md`](DEMO.md): Complete pitch-deck outline, demo script, and judge checklist |
 | **Live site** | Frontend on Vercel, API on Render (configured in [`vercel.json`](vercel.json)) |
 
 > **Tip for judges:** sign in as Front Desk or Doctor and press **Load sample scenario (synthetic)** in the top bar. It creates the synthetic patient *Priya Raman* with a penicillin allergy, an encounter, released and pending lab results, and an outside-hospital report that has been imported three times (clean, duplicate, conflicting). It only runs once.
