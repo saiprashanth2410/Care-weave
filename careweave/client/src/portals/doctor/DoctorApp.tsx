@@ -70,6 +70,10 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
           <span>CareWeave</span>
         </div>
 
+        <button className="icon-button menu-button side-menu-button" onClick={() => setCollapsed(!collapsed)}>
+          <Menu size={20} />
+        </button>
+
         <div className="workspace-switch">
           <span className="role-dot doctor" style={{ width: 10, height: 10 }}></span>
           <div>
@@ -112,7 +116,7 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
 
       <main className="main">
         <header className="topbar">
-          <button className="icon-button menu-button" onClick={() => setCollapsed(!collapsed)}>
+          <button className="icon-button menu-button top-menu-button" onClick={() => setCollapsed(!collapsed)}>
             <Menu size={20} />
           </button>
           <div className="breadcrumb">

@@ -14,7 +14,7 @@ export function DoctorReconciliation({ notify }: { notify: (s: string) => void }
   return (
     <>
       <PageHeader
-        eyebrow="CareWeave Record Intelligence"
+        eyebrow="CareWeave Record Review"
         title="External Record Review & Reconciliation"
         sub="Inspect fragmented records across facilities while preserving strict provenance, uncertainty flags, and clinician authority."
         action={

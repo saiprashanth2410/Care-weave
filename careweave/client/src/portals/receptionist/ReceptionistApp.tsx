@@ -134,6 +134,14 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
           <span>CareWeave</span>
         </div>
 
+        <button
+          className="icon-btn side-menu-button"
+          onClick={() => setCollapsed(!collapsed)}
+          title="Toggle sidebar"
+        >
+          <Menu size={19} />
+        </button>
+
         <div className="workspace-badge">
           <span className="role-dot"></span>
           <div>
@@ -188,7 +196,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
       <main className="main">
         <header className="topbar">
           <button
-            className="icon-btn"
+            className="icon-btn top-menu-button"
             onClick={() => setCollapsed(!collapsed)}
             title="Toggle sidebar"
           >
@@ -213,7 +221,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               to="/analytics"
               className="btn-soft"
               style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700, color: '#0f766e', borderColor: '#0f766e' }}
-              title="Open Exasol Hospital Analytics & Intelligence Dashboard"
+              title="Open Exasol Hospital Analytics Dashboard"
             >
               <span>Exasol Analytics</span>
             </Link>

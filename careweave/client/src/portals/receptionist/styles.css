@@ -660,13 +660,14 @@ label {
 }
 
 .sidebar nav button:hover {
-  background: var(--slate-100);
-  color: var(--slate-900);
+  background: #e9ece7;
+  color: #14231f;
 }
 
-.sidebar nav button.active {
-  background: var(--primary-light);
-  color: var(--primary-hover);
+.sidebar nav button.active,
+.sidebar nav button.active:hover {
+  background: #0c6b6d;
+  color: #f6f7f3;
   font-weight: 700;
 }
 
@@ -1842,3 +1843,8 @@ tbody tr:hover {
   to { transform: rotate(360deg); }
 }
 
+
+/* Sidebar toggle sits in the sidebar on desktop; the topbar one remains for the mobile drawer */
+.side-menu-button { align-self: flex-start; margin: 0 0 14px 10px; }
+@media (min-width: 761px) { .top-menu-button { display: none; } }
+@media (max-width: 760px) { .side-menu-button { display: none; } }
