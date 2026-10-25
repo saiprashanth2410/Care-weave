@@ -1,4 +1,4 @@
-import app, { ensureInitialized } from '../careweave/server/src/index.js';
+import app, { ensureInitialized } from '../careweave/server/dist/index.js';
 
 export default async function handler(req: any, res: any) {
   try {

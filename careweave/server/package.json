@@ -4,6 +4,7 @@
   "description": "CareWeave API Server with MongoDB Atlas & Front Desk Services",
   "main": "src/index.ts",
   "scripts": {
+    "build": "tsc",
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "seed": "tsx src/seed.ts",
