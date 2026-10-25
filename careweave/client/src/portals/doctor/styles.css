@@ -120,3 +120,7 @@
 
 /* The sidebar is text-only (no icons), so it stays open on desktop; the toggle is only for the mobile drawer */
 @media (min-width: 761px) { .top-menu-button { display: none !important; } }
+
+.brand-logo { width: 150px; height: auto; border-radius: 3px; display: block; }
+.nav-collapsed .brand-logo { width: 40px; }
+@media (max-width: 760px) { .nav-collapsed .brand-logo { width: 150px; } }

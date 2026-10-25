@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   AlertCircle, AlertTriangle, ArrowRight, Ban, Calendar,
   CalendarDays, Check, CheckCircle2, ChevronRight, Clock3, ClockIcon,
-  HeartPulse, LayoutDashboard, LogOut, Mail, Menu, Pencil, Phone,
+  LayoutDashboard, LogOut, Mail, Menu, Pencil, Phone,
   Plus, RefreshCw, Search, ShieldCheck, Stethoscope, UserCheck,
   UserPlus, Users, X
 } from './icons';
@@ -130,8 +130,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
       {/* Sidebar */}
       <aside className="sidebar">
         <div className="side-brand">
-          <div className="brand-mark"><HeartPulse size={20} /></div>
-          <span>CareWeave</span>
+          <img src="/careweave-logo.png" alt="CareWeave" className="brand-logo" />
         </div>
 
         <span className="nav-section-title">Front Desk Operations</span>
