@@ -2,11 +2,11 @@
 
 > One clinical platform where the front desk, the lab and the doctor finally work from the same patient record.
 
-[![Hacktoberfest 2026](https://img.shields.io/badge/Hacktoberfest-2026-orange.svg)](https://hacktoberfest.com/)
+[![ExaThon India 2026](https://img.shields.io/badge/ExaThon_India-2026-brightgreen.svg)](https://www.exasol.com)
 [![Built with Gemma 4](https://img.shields.io/badge/Vision_AI-Gemma_4-blue.svg)](https://ai.google.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-CareWeave is a multi-role EHR and lab platform built for the **Hacktoberfest Hack Day Chennai × Code-Y-Gen** HealthTech problem statement: *From Siloed Patient Records to Unified Patient Health Records*.
+CareWeave is a unified multi-role EHR and lab platform submitted for **ExaThon India 2026** under the HealthTech challenge: *From Siloed Patient Records to Unified Patient Health Records*.
 
 It is a demonstration build. Everything you see runs on **synthetic data**, and it is clinical-review support, not a diagnostic system.
 
