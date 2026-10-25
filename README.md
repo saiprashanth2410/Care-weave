@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="careweave-logo.jpg" alt="CareWeave Logo" width="460" style="border-radius: 14px;" />
-</p>
-
 # CareWeave 🏥
 
 > One clinical platform where the front desk, the lab and the doctor finally work from the same patient record.
