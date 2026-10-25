@@ -30,6 +30,8 @@ try {
   await queryExasol('CREATE SCHEMA CAREWEAVE_PARITY_TEST');
   await queryExasol('OPEN SCHEMA CAREWEAVE_PARITY_TEST');
   await queryExasol('CREATE TABLE FACT_LAB_ORDERS_TAT (ORDER_ID VARCHAR(64) PRIMARY KEY, PATIENT_ID VARCHAR(64), TEST_NAME VARCHAR(128), DEPARTMENT VARCHAR(64), PRIORITY VARCHAR(16), STATUS VARCHAR(32), CREATED_AT TIMESTAMP, COLLECTED_AT TIMESTAMP, VERIFIED_AT TIMESTAMP, RELEASED_AT TIMESTAMP, TAT_MINUTES INT, SLA_TARGET_MINUTES INT, WITHIN_SLA BOOLEAN, CRITICAL_FLAG_COUNT INT)');
+  // A row left by the old sync, which invented a turnaround for an order that never finished.
+  await queryExasol(`INSERT INTO FACT_LAB_ORDERS_TAT (ORDER_ID, PATIENT_ID, TEST_NAME, STATUS, TAT_MINUTES, SLA_TARGET_MINUTES, WITHIN_SLA, CRITICAL_FLAG_COUNT) VALUES ('ORD-7', 'p1', 'HbA1c', 'processing', 38, 120, TRUE, 0)`);
   let r = await syncDataToExasol(db);
   check('first sync succeeds and is verified live', r.success && r.live && r.verified?.visits === 12 && r.verified?.labOrders === 9 && r.verified?.prescriptions === 6, JSON.stringify(r));
   check('an old table is upgraded in place', (await queryExasol<any>(`SELECT COLUMN_NAME AS "n" FROM EXA_ALL_COLUMNS WHERE COLUMN_SCHEMA = 'CAREWEAVE_PARITY_TEST' AND COLUMN_TABLE = 'FACT_LAB_ORDERS_TAT' AND COLUMN_NAME = 'ABNORMAL_FLAG_COUNT'`)).length === 1);
@@ -48,6 +50,11 @@ try {
   same('lab turnaround, p90 and SLA', ov.labTat, m.labTat(labs));
   same('lab stage durations', ov.labStages, m.labStages(labs));
   same('pharmacy demand estimate', ov.pharmacyConsumption, m.pharmacyConsumption(rx));
+  const bad = await queryExasol<any>('SELECT COUNT(*) AS "n" FROM FACT_LAB_ORDERS_TAT WHERE TAT_MINUTES IS NOT NULL AND (VERIFIED_AT IS NULL OR STATUS NOT IN (\'verified\', \'released\'))');
+  check('invariant in Exasol: a turnaround exists only for a verified or released order with a verify time', Number(bad[0].n) === 0, String(bad[0].n));
+  const stale = await queryExasol<any>(`SELECT TAT_MINUTES AS "t", WITHIN_SLA AS "w" FROM FACT_LAB_ORDERS_TAT WHERE ORDER_ID = 'ORD-7'`);
+  check('a turnaround invented by the old sync is overwritten with NULL', stale.length === 1 && stale[0].t === null && stale[0].w === null, JSON.stringify(stale));
+  check('release time is never copied from the verification time', Number((await queryExasol<any>('SELECT COUNT(*) AS "n" FROM FACT_LAB_ORDERS_TAT WHERE RELEASED_AT IS NOT NULL'))[0].n) === 0);
   check('orders still being processed have no turnaround time', ov.labTat.reduce((n, l) => n + l.pendingOrders, 0) === 2 && ov.dataQuality.labOrdersPending === 2);
 } catch (err: any) {
   failed++;

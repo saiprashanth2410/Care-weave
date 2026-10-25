@@ -72,7 +72,7 @@ async function main() {
   BASE = `http://localhost:${PORT}`;
   const server = spawn('npx', ['tsx', 'src/index.ts'], { env: { ...process.env, PORT: String(PORT), MONGODB_URI: URI, MONGODB_DB: DB, CLIENT_ORIGIN: 'http://localhost:5173', FIREBASE_PROJECT_ID: '', ALLOW_LOCAL_LOGIN: '', FIREBASE_REQUIRE_VERIFIED_EMAIL: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
   await new Promise<void>((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error('server did not start')), 30000);
+    const t = setTimeout(() => reject(new Error('server did not start')), 90000);
     server.stdout.on('data', (d) => { if (String(d).includes('listening')) { clearTimeout(t); resolve(); } });
     server.on('exit', () => reject(new Error('server exited early')));
   });

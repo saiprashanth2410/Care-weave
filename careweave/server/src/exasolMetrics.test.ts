@@ -125,3 +125,20 @@ test('sample history gives the dashboard real shape: waits differ by department,
   const labs = deriveLabOrders(input.labOrders);
   assert.ok(labs.some((l) => l.tatMinutes === null) && labs.some((l) => l.tatMinutes !== null));
 });
+
+test('no turnaround is produced from a missing or misleading release time', () => {
+  const rows = deriveLabOrders([
+    { id: '1', status: 'released', testName: 'X', orderedAt: T(0) },                                   // released, no verify/release time at all
+    { id: '2', status: 'processing', testName: 'X', orderedAt: T(0), releasedAt: T(30), verifiedAt: T(30) }, // not finished, even if a stray time exists
+    { id: '3', status: 'awaiting_verification', testName: 'X', orderedAt: T(0), approvedAt: T(20) },
+    { id: '4', status: 'released', testName: 'X', verifiedAt: T(50) },                                   // no ordered time
+    { id: '5', status: 'released', testName: 'X', orderedAt: 'garbage', verifiedAt: T(50) },
+    { id: '6', status: 'released', testName: 'X', orderedAt: T(0), verifiedAt: T(45) },                  // the only genuine one
+  ]);
+  assert.deepEqual(rows.map((r) => r.tatMinutes), [null, null, null, null, null, 45]);
+  assert.deepEqual(rows.map((r) => r.releasedAt), [null, null, null, null, null, null]); // never copied from verifiedAt
+  const [x] = m.labTat(rows);
+  assert.equal(x.completedOrders, 1);
+  assert.equal(x.pendingOrders, 5);
+  assert.equal(x.avgTatMinutes, 45);   // the five unmeasurable orders do not pull the average toward zero or now
+});

@@ -10,7 +10,7 @@ export type VisitRow = {
 };
 export type LabRow = {
   orderId: string; patientId: string; testName: string; department: string; priority: 'routine' | 'urgent'; status: string;
-  orderedAt: string | null; collectedAt: string | null; verifiedAt: string | null;
+  orderedAt: string | null; collectedAt: string | null; verifiedAt: string | null; releasedAt: string | null;
   tatMinutes: number | null; slaTargetMinutes: number; withinSla: boolean | null; criticalFlagCount: number; abnormalFlagCount: number;
 };
 export type RxRow = {
@@ -78,6 +78,8 @@ export function deriveLabOrders(labOrders: any[]): LabRow[] {
       orderedAt: iso(orderedAt),
       collectedAt: iso(o.collectedAt),
       verifiedAt: iso(verifiedAt),
+      // The application records no separate release moment, so this stays empty rather than copying the verification time.
+      releasedAt: DONE_LAB.has(o.status) ? iso(o.releasedAt) : null,
       tatMinutes: tat,
       slaTargetMinutes: sla,
       withinSla: tat === null ? null : tat <= sla,
