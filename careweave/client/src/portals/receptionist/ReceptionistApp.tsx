@@ -134,14 +134,6 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
           <span>CareWeave</span>
         </div>
 
-        <button
-          className="icon-btn side-menu-button"
-          onClick={() => setCollapsed(!collapsed)}
-          title="Toggle sidebar"
-        >
-          <Menu size={19} />
-        </button>
-
         <div className="workspace-badge">
           <span className="role-dot"></span>
           <div>
