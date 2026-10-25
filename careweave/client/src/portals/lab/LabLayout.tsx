@@ -48,9 +48,14 @@ export default function LabLayout({ user }: { user: SessionUser }) {
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[240px_1fr]">
       <aside className="hidden bg-deep text-surface lg:block">
-        <div className="sticky top-0">
+        <div className="sticky top-0 flex h-screen flex-col">
           <Brand />
           {nav}
+          <div className="mt-auto border-t border-surface/20 px-5 py-4">
+            <p className="text-sm font-semibold leading-tight">{user.name}</p>
+            <p className="mt-0.5 text-xs text-surface/70">{user.facility ?? 'Laboratory'}</p>
+            <button onClick={signOut} className="mt-3 min-h-11 text-sm font-medium text-surface/80 underline underline-offset-2 hover:text-surface">Sign out</button>
+          </div>
         </div>
       </aside>
 
@@ -79,10 +84,6 @@ export default function LabLayout({ user }: { user: SessionUser }) {
       <div className="flex min-w-0 flex-col">
         <div className="hidden items-center justify-between border-b border-rule bg-surface px-8 py-3 lg:flex">
           <p className="flex items-center gap-4 text-xs font-semibold uppercase tracking-wider text-accent-ink">Laboratory <SampleScenario className="[&_button]:min-h-8 [&_button]:border [&_button]:border-rule [&_button]:px-2 [&_button]:text-xs [&_button]:normal-case [&_button]:tracking-normal" /></p>
-          <p className="flex items-center gap-4 text-sm text-ink-2">
-            <span><span className="font-semibold text-ink">{user.name}</span> · {user.facility ?? 'Laboratory'}</span>
-            <button onClick={signOut} className="min-h-11 px-2 text-sm font-semibold text-accent-ink underline underline-offset-2">Sign out</button>
-          </p>
         </div>
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
           {notice && (
@@ -110,8 +111,7 @@ export default function LabLayout({ user }: { user: SessionUser }) {
 function Brand() {
   return (
     <div className="px-5 py-5">
-      <p className="text-base font-bold leading-none tracking-tight">CareWeave</p>
-      <p className="mt-1.5 text-[11px] uppercase tracking-widest text-surface/70">Laboratory</p>
+      <img src="/careweave-logo.png" alt="CareWeave" className="w-36 rounded-sm" />
     </div>
   )
 }

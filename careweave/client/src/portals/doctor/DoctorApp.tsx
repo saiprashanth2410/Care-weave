@@ -66,8 +66,7 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
     <div className={`app-shell ${collapsed ? 'nav-collapsed' : ''}`}>
       <aside className="sidebar">
         <div className="side-brand">
-          <div className="brand-mark"><Stethoscope size={21} /></div>
-          <span>CareWeave</span>
+          <img src="/careweave-logo.png" alt="CareWeave" className="brand-logo" />
         </div>
 
         <nav>
@@ -129,15 +128,6 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
             >
               <RefreshCw size={17} />
             </button>
-            <div className="user-chip">
-              <div className="avatar" style={{ background: '#0c6b6d', color: '#f6f7f3' }}>
-                {initials(user.name)}
-              </div>
-              <span>
-                <b>{user.name}</b>
-                <small>CareWeave Clinic</small>
-              </span>
-            </div>
           </div>
         </header>
 
