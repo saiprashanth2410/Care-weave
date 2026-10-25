@@ -224,15 +224,4 @@ We would rather say these out loud than have you find them:
 - The Exasol analytics tables are a copy: press **Sync to Exasol** to refresh them. Safety counts (allergy and duplicate-therapy blocks, maker-checker blocks) come from the application's audit trail.
 - This is a demonstration build with synthetic data. We make no claims about clinical accuracy, regulatory compliance, or real hospital interoperability.
 
----
-
-## Prize track alignment
-
-- **Best Use of Gemma:** Gemma 4 turns unstructured diagnostic reports into structured clinical data, always as a reviewable draft.
-- **Best Open-Source AI Project (DigitalOcean):** open-weight models and an open-source stack (Node, React, Mongo) that can be self-hosted on a privacy-first Droplet without locking patient data in.
-
----
-
-## License
-
-MIT. Add a `LICENSE` file before publishing (the badge above links to it).
+-

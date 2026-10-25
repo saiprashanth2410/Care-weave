@@ -78,7 +78,7 @@ export async function syncDataToExasol(db: any): Promise<SyncResult> {
 
     await loadTable('FACT_LAB_ORDERS_TAT', ['ORDER_ID'],
       ['ORDER_ID', 'PATIENT_ID', 'TEST_NAME', 'DEPARTMENT', 'PRIORITY', 'STATUS', 'CREATED_AT', 'COLLECTED_AT', 'VERIFIED_AT', 'RELEASED_AT', 'TAT_MINUTES', 'SLA_TARGET_MINUTES', 'WITHIN_SLA', 'CRITICAL_FLAG_COUNT', 'ABNORMAL_FLAG_COUNT'],
-      labs.map((o) => [str(o.orderId, 64), str(o.patientId, 64), str(o.testName, 128), str(o.department, 64), str(o.priority, 16), str(o.status, 32), ts(o.orderedAt), ts(o.collectedAt), ts(o.verifiedAt), ts(o.verifiedAt), num(o.tatMinutes), int(o.slaTargetMinutes), bool(o.withinSla), int(o.criticalFlagCount), int(o.abnormalFlagCount)]),
+      labs.map((o) => [str(o.orderId, 64), str(o.patientId, 64), str(o.testName, 128), str(o.department, 64), str(o.priority, 16), str(o.status, 32), ts(o.orderedAt), ts(o.collectedAt), ts(o.verifiedAt), ts(o.releasedAt), num(o.tatMinutes), int(o.slaTargetMinutes), bool(o.withinSla), int(o.criticalFlagCount), int(o.abnormalFlagCount)]),
       (r) => [r[0]]);
 
     // A prescription can hold the same medicine twice; the table's key is (prescription, medicine), so keep the first.
