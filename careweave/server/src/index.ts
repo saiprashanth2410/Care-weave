@@ -1,6 +1,6 @@
 import { SERVER_DIR } from './env.js';
 import path from 'node:path';
-import { announceChange } from './liveEvents.js';
+import { LiveHub } from './liveEvents.js';
 import { importMedicines } from './medicines.js';
 import { buildSeed } from './seed.js';
 import { INDEXES, LocalStore, QUIET, createRepos, openMongoStore, type Repos, type Store } from './repo/index.js';
@@ -14,7 +14,7 @@ const DATA = path.join(SERVER_DIR, 'data/careweave.json');
 
 /** MongoDB when MONGODB_URI is set. The JSON file only when it is not, and never in production unless ALLOW_LOCAL_STORE=true. */
 async function openStore(): Promise<Store> {
-  const onChange = (name: string) => { if (!QUIET.has(name)) announceChange(); };
+  const onChange = (name: string) => { if (!QUIET.has(name)) live.announceChange(); };
   const uri = process.env.MONGODB_URI || process.env.MONGO_URI;
   if (uri) {
     try {
@@ -37,12 +37,13 @@ async function openStore(): Promise<Store> {
 }
 
 let current: Repos | null = null;
+const live = new LiveHub(() => current);
 const repos = () => {
   if (!current) throw new Error('The database is not ready yet');
   return current;
 };
 
-export const app = createApp({ repos });
+export const app = createApp({ repos, live });
 
 let initPromise: Promise<void> | null = null;
 export function ensureInitialized() {

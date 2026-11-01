@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addClient, broadcast, connectedCount } from './liveEvents.js';
+import { LiveHub } from './liveEvents.js';
+import { createRepos } from './repo/index.js';
+import { memoryStore } from './testing.js';
 
 const fakeRes = () => {
   const written: string[] = [];
@@ -12,16 +14,62 @@ const fakeRes = () => {
   };
   return { res, written, close: () => handlers.close?.() };
 };
+const got = (r: { written: string[] }, type: string) => r.written.filter((w) => w.startsWith(`event: ${type}`)).length;
+const until = async (cond: () => boolean, ms = 2000) => { const t = Date.now(); while (!cond() && Date.now() - t < ms) await new Promise((r) => setTimeout(r, 20)); };
 
-test('a critical alert reaches only the doctors it is meant for, and a closed screen is dropped', () => {
+test('a critical alert reaches only the doctors it is meant for, and a closed screen is dropped', async () => {
+  const hub = new LiveHub();
   const a = fakeRes(), b = fakeRes();
-  addClient(a.res, 'doc-1', 'doctor');
-  addClient(b.res, 'doc-2', 'doctor');
-  broadcast('critical', { patientName: 'X' }, (id) => id === 'doc-1');
-  assert.ok(a.written.some((w) => w.startsWith('event: critical')));
-  assert.ok(!b.written.some((w) => w.includes('critical')));
-  const before = connectedCount();
+  hub.addClient(a.res, 'doc-1', 'doctor');
+  hub.addClient(b.res, 'doc-2', 'doctor');
+  await hub.publish('critical', { patientName: 'X' }, ['doc-1']);
+  assert.equal(got(a, 'critical'), 1);
+  assert.equal(got(b, 'critical'), 0);
   a.close();
-  assert.equal(connectedCount(), before - 1);
+  assert.equal(hub.connectedCount, 1);
   b.close();
+});
+
+test('an event published on one instance reaches screens connected to another, once, and not back to its own', async () => {
+  const repos = createRepos(await memoryStore());
+  const one = new LiveHub(() => repos, 30), two = new LiveHub(() => repos, 30);
+  const onOne = fakeRes(), onTwo = fakeRes(), otherDoc = fakeRes();
+  one.addClient(onOne.res, 'doc-1', 'doctor');
+  two.addClient(onTwo.res, 'doc-1', 'doctor');
+  two.addClient(otherDoc.res, 'doc-2', 'doctor');
+  await new Promise((r) => setTimeout(r, 60)); // both tails have found their start point
+  await one.publish('critical', { orderId: 'ORD-1' }, ['doc-1']);
+  await one.publish('change');
+  await until(() => got(onTwo, 'critical') >= 1 && got(onTwo, 'change') >= 1);
+  assert.equal(got(onTwo, 'critical'), 1);
+  assert.equal(got(onTwo, 'change'), 1);
+  assert.equal(got(otherDoc, 'critical'), 0, 'targeting holds across instances');
+  assert.equal(got(otherDoc, 'change'), 1);
+  await new Promise((r) => setTimeout(r, 150)); // several more polls: nothing repeats
+  assert.equal(got(onTwo, 'critical'), 1);
+  assert.equal(got(onOne, 'critical'), 1, 'the publishing instance delivered it directly, and does not hear its own echo');
+  assert.equal(got(onOne, 'change'), 1);
+  for (const c of [onOne, onTwo, otherDoc]) c.close();
+});
+
+test('events from before a screen connected are not replayed to it', async () => {
+  const repos = createRepos(await memoryStore());
+  const one = new LiveHub(() => repos, 30), two = new LiveHub(() => repos, 30);
+  await one.publish('change');
+  const late = fakeRes();
+  two.addClient(late.res, 'doc-1', 'doctor');
+  await new Promise((r) => setTimeout(r, 150));
+  assert.equal(got(late, 'change'), 0);
+  late.close();
+});
+
+test('if the shared store fails, publishing still reaches local screens and does not throw', async () => {
+  const repos = createRepos(await memoryStore());
+  repos.liveEvents.insert = async () => { throw new Error('database went away'); };
+  const hub = new LiveHub(() => repos, 30);
+  const a = fakeRes();
+  hub.addClient(a.res, 'u', 'doctor');
+  await hub.publish('change');
+  assert.equal(got(a, 'change'), 1);
+  a.close();
 });

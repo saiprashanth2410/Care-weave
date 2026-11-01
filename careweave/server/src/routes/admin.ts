@@ -2,7 +2,6 @@ import { Router } from 'express';
 import type { AppCtx } from '../context.js';
 import { catchAsyncRoutes } from '../asyncRoutes.js';
 import { removeUnfinishedSample } from '../services/sampleCleanup.js';
-import { addClient } from '../liveEvents.js';
 import { isToday } from '../util.js';
 import { doctorDashboard } from '../services/chart.js';
 import { startSession } from '../services/sessions.js';
@@ -32,7 +31,7 @@ export function adminRoutes(ctx: AppCtx) {
   // Live updates. A serverless host cannot hold the connection open, so there the screens fall back to polling.
   router.get('/events', (req: any, res) => {
     if (ctx.config.isVercel) return res.status(204).end();
-    addClient(res, req.user.id, req.user.role);
+    ctx.live.addClient(res, req.user.id, req.user.role);
   });
 
   router.get('/dashboard', async (req: any, res) => {

@@ -16,6 +16,7 @@ import { externalRecordsRepo, externalRecordsIndexes } from './externalRecords.j
 import { casesRepo, casesIndexes } from './cases.js';
 import { syntheticHistoryRepo, syntheticHistoryIndexes } from './syntheticHistory.js';
 import { whatsappPrefsRepo, whatsappPrefsIndexes } from './whatsappPrefs.js';
+import { liveEventsRepo, liveEventsIndexes } from './liveEvents.js';
 import { MongoStore } from './mongo.js';
 import { LocalStore } from './local.js';
 import type { Store } from './store.js';
@@ -44,6 +45,7 @@ function collections(store: Store) {
     cases: casesRepo(c('cases')),
     syntheticHistory: syntheticHistoryRepo(c('syntheticHistory')),
     whatsappPrefs: whatsappPrefsRepo(c('whatsappPrefs')),
+    liveEvents: liveEventsRepo(c('liveEvents')),
   };
 }
 export type Repos = ReturnType<typeof collections> & {
@@ -59,11 +61,11 @@ export const INDEXES = {
   users: usersIndexes, patients: patientsIndexes, appointments: appointmentsIndexes, labOrders: ordersIndexes,
   encounters: encountersIndexes, prescriptions: prescriptionsIndexes, auditLogs: auditIndexes, sessions: sessionsIndexes, rateLimits: rateLimitsIndexes,
   vitals: vitalsIndexes, referrals: referralsIndexes, carePlans: carePlansIndexes, externalRecords: externalRecordsIndexes,
-  cases: casesIndexes, syntheticHistory: syntheticHistoryIndexes, whatsappPrefs: whatsappPrefsIndexes, files: [idIndex],
+  cases: casesIndexes, syntheticHistory: syntheticHistoryIndexes, whatsappPrefs: whatsappPrefsIndexes, liveEvents: liveEventsIndexes, files: [idIndex],
 };
 
 /** Quiet collections change on every sign-in or page view; they are not worth waking other screens for. */
-export const QUIET = new Set(['auditLogs', 'sessions', 'rateLimits']);
+export const QUIET = new Set(['auditLogs', 'sessions', 'rateLimits', 'liveEvents']);
 
 /** Connects to MongoDB. A failed connection is an error: it never quietly turns into per-instance local data. */
 export async function openMongoStore(uri: string, dbName: string, onChange: (name: string) => void) {

@@ -11,7 +11,6 @@ import { ageFromDob, diff, id, now, text } from '../util.js';
 import { linkedPatientIds } from '../services/access.js';
 import { FILE_TYPES, LAB_EDITABLE, LAB_NEXT, LAB_STATUSES, OPEN_VISIT, can, cleanResults, resultsSignature } from '../services/labOrders.js';
 import { emitEvent } from '../whatsapp/emitter.js';
-import { broadcast } from '../liveEvents.js';
 
 /** Requests that carry a base64 file. They are the only ones allowed a large JSON body; see index.ts. */
 export const UPLOAD_ROUTES = [/^\/api\/lab\/extract$/, /^\/api\/lab\/orders\/[^/]+\/attachments$/];
@@ -223,10 +222,10 @@ export function labRoutes(ctx: AppCtx) {
         for (const d of doctors) {
           if (d.id === o.createdBy || d.name === o.orderingDoctor || (pt && (await linkedPatientIds(ctx.repos, d.id)).has(pt.id))) who.add(d.id);
         }
-        broadcast('critical', {
+        await ctx.live.publish('critical', {
           orderId: o.id, patientName: o.patientName, patientId: o.patientId, testName: o.testName, at: now(),
           values: critical.slice(0, 6).map((r: any) => ({ parameter: r.parameter, value: r.value, unit: r.unit })),
-        }, (userId) => who.has(userId));
+        }, [...who]);
         await audit(req, 'alert', 'labOrder', o.id, `Critical value pushed to ${who.size} doctor(s)`);
       }
     }

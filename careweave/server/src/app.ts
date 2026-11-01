@@ -15,9 +15,10 @@ import { patientRoutes } from './routes/patients.js';
 import { appointmentRoutes } from './routes/appointments.js';
 import { labRoutes, UPLOAD_ROUTES } from './routes/lab.js';
 import { doctorRoutes } from './routes/doctor.js';
+import { LiveHub } from './liveEvents.js';
 import { whatsappPublicRoutes, whatsappSimulatorRoutes } from './whatsapp/routes.js';
 
-export type CreateAppOptions = { repos: Repos | (() => Repos); config?: Partial<AppConfig> };
+export type CreateAppOptions = { repos: Repos | (() => Repos); config?: Partial<AppConfig>; live?: LiveHub };
 
 /** Wires middleware and routers. All data access goes through `repos`; this file holds no state of its own. */
 export function createApp(opts: CreateAppOptions) {
@@ -38,6 +39,7 @@ export function createApp(opts: CreateAppOptions) {
   const ctx: AppCtx = {
     get repos() { return getRepos(); },
     audit, auditOnce, roles, config,
+    live: opts.live ?? new LiveHub(getRepos),
     async auth(req: any, res: any, next: any) {
       const { token, via } = credentialOf(req);
       const u = await userForToken(getRepos(), token);
