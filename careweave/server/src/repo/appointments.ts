@@ -6,6 +6,7 @@ export const appointmentsIndexes: IndexSpec[] = [
   { keys: { doctorId: 1, date: 1, time: 1 } },
   { keys: { patientId: 1 } },
   { keys: { date: 1, status: 1 } },
+  { keys: { updatedAt: 1 } },
   // One active booking per doctor per slot. The key exists only while the booking is active, so a cancelled slot can be booked again.
   { keys: { slotKey: 1 }, unique: true, partial: { slotKey: { $type: 'string' } } },
   // One active booking per patient per time, and one OP token per day. Same idea: the key exists only while it applies.

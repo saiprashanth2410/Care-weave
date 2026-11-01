@@ -6,6 +6,8 @@ import { buildSeed } from './seed.js';
 import { INDEXES, LocalStore, QUIET, createRepos, openMongoStore, type Repos, type Store } from './repo/index.js';
 import { createApp } from './app.js';
 import { ensureStaff } from './services/staff.js';
+import { runAnalyticsSync } from './services/analytics.js';
+import { isExasolConfigured } from './exasol/client.js';
 
 const isVercel = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 const isProd = process.env.NODE_ENV === 'production';
@@ -58,8 +60,20 @@ export function ensureInitialized() {
 
 export default app;
 
+/** ANALYTICS_SYNC_MINUTES=15 runs the incremental Exasol sync on that interval (not on Vercel; use the cron route there). */
+function startScheduledSync() {
+  const minutes = Number(process.env.ANALYTICS_SYNC_MINUTES);
+  if (!minutes || minutes < 1 || !isExasolConfigured()) return;
+  setInterval(() => {
+    runAnalyticsSync(current!).then((r) => { if (!r.success && !r.busy) console.warn('[analytics] scheduled sync failed:', r.error); })
+      .catch((e) => console.warn('[analytics] scheduled sync error:', e?.message));
+  }, minutes * 60_000).unref();
+  console.log(`[analytics] incremental Exasol sync every ${minutes} min`);
+}
+
 if (!isVercel) {
   ensureInitialized().then(() => {
+    startScheduledSync();
     app.listen(PORT, () => console.log(`CareWeave API listening on http://localhost:${PORT} [storage: ${current!.mode}]`));
   }).catch((err) => {
     console.error('Failed to start CareWeave API:', err.message);

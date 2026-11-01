@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { ConflictError, DuplicateError, UNIQUE_FIELDS, VERSIONED, splitChanges, type Collection, type FileStore, type Filter, type FindOpts, type IndexSpec, type Store } from './store.js';
+import { ConflictError, DuplicateError, UNIQUE_FIELDS, VERSIONED, splitChanges, stampChange, stampNew, type Collection, type FileStore, type Filter, type FindOpts, type IndexSpec, type Store } from './store.js';
 
 // Development fallback used only when MONGODB_URI is not set. Documents live in process memory and are saved to one JSON
 // file after every write. It is single-process: two server instances would overwrite each other's file, which is exactly
@@ -19,6 +19,7 @@ export function matches(doc: any, filter: Filter = {}): boolean {
           case '$in': return arg.includes(v);
           case '$nin': return !arg.includes(v);
           case '$ne': return v !== arg;
+          case '$gt': return v !== undefined && v > arg;
           case '$gte': return v !== undefined && v >= arg;
           case '$lte': return v !== undefined && v <= arg;
           case '$regex': return new RegExp(arg, cond.$options).test(String(v ?? ''));
@@ -67,7 +68,7 @@ class LocalCollection implements Collection {
     return this.docs.filter((d) => matches(d, filter)).length;
   }
   async insert(doc: any) {
-    const row = structuredClone(this.versioned ? { ...doc, version: doc.version ?? 1 } : doc);
+    const row = structuredClone(stampNew(this.name, this.versioned ? { ...doc, version: doc.version ?? 1 } : doc));
     { const f = this.clash(row); if (f) throw new DuplicateError(f); }
     this.docs.push(row);
     await this.save();
@@ -76,7 +77,7 @@ class LocalCollection implements Collection {
   }
   async insertMany(docs: any[]) {
     for (const d of docs) {
-      const row = structuredClone(this.versioned ? { ...d, version: d.version ?? 1 } : d);
+      const row = structuredClone(stampNew(this.name, this.versioned ? { ...d, version: d.version ?? 1 } : d));
       { const f = this.clash(row); if (f) throw new DuplicateError(f); }
       this.docs.push(row);
     }
@@ -87,7 +88,7 @@ class LocalCollection implements Collection {
     const stored = this.docs.find((d) => d.id === current.id);
     const want = expected ?? current.version;
     if (!stored || (this.versioned && stored.version !== want)) throw new ConflictError();
-    const { set, unset } = splitChanges(changes);
+    const { set, unset } = splitChanges(stampChange(this.name, changes));
     const next = { ...stored, ...structuredClone(set) };
     for (const k of Object.keys(unset)) delete next[k];
     { const f = this.clash(next, stored.id); if (f) throw new DuplicateError(f); }

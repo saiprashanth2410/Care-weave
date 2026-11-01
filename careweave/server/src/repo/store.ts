@@ -31,7 +31,7 @@ export const UNIQUE_FIELDS: Record<string, string[]> = {
 /** Collections whose documents carry a `version` and are written with optimistic concurrency. */
 export const VERSIONED = new Set([
   'patients', 'encounters', 'labOrders', 'appointments', 'prescriptions',
-  'referrals', 'carePlans', 'vitals', 'externalRecords', 'cases', 'users',
+  'referrals', 'carePlans', 'vitals', 'externalRecords', 'cases', 'users', 'meta',
 ]);
 
 export interface Collection {
@@ -56,6 +56,14 @@ export interface Collection {
    */
   hit(key: string, windowMs: number): Promise<{ count: number; resetAt: Date }>;
 }
+
+/**
+ * Collections the analytics sync reads incrementally. Every insert and update stamps `updatedAt` (ISO time), so "what changed since
+ * the last sync" is one indexed query instead of a scan. Documents written before this existed have no stamp; the first (full) sync covers them.
+ */
+export const STAMPED = new Set(['appointments', 'labOrders', 'prescriptions', 'syntheticHistory']);
+export const stampNew = (name: string, doc: any) => (STAMPED.has(name) && doc.updatedAt === undefined ? { ...doc, updatedAt: new Date().toISOString() } : doc);
+export const stampChange = (name: string, changes: Filter) => (STAMPED.has(name) ? { ...changes, updatedAt: new Date().toISOString() } : changes);
 
 /** Binary files (lab report attachments). MongoDB keeps them in the `files` collection; the local fallback keeps them on disk. */
 export interface FileStore {

@@ -2,7 +2,7 @@ import type { IRouter, Request, Response } from 'express';
 import type { Repos } from '../repo/index.js';
 import { getAnalyticsEngineStatus } from './client.js';
 import { getAnalyticsOverview } from './queries.js';
-import { syncDataToExasol } from './sync.js';
+import { forceFullNextSync, overviewSnapshot, runAnalyticsSync, syncStatus } from '../services/analytics.js';
 import { generateSampleHistory } from './sampleHistory.js';
 
 interface AnalyticsCtx {
@@ -11,17 +11,6 @@ interface AnalyticsCtx {
   roles: (...allowed: string[]) => any;
   audit: (req: any, action: string, entity: string, entityId: string, detail: string) => Promise<void>;
   sampleAllowed: boolean;
-}
-
-/**
- * The analytics read whole collections on purpose: the Exasol sync is a periodic bulk load, and the overview falls back to
- * computing over the same rows when Exasol is offline. Nothing else in the server loads a whole collection.
- */
-async function analyticsSnapshot(repos: Repos) {
-  const [patients, appointments, labOrders, prescriptions, syntheticHistory] = await Promise.all([
-    repos.patients.find(), repos.appointments.find(), repos.orders.find(), repos.prescriptions.find(), repos.syntheticHistory.find(),
-  ]);
-  return { patients, appointments, labOrders, prescriptions, syntheticHistory };
 }
 
 export function registerExasolAnalyticsRoutes({ app, repos, roles, audit, sampleAllowed }: AnalyticsCtx) {
@@ -47,8 +36,10 @@ export function registerExasolAnalyticsRoutes({ app, repos, roles, audit, sample
    */
   app.get('/analytics/overview', roles('receptionist', 'doctor', 'lab'), async (req: Request, res: Response) => {
     try {
-      const overview = await getAnalyticsOverview(await analyticsSnapshot(repos()));
-      res.json(overview);
+      const snapshot = await overviewSnapshot(repos());
+      const overview = await getAnalyticsOverview(snapshot);
+      // The window applies to the figures computed here; when Exasol answers, its tables hold all history.
+      res.json({ ...overview, fallbackWindowDays: snapshot.windowDays });
     } catch (err: any) {
       console.error('[Analytics Overview Error]:', err);
       res.status(500).json({ error: 'Failed to generate healthcare analytics overview' });
@@ -67,6 +58,7 @@ export function registerExasolAnalyticsRoutes({ app, repos, roles, audit, sample
     const history = repos().syntheticHistory;
     if (req.body?.remove === true) {
       const n = await history.remove({});
+      await forceFullNextSync(repos());
       await audit(req, 'delete', 'sample-history', 'analytics', `Removed ${n} synthetic records`);
       return res.json({ removed: n });
     }
@@ -83,16 +75,19 @@ export function registerExasolAnalyticsRoutes({ app, repos, roles, audit, sample
     res.status(201).json({ added: rows.length, total: rows.length });
   });
 
+  app.get('/analytics/sync-status', roles('receptionist', 'doctor', 'lab'), async (_req: Request, res: Response) => res.json(await syncStatus(repos())));
+
   app.post('/analytics/sync', roles('receptionist', 'doctor', 'lab'), async (req: any, res: Response) => {
     try {
-      const result = await syncDataToExasol(await analyticsSnapshot(repos()));
+      const result = await runAnalyticsSync(repos(), { full: req.body?.full === true });
+      if (result.busy) return res.status(409).json(result);
       await audit(
         req,
         result.success ? 'sync' : 'sync-failed',
         'exasol-analytics',
         'exasol-engine',
         result.success
-          ? `Synced ${result.syncedVisits} visits, ${result.syncedLabOrders} lab orders, ${result.syncedPrescriptions} prescriptions in ${result.durationMs} ms`
+          ? `Synced (${result.mode}) ${result.syncedVisits} visits, ${result.syncedLabOrders} lab orders, ${result.syncedPrescriptions} prescriptions in ${result.durationMs} ms`
           : `Sync failed: ${result.error}`
       );
       // A failed sync is an error response, so the client cannot mistake it for a success.

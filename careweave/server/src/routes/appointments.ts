@@ -35,8 +35,10 @@ export function appointmentRoutes(ctx: AppCtx) {
     if (req.user.role === 'doctor') filter.doctorId = req.user.id;
     if (status) filter.status = status;
     if (patientId) filter.patientId = patientId;
-    let rows = await ctx.repos.appointments.find(filter);
-    if (date === 'today') rows = rows.filter((a: any) => isToday(a.date));
+    // "today" reads one day's rows and narrows them; anything else is a normal filtered query.
+    const rows = date === 'today'
+      ? (await ctx.repos.appointments.onDay(isoToday())).filter((a: any) => Object.entries(filter).every(([k, v]) => a[k] === v))
+      : await ctx.repos.appointments.find(filter);
     res.json(rows);
   });
 

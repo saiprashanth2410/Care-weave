@@ -1,5 +1,5 @@
 import type mongoose from 'mongoose';
-import { ConflictError, DuplicateError, VERSIONED, splitChanges, type Collection, type FileStore, type Filter, type FindOpts, type IndexSpec, type Store } from './store.js';
+import { ConflictError, DuplicateError, VERSIONED, splitChanges, stampChange, stampNew, type Collection, type FileStore, type Filter, type FindOpts, type IndexSpec, type Store } from './store.js';
 
 type Db = NonNullable<typeof mongoose.connection.db>;
 type MongoColl<T = any> = ReturnType<Db['collection']> & { __t?: T };
@@ -34,7 +34,7 @@ class MongoCollection implements Collection {
     return this.c.countDocuments(filter, this.o);
   }
   async insert(doc: any) {
-    const row = this.versioned ? { ...doc, version: doc.version ?? 1 } : { ...doc };
+    const row = stampNew(this.name, this.versioned ? { ...doc, version: doc.version ?? 1 } : { ...doc });
     try {
       await this.c.insertOne({ ...row }, this.o); // the driver adds _id to what it is given, so give it a copy
     } catch (err: any) {
@@ -47,7 +47,7 @@ class MongoCollection implements Collection {
   async insertMany(docs: any[]) {
     if (!docs.length) return;
     try {
-      await this.c.insertMany(docs.map((d) => (this.versioned ? { ...d, version: d.version ?? 1 } : { ...d })), this.o);
+      await this.c.insertMany(docs.map((d) => stampNew(this.name, this.versioned ? { ...d, version: d.version ?? 1 } : { ...d })), this.o);
     } catch (err: any) {
       if (err?.code === 11000) throw new DuplicateError(Object.keys(err.keyPattern ?? {})[0] ?? 'id');
       throw err;
@@ -55,7 +55,7 @@ class MongoCollection implements Collection {
     this.changed(this.name);
   }
   async update(current: any, changes: Filter, expected?: number) {
-    const { set, unset } = splitChanges(changes);
+    const { set, unset } = splitChanges(stampChange(this.name, changes));
     const ops: Filter = {};
     if (Object.keys(set).length) ops.$set = set;
     if (Object.keys(unset).length) ops.$unset = unset;

@@ -11,6 +11,7 @@ import { makeAudit } from './services/audit.js';
 import { BROWSER_HEADER, credentialOf, userForToken } from './services/sessions.js';
 import { authRoutes, sessionRoutes } from './routes/auth.js';
 import { adminRoutes, healthRoutes } from './routes/admin.js';
+import { cronRoutes } from './routes/cron.js';
 import { patientRoutes } from './routes/patients.js';
 import { appointmentRoutes } from './routes/appointments.js';
 import { labRoutes, UPLOAD_ROUTES } from './routes/lab.js';
@@ -81,6 +82,7 @@ export function createApp(opts: CreateAppOptions) {
   app.use((req, res, next) => (req.method === 'POST' && UPLOAD_ROUTES.some((r) => r.test(req.path)) ? large : small)(req, res, next));
 
   app.use('/api', healthRoutes(ctx));
+  app.use('/api', cronRoutes(ctx));
   app.use('/api', authRoutes(ctx));
   app.use('/api', ctx.auth);
   app.use('/api', sessionRoutes(ctx));

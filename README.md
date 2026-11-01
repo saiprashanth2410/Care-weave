@@ -23,9 +23,9 @@
 
 In typical community hospitals and diagnostic centers, **Front Desk (OPD)**, **Diagnostic Labs**, and **Doctor Consultation Rooms** operate in completely disconnected silos. Patients carry crumpled paper slips, lab values are manually re-typed (risking fatal decimal shift errors), doctors prescribe without allergy awareness, and administrators have zero real-time visibility into operational bottlenecks.
 
-**CareWeave** puts the three desks on one shared record and adds an analytics layer: **OLTP (MongoDB) + OLAP (Exasol) with an on-demand MERGE sync**.
+**CareWeave** puts the three desks on one shared record and adds an analytics layer: **OLTP (MongoDB) + OLAP (Exasol) with a `MERGE` sync you run from the analytics page or schedule**.
 1. **Operational store (OLTP, MongoDB):** One shared source of truth for the Front Desk, Laboratory and Physician workspaces. Every request reads and writes MongoDB directly; the server keeps no copy of the data. Every collection that staff edit (patients, encounters, lab orders, appointments, prescriptions, referrals, care plans, vitals, external records, review cases, users) carries a `version`, and a write made from an out-of-date copy is refused with HTTP 409 (see [Data consistency](#-data-consistency-exactly-what-is-implemented)). Writes that touch several documents run in a transaction. Every action is written to an audit log.
-2. **Analytics (OLAP, Exasol Personal):** A columnar engine runs window functions, `PERCENTILE_CONT` and aggregations over outpatient queues, diagnostic turnaround times (TAT) and prescribing volume. Data reaches Exasol when someone presses **Sync to Exasol** on the analytics page, which runs an idempotent `MERGE`; nothing syncs by itself. If Exasol is offline the page says so and shows figures computed by the application instead.
+2. **Analytics (OLAP, Exasol Personal):** A columnar engine runs window functions, `PERCENTILE_CONT` and aggregations over outpatient queues, diagnostic turnaround times (TAT) and prescribing volume. Data reaches Exasol when someone presses **Sync to Exasol** on the analytics page, or on a schedule if you switch one on (`ANALYTICS_SYNC_MINUTES`, or a cron call to `/api/analytics/cron` with `CRON_SECRET`); nothing syncs by itself otherwise. The sync reads records a page at a time and, after the first run, loads only what changed (`updatedAt` stamp); **Full resync** rebuilds from every record and removes Exasol rows whose source is gone. Each loaded page is counted back from Exasol. If Exasol is offline the page says so and shows figures computed by the application instead.
 3. **Multimodal AI (Google Gemma 4):** Reads photographed lab reports into structured rows. The output is a draft; a second person with verification permission must sign it off (maker-checker).
 4. **Drug safety checks:** Brand-to-molecule lookup over a 93,911-row brand catalogue, an allergy check against a short hand-written list of drug families (penicillins, sulfonamides, NSAIDs, cephalosporins; anything else is matched by name only), duplicate-molecule detection across brands, and a 12-pair drug-drug interaction list.
 5. **WhatsApp (n8n, Twilio, Meta):** Event pushes (OP token, lab report released, prescription) and two-way keywords. Meta webhook calls are accepted only with a valid `X-Hub-Signature-256`.
@@ -163,7 +163,7 @@ Separately, every analytics widget has a **SQL Inspector** that shows the exact 
 - Built-in **WhatsApp Simulator Widget** allows evaluators to simulate the entire WhatsApp experience directly inside the browser without needing third-party hardware.
 
 ### 5. Live Operations
-- **Live sync:** a server-sent-events stream (`/api/events`) refreshes the front desk and doctor screens the moment anything changes. Where the host cannot hold a connection open (serverless), screens fall back to polling every 5 seconds.
+- **Live sync:** a server-sent-events stream (`/api/events`) refreshes the front desk and doctor screens when anything changes, including changes made on another server instance (instances pass events through the `liveEvents` collection and read it every 1.5 s while a screen is connected). Where the host cannot hold a connection open (serverless), screens fall back to polling every 5 seconds.
 - **Critical lab alerts:** when a verifier releases a result with a critical value, the ordering and linked doctors get a banner at once, and their Overview keeps it for 3 days.
 - **Pre-consult brief:** one click on a patient chart summarises allergies, flagged labs, medicines and open items. It uses Gemma/Gemini when `GEMINI_API_KEY` is set (no name, phone or UHID is sent) and plain rules otherwise.
 
@@ -258,7 +258,7 @@ cd careweave/client && npm test
 - `vercel.json` builds the server (`tsc` into `careweave/server/dist`, which is **not** committed) and then the client; `api/index.ts` imports the built server.
 - Required: `MONGODB_URI` (the server refuses to start in production without it). Several instances can run at once because sessions and data are in MongoDB.
 - WhatsApp: set `META_APP_SECRET` (Meta app secret, used to verify `X-Hub-Signature-256`; without it production refuses Meta webhook calls), `META_VERIFY_TOKEN` for the one-time handshake, and `WHATSAPP_API_KEY` for n8n and Twilio calls.
-- Lab report attachments are written to the instance's local disk (`/tmp` on Vercel), so they are not shared between instances or kept across restarts.
+- Lab report attachments (PDF, PNG, JPEG, up to 10 MB) are stored in the MongoDB `files` collection, so every instance serves them and they survive restarts. In the local-file development mode they are written to `server/uploads/store`. Files saved by older versions are still read from `uploads/` on that server's disk if present.
 
 ---
 
@@ -273,10 +273,10 @@ Still true after the changes above:
 - **Optimistic concurrency is last-resort, not merge.** A stale write is refused and the user must reload; nothing is merged. A client that sends no version is only protected between its own read and write inside one request. Audit entries are append-only and have no version.
 - **OP token numbers can skip.** The next token is counted from existing tokens and a unique per-day `tokenKey` rejects a duplicate; the loser of a race counts again (up to 5 tries). Numbers are not reused or renumbered.
 - **Double booking of a patient is guarded only while the booking is active** (unique `patientKey`, same rule as the doctor slot). Appointments created before this key existed are not covered until they are rebooked.
-- **Analytics sync is manual** (button on the analytics page) and reads whole collections. The overview, when Exasol is offline, also computes over whole collections. Neither is designed for a large hospital.
+- **Analytics at scale is untested.** The Exasol sync is paged and incremental, but it has not been run against a large dataset or timed (see the unrecorded benchmark). With Exasol offline the overview computes over the last `ANALYTICS_WINDOW_DAYS` days (default 90) of visits, lab orders and prescriptions, so its figures cover that window, not all history. An incremental sync assumes Exasol was not reset since the last run; use **Full resync** after resetting it. Records deleted in MongoDB (nothing in the app deletes visits, orders or prescriptions) are removed from Exasol only by a full sync.
 - **WhatsApp language preference** (`LANG TA/EN`) is stored per phone number in the `whatsappPrefs` collection, so it survives restarts and is shared by instances. It is never cleared.
-- **Attachments live on local disk** (see Deployment notes).
-- **Live updates** use server-sent events held in one process: a change made on one instance only pushes to screens connected to that instance; the screens also poll every 5 seconds. On Vercel only polling is used.
+- **Attachments are stored in MongoDB documents** (10 MB cap, no virus scan, no encryption beyond the database's own).
+- **Live updates across instances take up to about 1.5 s** (the polling interval of the shared event collection). Screens also poll every 5 seconds as a safety net, and on Vercel only polling is used.
 - **Sample data:** the "sample scenario" and 30-day analytics history are synthetic and generated by the app.
 - **Not benchmarked:** no performance figure is claimed anywhere in this repository. `npm run demo:scale` exists but its results have not been recorded.
 - **Not a medical device.** No regulatory review, no security audit, no penetration test.
