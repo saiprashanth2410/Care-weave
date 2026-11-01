@@ -38,6 +38,7 @@ export type Doctor = {
 
 export type Appointment = {
   id: string;
+  token?: string;
   patientId: string;
   patientName: string;
   patientIdCode?: string;

@@ -8,12 +8,14 @@ import { FollowUpAppointmentModal } from '../modals/FollowUpAppointmentModal';
 
 export function DoctorAppointments({
   user: _user,
+  refresh,
   notify,
   onOpenPatient,
   onStartConsultation,
   onScheduleFollowUp
 }: {
   user: User;
+  refresh: number;
   notify: (s: string) => void;
   onOpenPatient: (p: Patient) => void;
   onStartConsultation: (p: Patient) => void;
@@ -33,7 +35,7 @@ export function DoctorAppointments({
     api.patients().then(setPatients).catch(() => {});
   }, [filter]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, refresh]);
 
   const handleStatus = async (a: Appointment, status: string) => {
     try {

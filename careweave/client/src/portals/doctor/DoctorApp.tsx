@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLiveRefresh } from '../../useLiveRefresh';
 import { Activity, CalendarDays, Check, ClipboardList, FileText, FlaskConical, HeartPulse, LayoutDashboard, LogOut, Menu, RefreshCw, Stethoscope, Users } from './icons';
 import { api } from './api';
 import type { Patient, User } from './types';
@@ -27,6 +28,7 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
   const [section, setSection] = useState('overview');
   const [collapsed, setCollapsed] = useState(false);
   const [refresh, setRefresh] = useState(0);
+  useLiveRefresh(() => setRefresh(r => r + 1));
   const [toast, setToast] = useState('');
   const [openCases, setOpenCases] = useState(0);
   useEffect(() => { api.cases().then(c => setOpenCases(c.length)).catch(() => setOpenCases(0)); }, [refresh]);
@@ -150,6 +152,7 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
           {section === 'appointments' && (
             <DoctorAppointments
               user={user}
+              refresh={refresh}
               notify={notify}
               onOpenPatient={handleOpenPatientRecord}
               onStartConsultation={p => setNewEncounterPatient(p)}

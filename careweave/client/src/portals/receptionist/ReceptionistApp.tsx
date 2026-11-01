@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { useLiveRefresh } from '../../useLiveRefresh';
 import {
   AlertCircle, AlertTriangle, ArrowRight, Ban, Calendar,
   CalendarDays, Check, CheckCircle2, ChevronRight, Clock3, ClockIcon,
@@ -86,6 +87,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [section, setSection] = useState<'overview' | 'queue' | 'appointments' | 'patients' | 'doctors'>('overview');
   const [collapsed, setCollapsed] = useState(false);
   const [refresh, setRefresh] = useState(0);
+  useLiveRefresh(() => setRefresh(r => r + 1));
   const [toast, setToast] = useState('');
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
 

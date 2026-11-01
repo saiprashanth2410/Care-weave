@@ -75,6 +75,27 @@ const uploadLimit = rateLimit(60 * 1000, 20, (r) => `${r.user?.id || r.ip}`);
 
 let db: any;
 let mongoConnected = false;
+
+// Each serverless instance keeps its own in-memory copy of the data, so a change made through one instance is
+// invisible to the others. Re-read MongoDB when the copy is a couple of seconds old, but only while nothing else
+// on this instance is mid-request, so an unsaved change is never replaced by the reload.
+let inflight = 0;
+let lastLoad = Date.now();
+app.use(async (req: any, res: any, next: any) => {
+  inflight++;
+  res.once('close', () => { inflight--; });
+  if (isVercel && mongoConnected && inflight === 1 && Date.now() - lastLoad > 2000 && req.path.startsWith('/api') && req.path !== '/api/health') {
+    try {
+      db = await loadFromMongo();
+      for (const c of COLLECTIONS) db[c] ||= [];
+      for (const x of db.sessions) if (x.expires > Date.now()) sessions.set(x.id, { userId: x.userId, expires: x.expires });
+      lastLoad = Date.now();
+    } catch (err: any) {
+      console.warn('Refreshing data from MongoDB failed:', err?.message);
+    }
+  }
+  next();
+});
 // Sessions are keyed by a hash of the token, so the database never holds a usable token.
 const sessions = new Map<string, { userId: string; expires: number }>();
 const tokenKey = (raw: string) => crypto.createHash('sha256').update(raw).digest('hex');
@@ -908,6 +929,7 @@ export async function ensureInitialized() {
         await save();
       }
     } else {
+      if (isVercel) console.warn('No MongoDB on Vercel: data is kept in /tmp per instance and will not sync between devices. Set MONGODB_URI.');
       db = await ensureSeed(DATA);
     }
     for (const c of COLLECTIONS) db[c] ||= [];
