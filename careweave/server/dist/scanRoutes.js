@@ -3,9 +3,9 @@ import { extractWithGemini } from './geminiScan.js';
 import { searchMedicines } from './medicines.js';
 import { ScanError } from './scanSchema.js';
 /** Report scanning and medicine search. The Gemini key stays on the server. */
-export function registerScanRoutes({ app, roles, uploadLimit, text, audit, save, mongoConnected }) {
+export function registerScanRoutes({ app, roles, uploadLimit, text, audit, repos }) {
     const scanCache = new Map(); // identical uploads reuse the result instead of spending quota
-    app.post('/api/lab/extract', roles('lab'), uploadLimit, async (req, res) => {
+    app.post('/lab/extract', roles('lab'), uploadLimit, async (req, res) => {
         const geminiKey = process.env.GEMINI_API_KEY;
         if (!geminiKey)
             return res.status(503).json({ error: 'Report scanning is not configured. Set GEMINI_API_KEY on the server.' });
@@ -21,11 +21,10 @@ export function registerScanRoutes({ app, roles, uploadLimit, text, audit, save,
         try {
             const parsed = await extractWithGemini(mimeType, data, geminiKey);
             console.log(`[scan] ${parsed.model} -> ok (${mimeType}, ${kb} KB, ${parsed.results.length} rows)`);
-            audit(req, 'scan', 'labReport', 'upload', `${mimeType} via ${parsed.model}`);
+            await audit(req, 'scan', 'labReport', 'upload', `${mimeType} via ${parsed.model}`);
             scanCache.set(fileKey, parsed);
             if (scanCache.size > 50)
                 scanCache.delete(scanCache.keys().next().value);
-            await save();
             res.json({ data: parsed });
         }
         catch (e) {
@@ -34,9 +33,9 @@ export function registerScanRoutes({ app, roles, uploadLimit, text, audit, save,
             res.status(status).json({ error: e instanceof ScanError ? e.message : 'The scanner is unavailable right now, try again shortly.' });
         }
     });
-    app.get('/api/medicines/search', roles('doctor'), async (req, res) => {
+    app.get('/medicines/search', roles('doctor'), async (req, res) => {
         try {
-            res.json(await searchMedicines(String(req.query.q ?? ''), 15, mongoConnected()));
+            res.json(await searchMedicines(String(req.query.q ?? ''), 15, repos().mode === 'mongo'));
         }
         catch (err) {
             res.status(500).json({ error: err?.message || 'Medicine search failed' });

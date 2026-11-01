@@ -12,7 +12,7 @@ export async function runScenario(base, users, patients, mint, requester) {
     const enterer = labs.find((u) => u.id !== verifier?.id);
     if (!doctor || !receptionist || !verifier || !enterer)
         throw new Error('Needs a front desk, a doctor, a lab user and a second lab user who can verify.');
-    const tok = { rec: mint(receptionist.id), doc: mint(doctor.id), lab: mint(enterer.id), ver: mint(verifier.id) };
+    const tok = { rec: await mint(receptionist.id), doc: await mint(doctor.id), lab: await mint(enterer.id), ver: await mint(verifier.id) };
     const call = async (method, path, token, body) => {
         const r = await fetch(`${base}${path}`, { method, headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: body ? JSON.stringify(body) : undefined });
         const json = await r.json().catch(() => ({}));
