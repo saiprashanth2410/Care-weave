@@ -33,7 +33,7 @@ class MongoCollection implements Collection {
     try {
       await this.c.insertOne({ ...row }); // the driver adds _id to what it is given, so give it a copy
     } catch (err: any) {
-      if (err?.code === 11000) throw new DuplicateError();
+      if (err?.code === 11000) throw new DuplicateError(Object.keys(err.keyPattern ?? {})[0] ?? 'id');
       throw err;
     }
     this.changed(this.name);
@@ -44,7 +44,7 @@ class MongoCollection implements Collection {
     try {
       await this.c.insertMany(docs.map((d) => (this.versioned ? { ...d, version: d.version ?? 1 } : { ...d })));
     } catch (err: any) {
-      if (err?.code === 11000) throw new DuplicateError();
+      if (err?.code === 11000) throw new DuplicateError(Object.keys(err.keyPattern ?? {})[0] ?? 'id');
       throw err;
     }
     this.changed(this.name);
@@ -61,7 +61,7 @@ class MongoCollection implements Collection {
     try {
       res = await this.c.updateOne(this.versioned ? { id: current.id, version: want } : { id: current.id }, ops);
     } catch (err: any) {
-      if (err?.code === 11000) throw new DuplicateError();
+      if (err?.code === 11000) throw new DuplicateError(Object.keys(err.keyPattern ?? {})[0] ?? 'id');
       throw err;
     }
     if (res.matchedCount === 0) throw new ConflictError();

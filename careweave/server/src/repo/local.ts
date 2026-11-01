@@ -40,7 +40,7 @@ class LocalCollection implements Collection {
 
   private clash(doc: any, exceptId?: string) {
     const fields = UNIQUE_FIELDS[this.name] ?? ['id'];
-    return fields.some((f) => doc[f] !== undefined && this.docs.some((d) => d !== doc && d.id !== exceptId && d[f] === doc[f]));
+    return fields.find((f) => doc[f] !== undefined && this.docs.some((d) => d !== doc && d.id !== exceptId && d[f] === doc[f]));
   }
 
   async find(filter?: Filter, opts: FindOpts = {}) {
@@ -68,7 +68,7 @@ class LocalCollection implements Collection {
   }
   async insert(doc: any) {
     const row = structuredClone(this.versioned ? { ...doc, version: doc.version ?? 1 } : doc);
-    if (this.clash(row)) throw new DuplicateError();
+    { const f = this.clash(row); if (f) throw new DuplicateError(f); }
     this.docs.push(row);
     await this.save();
     this.changed(this.name);
@@ -77,7 +77,7 @@ class LocalCollection implements Collection {
   async insertMany(docs: any[]) {
     for (const d of docs) {
       const row = structuredClone(this.versioned ? { ...d, version: d.version ?? 1 } : d);
-      if (this.clash(row)) throw new DuplicateError();
+      { const f = this.clash(row); if (f) throw new DuplicateError(f); }
       this.docs.push(row);
     }
     await this.save();
@@ -90,7 +90,7 @@ class LocalCollection implements Collection {
     const { set, unset } = splitChanges(changes);
     const next = { ...stored, ...structuredClone(set) };
     for (const k of Object.keys(unset)) delete next[k];
-    if (this.clash(next, stored.id)) throw new DuplicateError();
+    { const f = this.clash(next, stored.id); if (f) throw new DuplicateError(f); }
     Object.assign(stored, structuredClone(set));
     for (const k of Object.keys(unset)) delete stored[k];
     if (this.versioned) stored.version = want + 1;

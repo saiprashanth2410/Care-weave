@@ -9,7 +9,8 @@ export class ConflictError extends Error {
 }
 
 export class DuplicateError extends Error {
-  constructor(message = 'A record with this id already exists') {
+  /** `field` is the unique field that clashed (id, slotKey, tokenKey ...), when the backend could tell. */
+  constructor(public field = 'id', message = 'A record with this id already exists') {
     super(message);
     this.name = 'DuplicateError';
   }
@@ -22,7 +23,7 @@ export type IndexSpec = { keys: Record<string, 1 | -1>; unique?: boolean; expire
 /** Fields that must be unique across a collection (when present). The local fallback enforces these itself; MongoDB uses the unique indexes. */
 export const UNIQUE_FIELDS: Record<string, string[]> = {
   patients: ['id', 'patientId'],
-  appointments: ['id', 'slotKey'],
+  appointments: ['id', 'slotKey', 'patientKey', 'tokenKey'],
   sessions: ['tokenHash'],
   rateLimits: ['key'],
 };

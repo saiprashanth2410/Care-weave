@@ -3,12 +3,18 @@ import type { AppCtx } from '../context.js';
 import { catchAsyncRoutes } from '../asyncRoutes.js';
 import { expectedVersion } from '../middleware.js';
 import { DuplicateError } from '../repo/index.js';
-import { slotKeyOf } from '../repo/appointments.js';
+import { patientKeyOf, slotKeyOf, tokenKeyOf } from '../repo/appointments.js';
 import { id, isToday, now } from '../util.js';
 import { linkedPatientIds } from '../services/access.js';
 import { nextToken, queueAhead, roomFor } from '../whatsapp/messages.js';
 import { emitEvent } from '../whatsapp/emitter.js';
 import { isoToday } from '../util.js';
+
+/** Which of the unique guards fired: the patient already booked at that time, or the doctor's slot taken. */
+const clashMessage = (err: DuplicateError, patient: string, doctor: string | undefined, date: string, time: string) =>
+  err.field === 'patientKey'
+    ? `${patient} already has an appointment at ${time} on ${date}`
+    : `${doctor ?? 'The doctor'} already has a booking at ${time} on ${date}. Choose another time.`;
 
 const STATUSES = ['Scheduled', 'Checked In', 'Waiting', 'In Consultation', 'Completed', 'Cancelled', 'No Show'];
 
@@ -65,9 +71,9 @@ export function appointmentRoutes(ctx: AppCtx) {
     let a;
     try {
       // The unique slotKey is what stops two requests booking one slot at once; the check above only gives a friendlier message.
-      a = await ctx.repos.appointments.insert({ ...draft, slotKey: slotKeyOf(draft) });
+      a = await ctx.repos.appointments.insert({ ...draft, slotKey: slotKeyOf(draft), patientKey: patientKeyOf(draft) });
     } catch (err) {
-      if (err instanceof DuplicateError) return res.status(409).json({ error: `${doctor?.name ?? 'The doctor'} already has a booking at ${time} on ${date}. Choose another time.` });
+      if (err instanceof DuplicateError) return res.status(409).json({ error: clashMessage(err, p.name, doctor?.name, date, time) });
       throw err;
     }
     await audit(req, 'create', 'appointment', a.id, `${p.name} · ${date} ${time}`);
@@ -84,19 +90,18 @@ export function appointmentRoutes(ctx: AppCtx) {
     const nd = date || a.date, nt = time || a.time;
     const taken = (date || time) && a.doctorId && await ctx.repos.appointments.doctorSlot(a.doctorId, nd, nt, a.id);
     if (taken) return res.status(409).json({ error: `${a.doctorName} already has a booking at ${nt} on ${nd}. Choose another time.` });
+    const mine = (date || time) ? await ctx.repos.appointments.patientSlot(a.patientId, nd, nt) : null;
+    if (mine && mine.id !== a.id) return res.status(409).json({ error: `${a.patientName} already has an appointment at ${nt} on ${nd}` });
 
     const changes: Record<string, any> = {};
     let issuedToken: string | undefined;
+    let needsToken = false;
     if (status) {
       if (!STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid appointment status' });
       if (status === a.status) return res.status(409).json({ error: `Patient is already marked as ${status}` });
       changes.status = status;
       if ((status === 'Checked In' || status === 'Waiting') && !a.checkedInAt) changes.checkedInAt = now();
-      if ((status === 'Checked In' || status === 'Waiting') && !a.token) {
-        const day = await ctx.repos.appointments.onDay(isoToday());
-        issuedToken = nextToken({ appointments: a.date === 'Today' || isToday(a.date) ? day : await ctx.repos.appointments.find({ date: a.date }) }, a.date);
-        changes.token = issuedToken;
-      }
+      if ((status === 'Checked In' || status === 'Waiting') && !a.token) needsToken = true;
       // Analytics measures the wait as check-in to the start of the consultation, so both moments are recorded.
       if (status === 'In Consultation' && !a.startedAt) changes.startedAt = now();
       if (status === 'Completed' && !a.completedAt) changes.completedAt = now();
@@ -111,12 +116,25 @@ export function appointmentRoutes(ctx: AppCtx) {
     }
     if (reason) changes.reason = String(reason).trim();
     changes.slotKey = slotKeyOf({ ...a, ...changes });
+    changes.patientKey = patientKeyOf({ ...a, ...changes });
     let saved;
-    try {
-      saved = await ctx.repos.appointments.update(a, changes, expected);
-    } catch (err) {
-      if (err instanceof DuplicateError) return res.status(409).json({ error: `${a.doctorName} already has a booking at ${nt} on ${nd}. Choose another time.` });
-      throw err;
+    // The token is counted from today's existing tokens; the unique tokenKey is what stops two check-ins that counted at the same
+    // moment (here or on another instance) from both keeping A-007. The loser counts again and takes the next number.
+    for (let attempt = 0; ; attempt++) {
+      if (needsToken) {
+        const day = await ctx.repos.appointments.onDay(isoToday());
+        issuedToken = nextToken({ appointments: a.date === 'Today' || isToday(a.date) ? day : await ctx.repos.appointments.find({ date: a.date }) }, a.date);
+        changes.token = issuedToken;
+        changes.tokenKey = tokenKeyOf({ token: issuedToken, date: a.date });
+      }
+      try {
+        saved = await ctx.repos.appointments.update(a, changes, expected);
+        break;
+      } catch (err) {
+        if (err instanceof DuplicateError && err.field === 'tokenKey' && attempt < 5) continue;
+        if (err instanceof DuplicateError) return res.status(409).json({ error: clashMessage(err, a.patientName, a.doctorName, nd, nt) });
+        throw err;
+      }
     }
     await audit(req, 'update', 'appointment', a.id, `Status: ${saved.status}${date ? ` · Rescheduled to ${saved.date} ${saved.time}` : ''}`);
     if (issuedToken) {

@@ -14,6 +14,7 @@ import { carePlansRepo, carePlansIndexes } from './carePlans.js';
 import { externalRecordsRepo, externalRecordsIndexes } from './externalRecords.js';
 import { casesRepo, casesIndexes } from './cases.js';
 import { syntheticHistoryRepo, syntheticHistoryIndexes } from './syntheticHistory.js';
+import { whatsappPrefsRepo, whatsappPrefsIndexes } from './whatsappPrefs.js';
 import { MongoStore } from './mongo.js';
 import { LocalStore } from './local.js';
 import type { Store } from './store.js';
@@ -41,6 +42,7 @@ export function createRepos(store: Store) {
     externalRecords: externalRecordsRepo(c('externalRecords')),
     cases: casesRepo(c('cases')),
     syntheticHistory: syntheticHistoryRepo(c('syntheticHistory')),
+    whatsappPrefs: whatsappPrefsRepo(c('whatsappPrefs')),
   };
 }
 export type Repos = ReturnType<typeof createRepos>;
@@ -49,7 +51,7 @@ export const INDEXES = {
   users: usersIndexes, patients: patientsIndexes, appointments: appointmentsIndexes, labOrders: ordersIndexes,
   encounters: encountersIndexes, prescriptions: prescriptionsIndexes, auditLogs: auditIndexes, sessions: sessionsIndexes, rateLimits: rateLimitsIndexes,
   vitals: vitalsIndexes, referrals: referralsIndexes, carePlans: carePlansIndexes, externalRecords: externalRecordsIndexes,
-  cases: casesIndexes, syntheticHistory: syntheticHistoryIndexes,
+  cases: casesIndexes, syntheticHistory: syntheticHistoryIndexes, whatsappPrefs: whatsappPrefsIndexes,
 };
 
 /** Quiet collections change on every sign-in or page view; they are not worth waking other screens for. */
