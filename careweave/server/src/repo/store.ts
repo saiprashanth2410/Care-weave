@@ -29,7 +29,10 @@ export const UNIQUE_FIELDS: Record<string, string[]> = {
 };
 
 /** Collections whose documents carry a `version` and are written with optimistic concurrency. */
-export const VERSIONED = new Set(['patients', 'encounters', 'labOrders', 'appointments', 'prescriptions']);
+export const VERSIONED = new Set([
+  'patients', 'encounters', 'labOrders', 'appointments', 'prescriptions',
+  'referrals', 'carePlans', 'vitals', 'externalRecords', 'cases', 'users',
+]);
 
 export interface Collection {
   readonly name: string;
@@ -58,6 +61,12 @@ export interface Store {
   /** 'mongo' = every read and write goes to MongoDB. 'local' = in-process arrays saved to a JSON file (development only). */
   readonly mode: 'mongo' | 'local';
   collection(name: string): Collection;
+  /**
+   * Runs `fn` against a view of the store whose writes all commit together or not at all: if `fn` throws, none of them are kept.
+   * MongoDB: a multi-document transaction (needs a replica set, which Atlas always is). The local file store restores a snapshot.
+   * `fn` may run more than once (MongoDB retries a transaction after a transient error), so keep it free of side effects other than store writes.
+   */
+  transaction<T>(fn: (tx: Store) => Promise<T>): Promise<T>;
   ensureIndexes(specs: Record<string, IndexSpec[]>): Promise<void>;
   close(): Promise<void>;
 }

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { AppCtx } from '../context.js';
 import { catchAsyncRoutes } from '../asyncRoutes.js';
+import { removeUnfinishedSample } from '../services/sampleCleanup.js';
 import { addClient } from '../liveEvents.js';
 import { isToday } from '../util.js';
 import { doctorDashboard } from '../services/chart.js';
@@ -74,7 +75,8 @@ export function adminRoutes(ctx: AppCtx) {
       }
       res.status(out.loaded ? 201 : 200).json(out);
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || 'Could not load the sample scenario' });
+      const removed = await removeUnfinishedSample(ctx.repos).catch((e: any) => { console.error('Could not clean up the half-loaded sample scenario:', e?.message); return 0; });
+      res.status(500).json({ error: `${err?.message || 'Could not load the sample scenario'}${removed ? ' (the partly loaded sample was removed; try again)' : ''}` });
     } finally {
       scenarioRunning = false;
     }

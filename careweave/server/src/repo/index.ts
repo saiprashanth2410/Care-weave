@@ -22,7 +22,7 @@ import type { Store } from './store.js';
 export { ConflictError, DuplicateError, type Store } from './store.js';
 export { LocalStore } from './local.js';
 
-export function createRepos(store: Store) {
+function collections(store: Store) {
   const c = (name: string) => store.collection(name);
   return {
     mode: store.mode,
@@ -45,7 +45,14 @@ export function createRepos(store: Store) {
     whatsappPrefs: whatsappPrefsRepo(c('whatsappPrefs')),
   };
 }
-export type Repos = ReturnType<typeof createRepos>;
+export type Repos = ReturnType<typeof collections> & {
+  /** Everything written through the `Repos` given to `fn` is kept together or not at all (see `Store.transaction`). */
+  transaction<T>(fn: (tx: Repos) => Promise<T>): Promise<T>;
+};
+
+export function createRepos(store: Store): Repos {
+  return { ...collections(store), transaction: (fn) => store.transaction((tx) => fn(createRepos(tx))) };
+}
 
 export const INDEXES = {
   users: usersIndexes, patients: patientsIndexes, appointments: appointmentsIndexes, labOrders: ordersIndexes,
@@ -61,5 +68,5 @@ export const QUIET = new Set(['auditLogs', 'sessions', 'rateLimits']);
 export async function openMongoStore(uri: string, dbName: string, onChange: (name: string) => void) {
   await mongoose.connect(uri, { dbName, serverSelectionTimeoutMS: 8000, ignoreUndefined: true });
   const db = mongoose.connection.db!;
-  return new MongoStore(db, () => mongoose.disconnect(), onChange);
+  return new MongoStore(db, () => mongoose.disconnect(), onChange, mongoose.connection.getClient());
 }

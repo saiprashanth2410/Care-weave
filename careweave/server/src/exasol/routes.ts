@@ -73,7 +73,12 @@ export function registerExasolAnalyticsRoutes({ app, repos, roles, audit, sample
     const existing = await history.count();
     if (existing) return res.json({ added: 0, total: existing, note: 'Sample history is already loaded' });
     const rows = generateSampleHistory();
-    await history.insertMany(rows);
+    try {
+      await history.insertMany(rows);
+    } catch (err) {
+      await history.remove({}).catch(() => {}); // a partly loaded history would be reported as "already loaded"
+      throw err;
+    }
     await audit(req, 'create', 'sample-history', 'analytics', `Loaded ${rows.length} synthetic records`);
     res.status(201).json({ added: rows.length, total: rows.length });
   });

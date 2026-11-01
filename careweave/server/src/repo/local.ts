@@ -146,6 +146,29 @@ export class LocalStore implements Store {
     return c;
   }
 
+  private txQueue: Promise<unknown> = Promise.resolve();
+
+  /**
+   * All-or-nothing for development: a snapshot of every collection is restored if `fn` throws. Transactions run one at a time.
+   * A write from an unrelated request that lands while a transaction is open is also undone by a rollback; the local file mode
+   * is single-user development storage, which is why production uses MongoDB.
+   */
+  transaction<T>(fn: (tx: Store) => Promise<T>): Promise<T> {
+    const run = async () => {
+      const snapshot = new Map([...this.colls].map(([n, c]) => [n, structuredClone(c.docs)]));
+      try {
+        return await fn(this);
+      } catch (err) {
+        for (const [n, c] of this.colls) c.docs = snapshot.get(n) ?? [];
+        await this.persist();
+        throw err;
+      }
+    };
+    const next = this.txQueue.then(run, run);
+    this.txQueue = next.catch(() => {});
+    return next;
+  }
+
   private persist() {
     if (!this.file) return Promise.resolve();
     const file = this.file;

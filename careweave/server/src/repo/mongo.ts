@@ -3,6 +3,8 @@ import { ConflictError, DuplicateError, VERSIONED, splitChanges, type Collection
 
 type Db = NonNullable<typeof mongoose.connection.db>;
 type MongoColl<T = any> = ReturnType<Db['collection']> & { __t?: T };
+type Client = ReturnType<typeof mongoose.connection.getClient>;
+type Session = ReturnType<Client['startSession']>;
 
 // Every read is a query and every write is one operation on one document. Nothing is cached in the process, so several
 // server instances can run against the same database.
@@ -10,28 +12,31 @@ type MongoColl<T = any> = ReturnType<Db['collection']> & { __t?: T };
 class MongoCollection implements Collection {
   readonly versioned: boolean;
   private c: MongoColl<any>;
-  constructor(db: Db, readonly name: string, private changed: (name: string) => void) {
+  constructor(db: Db, readonly name: string, private changed: (name: string) => void, private session?: Session) {
     this.c = db.collection(name);
     this.versioned = VERSIONED.has(name);
   }
 
+  /** Inside a transaction every operation carries its session. */
+  private get o() { return this.session ? { session: this.session } : {}; }
+
   async find(filter: Filter = {}, opts: FindOpts = {}) {
-    let cur = this.c.find(filter, { projection: { _id: 0 } });
+    let cur = this.c.find(filter, { projection: { _id: 0 }, ...this.o });
     if (opts.sort) cur = cur.sort(opts.sort);
     if (opts.skip) cur = cur.skip(opts.skip);
     if (opts.limit) cur = cur.limit(opts.limit);
     return cur.toArray();
   }
   findOne(filter: Filter) {
-    return this.c.findOne(filter, { projection: { _id: 0 } });
+    return this.c.findOne(filter, { projection: { _id: 0 }, ...this.o });
   }
   count(filter: Filter = {}) {
-    return this.c.countDocuments(filter);
+    return this.c.countDocuments(filter, this.o);
   }
   async insert(doc: any) {
     const row = this.versioned ? { ...doc, version: doc.version ?? 1 } : { ...doc };
     try {
-      await this.c.insertOne({ ...row }); // the driver adds _id to what it is given, so give it a copy
+      await this.c.insertOne({ ...row }, this.o); // the driver adds _id to what it is given, so give it a copy
     } catch (err: any) {
       if (err?.code === 11000) throw new DuplicateError(Object.keys(err.keyPattern ?? {})[0] ?? 'id');
       throw err;
@@ -42,7 +47,7 @@ class MongoCollection implements Collection {
   async insertMany(docs: any[]) {
     if (!docs.length) return;
     try {
-      await this.c.insertMany(docs.map((d) => (this.versioned ? { ...d, version: d.version ?? 1 } : { ...d })));
+      await this.c.insertMany(docs.map((d) => (this.versioned ? { ...d, version: d.version ?? 1 } : { ...d })), this.o);
     } catch (err: any) {
       if (err?.code === 11000) throw new DuplicateError(Object.keys(err.keyPattern ?? {})[0] ?? 'id');
       throw err;
@@ -59,7 +64,7 @@ class MongoCollection implements Collection {
     else if (!ops.$set && !ops.$unset) return current;
     let res;
     try {
-      res = await this.c.updateOne(this.versioned ? { id: current.id, version: want } : { id: current.id }, ops);
+      res = await this.c.updateOne(this.versioned ? { id: current.id, version: want } : { id: current.id }, ops, this.o);
     } catch (err: any) {
       if (err?.code === 11000) throw new DuplicateError(Object.keys(err.keyPattern ?? {})[0] ?? 'id');
       throw err;
@@ -92,7 +97,7 @@ class MongoCollection implements Collection {
     return { count: doc!.count as number, resetAt: doc!.resetAt as Date };
   }
   async remove(filter: Filter) {
-    const res = await this.c.deleteMany(filter);
+    const res = await this.c.deleteMany(filter, this.o);
     if (res.deletedCount) this.changed(this.name);
     return res.deletedCount;
   }
@@ -100,10 +105,41 @@ class MongoCollection implements Collection {
 
 export class MongoStore implements Store {
   readonly mode = 'mongo' as const;
-  constructor(private db: Db, private closeFn: () => Promise<void>, private onChange: (name: string) => void = () => {}) {}
+  private transactionsSupported = true;
+  constructor(
+    private db: Db, private closeFn: () => Promise<void>, private onChange: (name: string) => void = () => {},
+    private client?: Client, private session?: Session,
+  ) {}
 
   collection(name: string) {
-    return new MongoCollection(this.db, name, this.onChange);
+    return new MongoCollection(this.db, name, this.onChange, this.session);
+  }
+
+  async transaction<T>(fn: (tx: Store) => Promise<T>): Promise<T> {
+    if (this.session) return fn(this); // already inside one
+    if (!this.client || !this.transactionsSupported) return fn(this);
+    const session = this.client.startSession();
+    const changed = new Set<string>();
+    try {
+      // withTransaction retries `fn` after a transient error, so what it collected on an earlier try is dropped.
+      const out = await session.withTransaction(async () => {
+        changed.clear();
+        return fn(new MongoStore(this.db, this.closeFn, (n) => { changed.add(n); }, this.client, session));
+      }) as T;
+      for (const n of changed) this.onChange(n); // other screens are told only once the data is really committed
+      return out;
+    } catch (err: any) {
+      // A standalone mongod has no transactions. The first command fails before anything is written, so running `fn`
+      // without one loses nothing; it just loses the all-or-nothing guarantee, which is said once in the log.
+      if (err?.codeName === 'IllegalOperation' || /Transaction numbers are only allowed|does not support retryable writes/.test(err?.message ?? '')) {
+        this.transactionsSupported = false;
+        console.warn('[storage] This MongoDB server does not support transactions (it is not a replica set). Multi-document writes are NOT atomic here.');
+        return fn(this);
+      }
+      throw err;
+    } finally {
+      await session.endSession();
+    }
   }
 
   async ensureIndexes(specs: Record<string, IndexSpec[]>) {
