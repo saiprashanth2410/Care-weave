@@ -56,7 +56,8 @@ export function createApp(opts: CreateAppOptions) {
     },
   };
 
-  if (!config.isVercel) app.use(helmet());
+  // The API only returns JSON, so the strictest policy is safe: no scripts, frames or subresources may load from an API response.
+  app.use(helmet({ contentSecurityPolicy: { directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } } }));
   // Browsers on these origins may call the API. CLIENT_ORIGIN is a comma-separated list. Requests with no Origin
   // header (same-origin, curl, server to server) are not a CORS concern and pass. Outside production, localhost is open.
   const allowedOrigins = String(process.env.CLIENT_ORIGIN || '').split(',').map((o) => o.trim().replace(/\/$/, '')).filter(Boolean);
