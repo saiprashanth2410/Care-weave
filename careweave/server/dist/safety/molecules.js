@@ -45,6 +45,21 @@ const CLASS_RISK = {
     'penicillin antibiotic': 'Two penicillin-class antibiotics overlap in spectrum and add to antibiotic toxicity.',
     'opioid analgesic': 'Two opioids together raise the risk of respiratory depression and sedation.',
 };
+// Major Cross-Class Drug-Drug Interactions (DDI) Matrix
+export const DRUG_INTERACTIONS = [
+    { drugA: 'warfarin', drugB: 'aspirin', riskDescription: 'Co-administration of Warfarin and Aspirin dramatically elevates major gastrointestinal bleeding and intracranial haemorrhage risks.' },
+    { drugA: 'warfarin', drugB: 'ibuprofen', riskDescription: 'Concurrent NSAID and Anticoagulant therapy causes severe GI mucosal ulceration and platelet inhibition, multiplying bleeding risk 3-5x.' },
+    { drugA: 'warfarin', drugB: 'diclofenac', riskDescription: 'Concurrent NSAID and Anticoagulant therapy causes severe GI mucosal ulceration and platelet inhibition, multiplying bleeding risk 3-5x.' },
+    { drugA: 'clopidogrel', drugB: 'omeprazole', riskDescription: 'Omeprazole significantly reduces the antiplatelet bioactivation of Clopidogrel via CYP2C19 inhibition, increasing ischemic event/thrombosis risk.' },
+    { drugA: 'tramadol', drugB: 'fluoxetine', riskDescription: 'Potent serotonergic synergy between Tramadol and SSRIs precipitates life-threatening Serotonin Syndrome and lowers seizure threshold.' },
+    { drugA: 'tramadol', drugB: 'sertraline', riskDescription: 'Potent serotonergic synergy between Tramadol and SSRIs precipitates life-threatening Serotonin Syndrome and lowers seizure threshold.' },
+    { drugA: 'sildenafil', drugB: 'nitroglycerin', riskDescription: 'Fatal synergistic vasodilation and severe refractory hypotension (systolic drop >50 mmHg).' },
+    { drugA: 'methotrexate', drugB: 'ibuprofen', riskDescription: 'NSAIDs diminish renal clearance of Methotrexate, inducing severe myelosuppression, pancytopenia, and acute nephrotoxicity.' },
+    { drugA: 'methotrexate', drugB: 'aspirin', riskDescription: 'Salicylates displace Methotrexate from protein binding sites and impair excretion, risking bone marrow suppression.' },
+    { drugA: 'digoxin', drugB: 'amiodarone', riskDescription: 'Amiodarone doubles serum Digoxin concentration by inhibiting P-glycoprotein, causing lethal digitalis arrhythmias.' },
+    { drugA: 'ciprofloxacin', drugB: 'theophylline', riskDescription: 'Ciprofloxacin inhibits CYP1A2 clearance of Theophylline, triggering toxic seizures, tachycardia, and arrhythmias.' },
+    { drugA: 'potassium', drugB: 'spironolactone', riskDescription: 'Concomitant potassium supplementation and potassium-sparing diuretics cause fatal hyperkalaemia and cardiac arrest.' }
+];
 const clean = (s) => s.toLowerCase().replace(/\s+/g, ' ').trim();
 function normalizeMolecule(raw) {
     let t = clean(raw.replace(/\d+(?:\.\d+)?\s*(?:mg|mcg|µg|g|kg|ml|l|iu|units?|%)(?:\s*\/\s*\d*\s*(?:ml|l|g))?/gi, ' ').replace(/[^a-z\s-]/gi, ' '));
@@ -168,7 +183,22 @@ export async function checkDuplicateTherapy(input) {
                 severity: 'SAME_CLASS_WARNING', ...base, matchedMolecules: [],
                 clinicalWarning: `${base.prescribedDrug.brand} and ${base.conflictingDrug.brand} are both ${classes.join(', ')} medicines. ${classes.map((c) => CLASS_RISK[c]).filter(Boolean).join(' ') || 'Check that therapy with two agents of one class is intended.'}`,
             });
+            continue;
+        }
+        // Check for Dangerous Drug-Drug Interactions (DDI)
+        for (const ddi of DRUG_INTERACTIONS) {
+            const matchA = next.includes(ddi.drugA) && have.includes(ddi.drugB);
+            const matchB = next.includes(ddi.drugB) && have.includes(ddi.drugA);
+            if (matchA || matchB) {
+                alerts.push({
+                    severity: 'DRUG_DRUG_INTERACTION', ...base,
+                    matchedMolecules: [ddi.drugA, ddi.drugB],
+                    clinicalWarning: `CRITICAL DRUG INTERACTION: ${base.prescribedDrug.brand} (${matchA ? ddi.drugA : ddi.drugB}) collides with current therapy ${base.conflictingDrug.brand} (${matchA ? ddi.drugB : ddi.drugA}). ${ddi.riskDescription}`,
+                });
+            }
         }
     }
-    return alerts.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'HIGH_COLLISION' ? -1 : 1));
+    return alerts.sort((a, b) => (a.severity === b.severity ? 0 :
+        a.severity === 'HIGH_COLLISION' ? -1 :
+            a.severity === 'DRUG_DRUG_INTERACTION' ? (b.severity === 'HIGH_COLLISION' ? 1 : -1) : 1));
 }

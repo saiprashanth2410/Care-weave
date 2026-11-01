@@ -1,9 +1,107 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, FileText, Plus } from '../icons';
+import { AlertTriangle, FileText, Plus, Download } from '../icons';
 import { api } from '../api';
-import type { Patient, PatientRecord } from '../types';
+import type { Patient, PatientRecord, Prescription } from '../types';
 import { fmtDate } from '../helpers';
 import { PageHeader } from '../components';
+
+function printPrescriptionSlip(patient: PatientRecord, rxList: Prescription[]) {
+  const activeRx = rxList.filter(p => p.status !== 'Discontinued');
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) return;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Prescription - ${patient.name} (${patient.patientId})</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 40px; color: #14231f; }
+          .header { border-bottom: 2px solid #0c6b6d; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-start; }
+          .logo { font-size: 24px; font-weight: 800; color: #0c6b6d; }
+          .meta { font-size: 12px; color: #56655f; text-align: right; }
+          .patient-box { background: #f6f7f3; border: 1px solid #c3cac2; border-radius: 6px; padding: 14px 18px; margin-bottom: 24px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; font-size: 13px; }
+          .patient-box b { color: #14231f; display: block; font-size: 11px; text-transform: uppercase; color: #56655f; margin-bottom: 4px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+          th { text-align: left; padding: 10px 12px; border-bottom: 2px solid #c3cac2; color: #56655f; font-size: 11px; text-transform: uppercase; }
+          td { padding: 12px; border-bottom: 1px solid #e1e5df; }
+          .rx-symbol { font-size: 28px; font-family: serif; font-weight: bold; color: #0c6b6d; margin: 16px 0 8px 0; }
+          .allergy-warning { background: #fff5f5; border: 1px solid #feb2b2; color: #c53030; padding: 10px 14px; border-radius: 4px; font-size: 12px; margin-bottom: 20px; }
+          .footer { margin-top: 60px; border-top: 1px dashed #c3cac2; padding-top: 20px; display: flex; justify-content: space-between; align-items: flex-end; font-size: 12px; }
+          .signature-line { border-top: 1px solid #14231f; width: 200px; text-align: center; padding-top: 6px; font-weight: bold; }
+          @media print { body { padding: 0; } button { display: none; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div>
+            <div class="logo">🏥 CareWeave Clinic</div>
+            <div style="font-size: 12px; color: #56655f; margin-top: 4px;">Department of Outpatient General Medicine & Specialities</div>
+          </div>
+          <div class="meta">
+            <b>Date:</b> ${new Date().toLocaleDateString('en-GB')}<br/>
+            <b>Rx Slip ID:</b> RX-${Date.now().toString().slice(-6)}
+          </div>
+        </div>
+
+        <div class="patient-box">
+          <div><b>Patient Name</b>${patient.name}</div>
+          <div><b>UHID / ID</b>${patient.patientId}</div>
+          <div><b>DOB / Date</b>${patient.dob || '—'}</div>
+          <div><b>Phone</b>${patient.phone || '—'}</div>
+        </div>
+
+        ${patient.allergies && patient.allergies.length > 0 ? `
+          <div class="allergy-warning">
+            ⚠️ <b>DOCUMENTED ALLERGIES:</b> ${patient.allergies.map(a => `${a.allergen} (${a.reaction})`).join(', ')}
+          </div>
+        ` : ''}
+
+        <div class="rx-symbol">℞</div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 5%">#</th>
+              <th style="width: 35%">Medication & Strength</th>
+              <th style="width: 25%">Dosage & Timing</th>
+              <th style="width: 15%">Duration</th>
+              <th style="width: 20%">Instructions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${activeRx.map((rx, idx) => `
+              <tr>
+                <td>${idx + 1}</td>
+                <td><b>${rx.medicine}</b><br/><span style="color:#56655f;font-size:11px;">${rx.dosage || ''}</span></td>
+                <td>${rx.frequency}</td>
+                <td>${rx.duration || '—'}</td>
+                <td>${rx.instructions || rx.route || 'As directed'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <div class="footer">
+          <div style="color: #56655f; max-width: 350px;">
+            Prescribed electronically through CareWeave Clinical Decision Support System. Valid for dispensing at registered pharmacies.
+          </div>
+          <div class="signature-line">
+            Authorized Medical Officer<br/>
+            <span style="font-size: 10px; font-weight: normal; color: #56655f;">Reg No: KMC-74921 / Signed Digitally</span>
+          </div>
+        </div>
+
+        <script>
+          window.onload = function() { window.print(); }
+        </script>
+      </body>
+    </html>
+  `;
+
+  printWindow.document.write(html);
+  printWindow.document.close();
+}
 
 export function DoctorPrescriptions({
   notify,
@@ -38,9 +136,20 @@ export function DoctorPrescriptions({
         title="E-Prescriptions & Active Meds"
         sub="Physician-authorized electronic prescriptions with automatic allergy cross-checking and refill management."
         action={
-          <button className="primary" onClick={onPrescribe}>
-            <Plus size={16} /> New E-Prescription
-          </button>
+          <div style={{ display: 'flex', gap: 10 }}>
+            {record && record.prescriptions && record.prescriptions.length > 0 && (
+              <button 
+                className="secondary" 
+                onClick={() => printPrescriptionSlip(record, record.prescriptions)}
+                title="Print or Export official medical prescription slip as PDF"
+              >
+                <Download size={15} /> Export PDF / Print Slip
+              </button>
+            )}
+            <button className="primary" onClick={onPrescribe}>
+              <Plus size={16} /> New E-Prescription
+            </button>
+          </div>
         }
       />
 

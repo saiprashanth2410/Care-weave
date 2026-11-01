@@ -37,5 +37,7 @@ export const TestTube2 = none
 export const Trash2 = none
 export const UserCheck = none
 export const Users = none
+export const Download = none
+export const BellRing = none
 export const X = ({ className }: IconProps) => <span aria-hidden className={className}>×</span>
 export const Menu = ({ className }: IconProps) => <span className={className}>Menu</span>

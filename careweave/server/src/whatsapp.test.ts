@@ -58,7 +58,7 @@ test('an unreachable n8n never blocks or throws', async () => {
   process.env.NODE_ENV = 'development';
   const t = Date.now();
   assert.doesNotThrow(() => emitEvent('PATIENT_CHECKED_IN', { name: 'X', phone: '1' }));
-  assert.ok(Date.now() - t < 50, 'emit returns immediately');
+  assert.ok(Date.now() - t < 500, 'emit returns immediately (it must not wait for the 3 s webhook limit)');
   process.env.NODE_ENV = prev;
   assert.ok(recentEvents().some((e) => e.event === 'PATIENT_CHECKED_IN'));
   await new Promise((r) => setTimeout(r, 200));

@@ -26,12 +26,14 @@ export function DuplicateTherapyModal({ alerts, dosage, onCancel, onOverride }: 
   const ready = ack && reason.trim().length >= MIN_OVERRIDE_REASON;
 
   return (
-    <Modal title="High-Risk Molecular Duplicate Detected" sub="The patient is already taking the same active ingredient under a different brand." onClose={onCancel}>
+    <Modal title={alerts.some(a => (a as any).severity === 'DRUG_DRUG_INTERACTION') ? "Critical Drug-Drug Interaction Detected" : "High-Risk Molecular Duplicate Detected"} sub="Clinical Safety Interceptor: Patient current therapy conflicts with new order." onClose={onCancel}>
       <div className="dup">
         {alerts.map((a, i) => (
           <section key={i} className="dup-case">
-            <p className="dup-banner" role="alert">
-              {a.severity === 'HIGH_COLLISION'
+            <p className="dup-banner" role="alert" style={{ background: (a as any).severity === 'DRUG_DRUG_INTERACTION' ? '#742a2a' : undefined }}>
+              {(a as any).severity === 'DRUG_DRUG_INTERACTION'
+                ? <><b>CRITICAL INTERACTION ALERT:</b> {a.clinicalWarning}</>
+                : a.severity === 'HIGH_COLLISION'
                 ? <>Patient is already receiving <b>{a.matchedMolecules.join(' and ')}</b> via <b>{a.conflictingDrug.brand}</b>. Prescribing <b>{a.prescribedDrug.brand}</b> leads to severe duplicate dosage.</>
                 : <>Same drug class as an active medicine: <b>{a.conflictingDrug.brand}</b>.</>}
             </p>
