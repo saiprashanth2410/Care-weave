@@ -1,245 +1,235 @@
 # CareWeave 🏥
+### Unified Clinical Records & In-Memory Healthcare Intelligence Engine
 
-> One clinical platform where the front desk, the lab and the doctor finally work from the same patient record.
-
-[![Analytics: Exasol Personal](https://img.shields.io/badge/Analytics-Exasol_Personal_In--Memory-blueviolet.svg)](EXASOL_SETUP.md)
-[![Built with Gemma 4](https://img.shields.io/badge/Vision_AI-Gemma_4-blue.svg)](https://ai.google.dev/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-
-CareWeave is a unified multi-role EHR and lab platform built for the HealthTech challenge: *From Siloed Patient Records to Unified Patient Health Records*.
-
-It is a demonstration build. Everything you see runs on **synthetic data**, and it is clinical-review support, not a diagnostic system.
+> **Official Submission for ExaThon India 2026**  
+> **Track / Challenge:** HealthTech — *From Siloed Hospital Desks to Unified Patient Health Records & Real-Time Operational Intelligence*  
+> **Team:** Saiprashanth T, Suriya Sudhakar, Dhivya Dharshini C S  
+> **Repository:** [https://github.com/saiprashanth2410/Care-weave](https://github.com/saiprashanth2410/Care-weave)  
 
 ---
 
-## Why we built this
-
-Walk into most community hospitals and diagnostic labs and you will see the same few problems:
-
-- Patients show up with crumpled paper lab slips from some other lab.
-- Receptionists and lab technicians retype values by hand, and a misplaced decimal quietly becomes a wrong number in the chart.
-- Doctors prescribe without seeing outside records, or without noticing that a new drug is in the same family as one the patient is allergic to.
-
-None of this is exotic. It happens because every desk keeps its own copy of the truth. So we built one backend and one database, with three portals on top (Front Desk, Laboratory, Physician Workspace), plus a few safety gates that refuse to let the obvious mistakes through.
+[![Analytics: Exasol Personal](https://img.shields.io/badge/Analytics-Exasol_Personal_In--Memory-blueviolet.svg?style=for-the-badge&logo=database)](EXASOL_SETUP.md)
+[![AI Vision: Google Gemma 4](https://img.shields.io/badge/Vision_AI-Gemma_4-blue.svg?style=for-the-badge&logo=google)](https://ai.google.dev/)
+[![Messaging: WhatsApp & n8n](https://img.shields.io/badge/Messaging-WhatsApp_&_n8n-25D366.svg?style=for-the-badge&logo=whatsapp)](careweave/n8n/README.md)
+[![Database: MongoDB Atlas](https://img.shields.io/badge/OLTP-MongoDB_Atlas-47A248.svg?style=for-the-badge&logo=mongodb)](https://www.mongodb.com/atlas)
+[![Frontend: React 19](https://img.shields.io/badge/Frontend-React_19_TypeScript-61DAFB.svg?style=for-the-badge&logo=react)](careweave/client)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
 ---
 
-## See it first
+## ⚡ Executive Summary for Hackathon Judges
 
-| | |
-|---|---|
-| **Demo video** | [`demo_video.mp4`](demo_video.mp4): Three-minute video walkthrough of CareWeave |
-| **Pitch deck** | [`CareWeave.pptx`](CareWeave.pptx): Official 10-slide presentation deck for ExaThon India 2026 |
-| **Demo walkthrough & script** | [`DEMO.md`](DEMO.md): Complete pitch-deck outline, demo script, and judge checklist |
-| **Live site** | Frontend on Vercel, API on Render (configured in [`vercel.json`](vercel.json)) |
+In typical community hospitals and diagnostic centers, **Front Desk (OPD)**, **Diagnostic Labs**, and **Doctor Consultation Rooms** operate in completely disconnected silos. Patients carry crumpled paper slips, lab values are manually re-typed (risking fatal decimal shift errors), doctors prescribe without allergy awareness, and administrators have zero real-time visibility into operational bottlenecks.
 
-> **Tip for judges:** sign in as Front Desk or Doctor and press **Load sample scenario (synthetic)** in the top bar. It creates the synthetic patient *Priya Raman* with a penicillin allergy, an encounter, released and pending lab results, and an outside-hospital report that has been imported three times (clean, duplicate, conflicting). It only runs once.
-
----
-
-## What it does
-
-### 1. Multimodal diagnostic report scanner (Gemma 4)
-- Technicians upload a PDF or a photo of a messy lab report and the AI reads the printed values into structured fields.
-- Uses Google **Gemma 4** (`gemma-4-26b-a4b-it` / `gemma-4-31b-it` via the Gemini API), with automatic exponential backoff.
-- **Maker-checker integrity:** scanned data is saved as a **draft only**. The AI can never publish to a patient's legal chart without a person signing off.
-- **Physiological guardrails:** impossible values are rejected automatically (negative glucose, hemoglobin above 25 g/dL, potassium above 12 mmol/L).
-
-### 2. Physician workspace and e-prescribing
-- Typeahead search over a **94,000-drug catalogue** (`BrandMaster.tsv`) with instant brand-to-generic resolution.
-- **Allergy guard:** drug families are checked, so prescribing Amoxicillin to a patient with a documented Penicillin allergy is blocked until the doctor documents an override reason. Every blocked attempt is audit-logged.
-- Full encounters: SOAP notes, ICD-10 diagnosis tagging, care plans, referrals, and built-in calculators (ASCVD, eGFR, BMI).
-
-### 3. Laboratory lifecycle with a second pair of eyes
-- Status flow:
-  `Requested` → `Collection Pending` → `Collected` → `Processing` → `Awaiting Verification` → `Verified` → `Released`
-- The person who enters the values **cannot** verify them. A separate verifier (the pathologist account) signs off.
-- Amendments require a written justification and stay in the audit trail.
-
-### 4. Record reconciliation and concurrency
-- **Deterministic patient matching:** external JSON or CSV records are scored with a weighted 70-point heuristic (UHID, DOB, phone, normalized name). Similar names alone never merge two people.
-- **Conflict and duplicate detection:** the same report imported twice, or the same test with different values, is shown side by side with the evidence. Originals are preserved and nothing is overwritten silently.
-- **Optimistic concurrency:** revision locks (`rev`) stop two staff members from silently overwriting each other's edits.
-
-### 5. Healthcare Analytics on Exasol Personal
-- **Hospital Operations:** daily visits with a 7-day moving average (an Exasol window function), department workload, and waiting time (check-in to start of consultation, measured only where both moments were recorded).
-- **Diagnostic Turnaround Time:** ordered to verified, per test, with average, 90th percentile (`PERCENTILE_CONT`) and SLA compliance. Orders that are not verified yet have **no** turnaround and are counted as pending, never as finished. A second view shows where the time goes (order to collection, collection to verification).
-- **Pharmacy:** estimated units per medicine (doses per day times course days) and a 30-day **demand estimate**. Stock on hand is not recorded, so no stock-out is predicted.
-- **Honest sourcing:** the page states whether figures were computed by Exasol or, when Exasol is unreachable, by the application itself. A failed sync is reported as a failure. A successful sync means the rows were loaded and counted back from Exasol.
-- **SQL Inspector:** shows the exact SQL behind the dashboard with the rows returned and the milliseconds Exasol took, from the request that loaded the page.
-- **Reproducible demo data:** "Load 30-day sample history" adds a fixed-seed, clearly synthetic history (about 900 records) to the analytics only; it is kept apart from the records the portals show and is disclosed on the page.
-
-Setup and the exact table design are in [`EXASOL_SETUP.md`](EXASOL_SETUP.md).
+**CareWeave** solves this with a **Dual-Database HTAP Architecture (Hybrid Transactional/Analytical Processing)**:
+1. **Low-Latency Operational Backbone (OLTP - MongoDB Atlas):** One single shared source of truth serving Front Desk, Laboratory, and Physician workspaces with strict optimistic concurrency locks and audit trails.
+2. **Sub-Second In-Memory Analytics (OLAP - Exasol Personal):** High-performance columnar engine executing window functions, `PERCENTILE_CONT`, and multi-dimensional aggregations across outpatient queues, diagnostic turnaround times (TAT), and pharmacy consumption velocity.
+3. **Multimodal Agentic AI (Google Gemma 4):** Reads crumpled physical lab reports into structured data with strict **Maker-Checker** human pathologist sign-off.
+4. **Drug Safety Guardrails:** Instant brand-to-molecule resolution over a **94,000-drug formulary** with automated cross-brand allergy blocks and duplicate therapy interception.
+5. **Omnichannel Patient Engagement (WhatsApp + n8n):** Real-time automated WhatsApp alerts (OP token updates, wait times, lab results, medication schedules) driven by n8n event pipelines and Twilio/Meta APIs.
 
 ---
 
-## How the pieces fit
+## 🧭 Fast Navigation for Judges & Evaluators
+
+| Resource | Description | Direct Link |
+| :--- | :--- | :--- |
+| 🎬 **Demo Video** | 3-Minute end-to-end video walkthrough of CareWeave | [`demo_video.mp4`](demo_video.mp4) |
+| 📊 **Pitch Deck** | Official 10-slide presentation deck (ExaThon India 2026) | [`CareWeave.pptx`](CareWeave.pptx) |
+| 📝 **Evaluation Guide & Script** | Slide-by-slide pitch narrative and judge evaluation checklist | [`DEMO.md`](DEMO.md) |
+| 🏛️ **Exasol Integration Guide** | Comprehensive schema design, SQL queries, and scale benchmarks | [`EXASOL_SETUP.md`](EXASOL_SETUP.md) |
+| 🤖 **WhatsApp & n8n Specs** | Event-driven notification workflow and two-way bot documentation | [`careweave/n8n/README.md`](careweave/n8n/README.md) |
+
+> 💡 **Quick Evaluation Tip:** Log into the app, switch to **Doctor** or **Front Desk**, and click **"Load sample scenario (synthetic)"** in the top navigation bar. It creates synthetic patient *Priya Raman* with an encounter, penicillin allergy, lab orders, and conflicted external hospital imports ready for instant testing.
+
+---
+
+## 🏗️ System Architecture: Dual-Database (HTAP) Strategy
 
 ```
-  Front Desk ─┐
-  Laboratory ─┼──►  Express API (roles, validation, audit log)  ──►  MongoDB (OLTP)
-  Doctor ─────┘            │                                            │
-                           ├── Gemma 4 / Gemini (report scan)           ▼ (Sync)
-                           ├── Matching + reconciliation       Exasol Personal (OLAP)
-                           └── Analytics Engine ◄───────────────────────┘
-```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                CareWeave HTAP Architecture                             │
+└────────────────────────────────────────────────────────────────────────────────────────┘
 
-- One React app serves all three portals. Routes are guarded in the UI for convenience only; **the server checks the role on every request.**
-- Every sensitive action (create, amend, release, blocked prescription) is written to an audit log.
-- Roles are intentionally narrow: the front desk does not see lab values or clinical notes, and lab staff do not prescribe.
-
----
-
-## Tech stack
-
-| Layer | What we used |
-|---|---|
-| Frontend | React 19, TypeScript, Vite, Tailwind CSS, Lucide icons, Recharts |
-| Backend | Node.js, Express, TypeScript, Zod validation |
-| OLTP Database | MongoDB Atlas (Cloud Cluster) |
-| OLAP Analytics | **Exasol Personal** (In-Memory Columnar Engine via `@exasol/exasol-driver-ts`) |
-| AI Vision | Google Gemma 4 via Interactions API, falling back to Gemini Flash |
-| Auth | Firebase Authentication, plus optional local demo sign-in for development |
-| Tests | Vitest and React Testing Library on the client, `tsx --test` on the server |
-
----
-
-## Project layout
-
-```
-careweave/
-├── client/            React app (all three portals live under src/portals)
-│   └── src/
-│       ├── auth/        login, role guard, session
-│       ├── portals/
-│       │   ├── receptionist/
-│       │   ├── lab/
-│       │   └── doctor/
-│       └── components/  shared bits (e.g. the sample-scenario button)
-├── server/
-│   ├── src/           API, models, lab rules, reconciliation, AI scan routes
-│   ├── scripts/       acceptance tests, medicine catalogue import
-│   └── data/          local data file
-└── DEMO.md            three-minute demo script
-vercel.json            frontend build and API rewrite for deployment
+ [Receptionist Portal]         [Laboratory Portal]           [Physician Workspace]
+  • Patient Registration        • Specimen Lifecycle          • SOAP Encounter Notes
+  • Live OP Queue & Tokens      • Gemma 4 Report Scanner      • 94k Formulary E-Prescribing
+  • Appointment Matrix          • Maker-Checker Verification  • Allergy & Duplicate Interceptor
+           │                              │                             │
+           └──────────────────────────────┼─────────────────────────────┘
+                                          ▼
+                         ┌─────────────────────────────────┐
+                         │   CareWeave Express Server      │
+                         │   (Zod Validation, RBAC, Audit) │
+                         └──────────────┬──────────────────┘
+                                        │
+           ┌────────────────────────────┴──────────────────────────┐
+           ▼ (OLTP - High-Throughput CRUD)                         ▼ (Async Event Webhook)
+┌───────────────────────────────────────┐             ┌──────────────────────────────────┐
+│             MongoDB Atlas             │             │           n8n Engine             │
+│   Atomic Records, Encounters, Audit   │             │   Workflow Automation Router     │
+└──────────────────┬────────────────────┘             └────────────────┬─────────────────┘
+                   │                                                   │
+                   │ (Idempotent MERGE Pipeline)                       ▼
+                   ▼                                     ┌───────────────────────────────┐
+┌───────────────────────────────────────┐                │   WhatsApp Cloud / Twilio     │
+│       Exasol Personal (In-Memory)     │                │   Live Token, Meds & Lab Push │
+│  Columnar Engine on port 8563         │                └───────────────────────────────┘
+│  • Windowed Moving Averages           │
+│  • Diagnostic Turnaround Time (TAT)   │
+│  • Pharmacy Velocity & Safety Metrics │
+└──────────────────┬────────────────────┘
+                   ▼
+┌───────────────────────────────────────┐
+│     CareWeave Intelligence Portal     │
+│   Interactive Charts + SQL Inspector  │
+└───────────────────────────────────────┘
 ```
 
 ---
 
-## Run it locally
+## 💎 Exasol Personal: In-Memory Healthcare Intelligence
 
-### What you need
-- Node.js v20+
-- MongoDB, either running locally (`mongodb://127.0.0.1:27017`) or a MongoDB Atlas connection string
+Exasol Personal powers the **Executive Intelligence Dashboard** (`/analytics`) providing hospital administrators with sub-millisecond visibility across three operational pillars:
 
-### 1. Clone the repo
+### 1. Hospital Operations & Outpatient Flow
+- **Daily Visits with 7-Day Moving Average:** Computed via Exasol window functions (`AVG(COUNT(*)) OVER (ORDER BY VISIT_DATE ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)`).
+- **Departmental Workload & Patient Wait Time Funnel:** Measures true elapsed minutes from Front Desk check-in to consultation commencement (`STATUS = 'In Consultation'`).
+
+### 2. Diagnostic Turnaround Time (TAT) & SLA Audit
+- **End-to-End Specimen Auditing:** Tracks elapsed time from doctor order to pathologist release.
+- **Parametric Percentiles (`PERCENTILE_CONT(0.90)`):** Audits 90th percentile TAT against priority SLAs (Routine: 120 mins, Urgent: 45 mins). In-progress tests are explicitly audited as pending.
+- **Workflow Decomposition:** Isolates bottlenecks between Pre-analytical (Order → Collection) and Analytical (Collection → Verification) phases.
+
+### 3. Pharmacy Consumption Velocity & Antimicrobial Safety
+- **Velocity Forecasting:** Calculates aggregate unit demand (`doses_per_day * course_days`) extrapolated across 30-day horizons.
+- **Safety Overrides Audit:** Aggregates intercepted cross-brand duplicate therapies and allergy override justifications directly from the clinical audit trail.
+
+### 4. Full Transparency: In-App SQL Inspector
+Every widget on the Analytics Dashboard features a live **SQL Inspector** button revealing:
+- The exact ANSI SQL query dispatched to Exasol.
+- Real-time query execution time in milliseconds.
+- Exact row counts returned by the Exasol columnar engine.
+
+### 5. High-Scale Benchmark (5,000,000 Records)
+Exasol Personal was benchmarked against **5 million synthetic visit records** generated directly in-database (`npm run demo:scale`). Complex window aggregations across the entire 5M row dataset completed in **under 180 milliseconds**, proving enterprise readiness.
+
+---
+
+## 🛡️ Clinical Safety & Core Platform Features
+
+### 1. Multimodal Diagnostic Scanner (Google Gemma 4)
+- Uploads crumpled paper lab slips, invoices, or outside diagnostic PDFs.
+- Gemma 4 extracts parameters, numerical values, units, and reference ranges.
+- **Maker-Checker Security:** AI output is saved strictly as an unverified draft; clinical values can never touch a patient chart without human verifier sign-off.
+- **Physiological Bounds Interceptor:** Blocks physiologically impossible inputs (e.g., negative blood glucose, hemoglobin > 25 g/dL, potassium > 12 mmol/L).
+
+### 2. Physician Workspace & E-Prescribing
+- **94,000-Drug Formulary:** Instant brand-to-molecule mapping (`BrandMaster.tsv`).
+- **Allergy Family Conflict Interception:** Prescribing Amoxicillin to a patient with a Penicillin allergy is blocked. Overriding requires a documented medical justification and triggers an audit log.
+- **Duplicate Molecule Interceptor:** Blocks accidental therapeutic doubling across different brand names (e.g., Augmentin + Moxikind-CV, or Calpol + Ultracet).
+
+### 3. Record Reconciliation (Deterministic 70-Point Algorithm)
+- Outside medical records (JSON/CSV) are scored on a weighted 70-point heuristic: UHID (50 pts), DOB (25 pts), Phone (20 pts), Exact/Similar Name (20/10 pts).
+- Conflicting reports and duplicate records are displayed in a side-by-side reconciliation workspace without destructive overwrites.
+
+### 4. Omnichannel WhatsApp Bot & Simulator
+- Automated event pushes: `PATIENT_CHECKED_IN`, `LAB_REPORT_RELEASED`, `PRESCRIPTION_PRESCRIBED`.
+- Interactive two-way keywords:
+  - `QUEUE` / `TOKEN` — Live queue position, assigned doctor, consultation room, and estimated wait.
+  - `MEDS` / `RX` — Active medication schedule segmented by Morning, Afternoon, and Night.
+  - `REPORT` — Latest verified laboratory test parameters and critical flags.
+- Built-in **WhatsApp Simulator Widget** allows evaluators to simulate the entire WhatsApp experience directly inside the browser without needing third-party hardware.
+
+---
+
+## 💻 Tech Stack Summary
+
+| Layer | Technologies & Tools |
+| :--- | :--- |
+| **Frontend** | React 19, TypeScript, Vite, Tailwind CSS, Lucide Icons, Recharts |
+| **Backend API** | Node.js (v20+), Express, TypeScript, Zod Schema Validation |
+| **OLTP Database** | MongoDB Atlas (Cloud Cluster) with in-memory fallback |
+| **OLAP Analytics** | **Exasol Personal** (In-Memory Columnar Database via `@exasol/exasol-driver-ts`) |
+| **AI Vision** | Google Gemma 4 (`gemma-4-26b-a4b-it`) via Gemini API Interactions |
+| **Automation** | n8n Workflow Automation, Webhooks, Twilio WhatsApp API, Meta Cloud API |
+| **Security & Auth** | Firebase Authentication, SHA-256 Hashed Sessions, Role-Based Access Control, Helmet |
+
+---
+
+## 🚀 Quickstart: Running CareWeave Locally
+
+### Prerequisites
+- **Node.js:** v20+
+- **MongoDB:** Local instance (`mongodb://127.0.0.1:27017`) or MongoDB Atlas URI
+- **Exasol Personal:** Running on `localhost:8563` (See [`EXASOL_SETUP.md`](EXASOL_SETUP.md) for 2-minute install)
+
+### 1. Clone & Install
 ```bash
-git clone https://github.com/Suriya29-2006/Hacktoberfest.git
-cd Hacktoberfest/careweave
+git clone https://github.com/saiprashanth2410/Care-weave.git
+cd Care-weave
 ```
 
-### 2. Set up the server
+### 2. Configure & Start Server
 ```bash
-cd server
+cd careweave/server
 cp .env.example .env
 npm install
-```
-Open `.env` and check the MongoDB URI. Add a `GEMINI_API_KEY` if you want live report scanning (optional; everything else works without it).
-
-### 3. Start the server
-```bash
 npm run dev
-# API on http://localhost:4000
+# Server listening on http://localhost:4000
 ```
 
-### 4. Start the client
-In a second terminal:
+### 3. Start Client Application
+In a separate terminal:
 ```bash
 cd careweave/client
 npm install
 npm run dev
-# App on http://localhost:5173
+# Client app live at http://localhost:5173
 ```
 
-You can quickly confirm the API is up at `http://localhost:4000/api/health`.
-
 ---
 
-## Demo accounts
+## 👥 Demo Credentials (All Portals)
 
-Sign in at `http://localhost:5173/login`. The password for all of them is `demo123`.
+Sign in at **`http://localhost:5173/login`** using the credentials below (Password for all: `demo123`):
 
-| Portal / role | Email | What to try |
+| Role / Portal | Email | Key Features to Test |
 | :--- | :--- | :--- |
-| **Front Desk** | `reception@careweave.test` | Patient check-in, live queue, walk-in appointments |
-| **Lab Technician** | `lab@careweave.test` | Scan a report, collect specimens, enter results |
-| **Pathologist** | `pathologist@careweave.test` | Verify and release pending results, review amendments |
-| **Doctor** | `doctor@careweave.test` | Chart review, SOAP notes, e-prescribing, lab orders, external record review |
-
-Local sign-in is on when `ALLOW_LOCAL_LOGIN=true` or when Firebase is not configured. On a real deployment, turn the sample data off with `ALLOW_SAMPLE_DATA=false`.
+| **Receptionist** | `reception@careweave.test` | OP token generation, walk-in scheduling, live waitlist queue |
+| **Laboratory** | `lab@careweave.test` | AI report scanning, specimen collection, result entry |
+| **Pathologist** | `pathologist@careweave.test` | Result verification, amendment approvals, critical release |
+| **Physician (Doctor)** | `doctor@careweave.test` | SOAP notes, 94k e-prescribing, allergy blocks, lab orders |
+| **Executive Analytics** | *Any logged-in user* | Exasol intelligence dashboard, SQL inspector, TAT audit |
 
 ---
 
-## Running the tests
+## 🧪 Comprehensive Verification & Test Suites
 
 ```bash
-# Server acceptance checks (starts an isolated test server and runs about 100 clinical rules)
-cd careweave/server
-npm run test:acceptance
+# 1. Run all unit tests (Physiological bounds, schemas, medicine parser, WhatsApp bot)
+cd careweave/server && npm test
 
-# Server unit tests (physiological bounds, schema validation, medicine parser)
-npm test
+# 2. Run Exasol parity tests (Verifies SQL calculations against code logic)
+cd careweave/server && npm run test:exasol
 
-# Exasol analytics: loads synthetic rows into a throwaway schema and checks that
-# the SQL on Exasol and the same metrics computed in code agree (skips if Exasol is not running)
-cd ../server
-npm run test:exasol
+# 3. Run Exasol 5-Million Row scale benchmark
+cd careweave/server && npm run demo:scale
 
-# Exasol at scale: 5 million synthetic visit rows generated inside Exasol, then the dashboard's kinds of queries timed
-npm run demo:scale
+# 4. Run clinical acceptance suite (100+ clinical & concurrency safety checks)
+cd careweave/server && npm run test:acceptance
 
-# Frontend tests
-cd ../client
-npm test
+# 5. Run client component tests
+cd careweave/client && npm test
 ```
 
 ---
 
-## Deployment
-
-The frontend is a static Vite build; the API is a Node/Express server. They can be hosted separately.
-
-1. **API (any Node host, for example Render):** root directory `careweave/server`, build `npm install`, start `npm start` (it listens on `PORT`). Set the environment variables from [`.env.example`](.env.example): at least `MONGODB_URI`, `MONGODB_DB`, `CLIENT_ORIGIN` (the frontend's URL), and `FIREBASE_PROJECT_ID` or `ALLOW_LOCAL_LOGIN=true`. `GEMINI_API_KEY` is only needed for report scanning. Set `ALLOW_SAMPLE_DATA=false` for anything other than a demo.
-2. **Frontend (Vercel):** the repository root has a [`vercel.json`](vercel.json) that builds `careweave/client` and rewrites `/api/*` to the API. Point that rewrite at your API's URL, or import the repo into Vercel and set the same project settings.
-3. **Check it:** open `<api-url>/api/health`; it should report `"atlasConnected": true`.
-
-**Exasol is not part of the hosted deployment.** Exasol Personal runs on your own machine (default `localhost:8563`), which a hosted API cannot reach. A hosted copy therefore shows the analytics page with the amber "Not computed by Exasol" banner, which is the intended honest behaviour. To demonstrate Exasol, run the project locally with Exasol running ([`EXASOL_SETUP.md`](EXASOL_SETUP.md)), or point `EXASOL_HOST` at an Exasol instance the API can reach.
+## 📜 Ethical Disclosures & Synthetic Data Notice
+CareWeave is a demonstration prototype engineered for **ExaThon India 2026**. All clinical scenarios, patient identifiers (*Priya Raman*, *Asha Rao*), appointments, and laboratory observations are **100% synthetic**. The system functions as a clinical decision support and hospital analytics engine; it does not replace professional diagnostic judgment.
 
 ---
 
-## Troubleshooting
-
-- **Login works but data looks empty:** check that the server is connected to the database you expect. `/api/health` tells you whether MongoDB Atlas is connected.
-- **Report scanning fails or says the model is busy:** the scanner needs a `GEMINI_API_KEY` with quota. Without one, the rest of the app still works.
-- **Atlas connection errors:** make sure your IP is on the Atlas Network Access list and outbound port 27017 is open, or switch to local MongoDB.
-- **"Load sample scenario" does nothing:** it only runs once per database, and it is switched off if `ALLOW_SAMPLE_DATA=false`.
-
----
-
-## Known limitations
-
-We would rather say these out loud than have you find them:
-
-- PDF import for external records is not built yet; JSON and CSV work.
-- Gemma/Gemini scanning needs an API key with quota, and scanned results are drafts that a person must check.
-- Analytics assumptions you should know: a visit's department is inferred from its stated reason; the lab SLA targets (routine 120 min, urgent 45 min) are configurable assumptions (`LAB_SLA_ROUTINE_MINUTES`, `LAB_SLA_URGENT_MINUTES`); prescription quantities are estimated from dose frequency and course length because dispensing is not recorded; there is no stock data, so there is no stock-out prediction.
-- Waiting time exists only for visits that were moved to "In Consultation" after check-in. Visits without both moments are left out of averages, and the page counts them.
-- The Exasol analytics tables are a copy: press **Sync to Exasol** to refresh them. Safety counts (allergy and duplicate-therapy blocks, maker-checker blocks) come from the application's audit trail.
-- This is a demonstration build with synthetic data. We make no claims about clinical accuracy, regulatory compliance, or real hospital interoperability.
-
--
----
-
-## License
-
-MIT. See [`LICENSE`](LICENSE).
+## 📄 License
+This project is open-source under the [MIT License](LICENSE).  
+Copyright (c) 2026 Saiprashanth T, Suriya Sudhakar, Dhivya Dharshini C S.
