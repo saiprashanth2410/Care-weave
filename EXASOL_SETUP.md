@@ -8,9 +8,9 @@
 
 ## 1. Architecture Overview: Dual-Database Strategy (OLTP + OLAP)
 
-Modern clinical hospital operations demand sub-second latency for front desk and emergency consultations, alongside complex multi-dimensional aggregation across millions of diagnostic and prescription records.
+Front-desk and consultation screens need fast single-record reads and writes, while operational reporting needs aggregation across many visits, lab orders and prescriptions. CareWeave keeps those two jobs in two databases.
 
-CareWeave resolves this through a **Hybrid Transactional/Analytical Processing (HTAP)** architecture:
+CareWeave uses **OLTP (MongoDB) + OLAP (Exasol) with an on-demand `MERGE` sync** (it is not an HTAP engine: the two stores are separate and Exasol only sees data after a sync):
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -29,7 +29,7 @@ CareWeave resolves this through a **Hybrid Transactional/Analytical Processing (
            ▼ (OLTP - Low Latency CRUD)                             ▼ (OLAP - Analytical Queries)
 ┌───────────────────────────┐                             ┌───────────────────────────┐
 │       MongoDB Atlas       │───[Idempotent Pipeline]────►│      Exasol Personal      │
-│   Transactional Database  │        (MERGE / UPSERT)     │     In-Memory Columnar    │
+│   Transactional Database  │        (MERGE / UPSERT)     │     Columnar Analytics    │
 │  (Patients, Encounters,   │                             │      Analytics Engine     │
 │   Lab Orders, Scans, Rx)  │                             │   (TAT, Workload, Supply) │
 └───────────────────────────┘                             └─────────────┬─────────────┘
@@ -42,8 +42,8 @@ CareWeave resolves this through a **Hybrid Transactional/Analytical Processing (
 ```
 
 1. **MongoDB Atlas (OLTP)**: Manages atomic clinical records, active patient tokens, encrypted credentials, and lab results.
-2. **Exasol Personal (OLAP)**: In-memory columnar analytics database executing sub-second group-by and window functions over diagnostic turnaround times, departmental patient wait funnels, and pharmacy consumption velocity.
-3. **Idempotent Data Pipeline (`sync.ts`)**: Reads clinical operational events and executes SQL `MERGE` commands to synchronize records into Exasol analytics fact tables without duplicate risk.
+2. **Exasol Personal (OLAP)**: Columnar analytics database executing group-by and window functions over diagnostic turnaround times, departmental patient wait funnels, and pharmacy consumption velocity.
+3. **Idempotent Data Pipeline (`sync.ts`)**: Runs when someone presses **Sync to Exasol** (nothing schedules it). It reads the visits, lab orders and prescriptions from MongoDB and executes SQL `MERGE` commands to synchronize records into Exasol analytics fact tables without duplicate risk.
 
 ---
 

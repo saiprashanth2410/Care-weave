@@ -23,13 +23,13 @@
 * **Blind Prescribing:** Doctors prescribe without real-time allergy cross-checks or knowledge of external medication histories.
 * **Analytics Lag:** Traditional hospital databases crawl under multi-table aggregations, leaving hospital administrators blind to turnaround bottlenecks.
 
-### Slide 3: The Solution — CareWeave HTAP Architecture
+### Slide 3: The Solution — CareWeave OLTP + OLAP Architecture
 * **Unified Clinical Records:** Three role-based portals (Receptionist, Pathologist, Physician) sharing a synchronized backbone.
 * **Gemma 4 Multimodal Scanner:** AI vision scans messy paper reports into structured lab values with strict **Maker-Checker** human verification.
 * **Safety Guardrails:** 94,000-drug formulary with automated allergy family conflict blocks (e.g., blocking Amoxicillin for Penicillin-allergic patients).
 * **Exasol Personal In-Memory Engine:** Columnar analytical store running window functions and percentiles over diagnostic turnaround times (TAT), outpatient waiting times and prescribing volume. Every figure is labelled as measured or estimated.
 
-### Slide 4: Dual-Database Strategy (HTAP)
+### Slide 4: Dual-Database Strategy (MongoDB OLTP + Exasol OLAP)
 * **MongoDB Atlas (OLTP):** High-throughput transactional writes for admissions, token queuing, encounters, and audit logs.
 * **Exasol Personal (OLAP):** Columnar in-memory analytical engine for real-time aggregation across thousands of visits and lab tests.
 * **Idempotent Data Pipeline:** Safe SQL `MERGE` data replication that prevents duplicate records and handles network retry seamlessly.
@@ -84,7 +84,7 @@
   > "Everything we just did is data. One click loads a clearly synthetic thirty-day history, and the sync loads it into **Exasol Personal** with an idempotent SQL MERGE, then counts the rows back from Exasol before it says it succeeded.
   > The banner tells us these figures are computed by Exasol. Under Operations, the department table shows Cardiology patients waiting much longer than General Medicine. That gap is a staffing question.
   > In the lab tab, turnaround runs from order to verification. Compare the average with the 90th percentile and the SLA compliance column, and look at the stage cards: most of the time sits between collection and verification. Orders still in progress are not counted as if they were done.
-  > Now the SQL Inspector: this is the exact SQL that just ran, with rows returned and milliseconds. Window functions for the moving average, PERCENTILE_CONT for the p90. We also ran the same kinds of queries on five million synthetic rows: on my laptop each answered in under half a second."
+  > Now the SQL Inspector: this is the exact SQL that just ran, with rows returned and milliseconds. Window functions for the moving average, PERCENTILE_CONT for the p90. `npm run demo:scale` runs the same kinds of queries over millions of synthetic rows inside Exasol; quote its printed numbers only after running it on the demo machine."
 
 ### **[2:40 - 3:00] Scene 5: Conclusion & Vision**
 * **Visual:** CareWeave Architecture Slide / GitHub Repository.

@@ -15,7 +15,7 @@
 | **Front Desk Portal** | Built & Server-backed | Patient registration, live OP waitlist queue, token printer |
 | **Laboratory Portal** | Built & Server-backed | Specimen collection, Gemma 4 AI scanner, maker-checker verification |
 | **Doctor Portal** | Built & Server-backed | SOAP encounters, 94k formulary prescribing, allergy & duplicate blocks |
-| **Exasol In-Memory Analytics** | Built & Integrated | Sub-second TAT audit, percentiles (`PERCENTILE_CONT`), moving averages |
+| **Exasol Analytics** | Built & Integrated | TAT audit, percentiles (`PERCENTILE_CONT`), moving averages. On-demand `MERGE` sync; no timing claimed |
 | **WhatsApp Patient Bot & n8n** | Built & Integrated | Event-driven token push, live queue status, prescription schedules |
 | **Record Reconciliation** | Built & Server-backed | Deterministic 70-point heuristic scoring, conflict side-by-side view |
 
@@ -56,10 +56,10 @@ Password for all accounts: **`demo123`**
 
 ```bash
 cd server
-npm test                 # Unit tests (bounds, validation, WhatsApp parsing, safety)
-npm run test:exasol      # Exasol in-memory analytics parity checks
-npm run demo:scale       # 5-Million row benchmark on Exasol Personal
-npm run test:acceptance  # End-to-end clinical acceptance checks (100+ rules)
+npm test                 # Unit + integration tests (rules, WhatsApp, 409 conflicts, sessions, webhook signature)
+npm run test:exasol      # Exasol analytics parity checks (needs Exasol)
+npm run demo:scale       # Scale benchmark on Exasol Personal (needs Exasol; prints its own timings)
+npm run test:acceptance  # End-to-end acceptance checks against MongoDB (102)
 
 cd ../client
 npm test                 # React component & Vitest suites
