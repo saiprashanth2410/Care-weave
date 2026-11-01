@@ -16,9 +16,14 @@ import type {
   VitalSign
 } from './types';
 
+// The server answers 409 with this text when a record changed after this screen read it.
+const CONFLICT='Record was changed by someone else, reload and retry';
+const RELOAD='Someone else changed this record while you had it open. Reload the page to see the latest version, then try again.';
+
 const json=async<T>(res:Response):Promise<T>=>{
   const body=await res.json().catch(()=>({}));
   if(res.status===401){localStorage.removeItem('cw_token');window.location.assign('/login');}
+  if(res.status===409&&body.error===CONFLICT)throw Object.assign(new Error(RELOAD),{body,status:409,conflict:true});
   if(!res.ok)throw Object.assign(new Error(body.error||'Request failed'),{body,status:res.status});
   return body;
 };
@@ -62,7 +67,7 @@ export const api={
       }`
     ),
   createAppointment:(body:any)=>request<Appointment>('/api/appointments',{method:'POST',body:JSON.stringify(body)}),
-  updateAppointment:(id:string,body:{status?:string;date?:string;time?:string;reason?:string})=>
+  updateAppointment:(id:string,body:{status?:string;date?:string;time?:string;reason?:string;version?:number})=>
     request<Appointment>(`/api/appointments/${id}`,{method:'PATCH',body:JSON.stringify(body)}),
 
   // Clinical Encounters & Notes (SOAP)
@@ -90,7 +95,7 @@ export const api={
   searchMedicines:(q:string)=>request<{id:string;name:string;brand:string;generic:string;strength:string;form:string;route:string}[]>(`/api/medicines/search?q=${encodeURIComponent(q)}`),
   validatePrescription:(body:{patientId:string;medicine:string;dosage?:string;frequency?:string})=>request<{alerts:CollisionAlert[];blocking:boolean}>('/api/encounters/validate-prescription',{method:'POST',body:JSON.stringify(body)}),
   createPrescription:(body:any)=>request<Prescription>('/api/prescriptions',{method:'POST',body:JSON.stringify(body)}),
-  updatePrescription:(id:string,body:{status?:string;refills?:number;discontinueReason?:string})=>
+  updatePrescription:(id:string,body:{status?:string;refills?:number;discontinueReason?:string;version?:number})=>
     request<Prescription>(`/api/prescriptions/${id}`,{method:'PATCH',body:JSON.stringify(body)}),
 
   // Referrals

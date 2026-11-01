@@ -343,7 +343,7 @@ export function DoctorPatientRecords({
                                   className="secondary small-btn"
                                   onClick={async () => {
                                     if (window.confirm(`Discontinue ${p.medicine}?`)) {
-                                      await api.updatePrescription(p.id, { status: 'Discontinued', discontinueReason: 'Clinician stopped' });
+                                      await api.updatePrescription(p.id, { status: 'Discontinued', discontinueReason: 'Clinician stopped', version: p.version });
                                       notify(`Medication discontinued`);
                                       refreshCurrentRecord();
                                     }

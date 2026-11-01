@@ -132,7 +132,7 @@ export function DoctorOverview({
                         className="primary small-btn"
                         onClick={async () => {
                           try {
-                            await api.updateAppointment(a.id, { status: 'In Consultation' });
+                            await api.updateAppointment(a.id, { status: 'In Consultation', version: a.version });
                             notify(`Started consultation with ${a.patientName}`);
                             if (patientObj) onStartConsultation(patientObj);
                             else go('consultations');
@@ -152,7 +152,7 @@ export function DoctorOverview({
                         style={{ background: '#f6f7f3', color: '#56655f', borderColor: '#c3cac2' }}
                         onClick={async () => {
                           try {
-                            await api.updateAppointment(a.id, { status: 'Completed' });
+                            await api.updateAppointment(a.id, { status: 'Completed', version: a.version });
                             notify(`Encounter with ${a.patientName} marked completed`);
                           } catch (e) {
                             notify((e as Error).message);

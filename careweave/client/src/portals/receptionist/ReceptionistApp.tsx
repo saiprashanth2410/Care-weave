@@ -422,7 +422,7 @@ function OverviewSection({
 
   const handleQuickCheckIn = async (a: Appointment) => {
     try {
-      await api.updateAppointment(a.id, { status: 'Checked In' });
+      await api.updateAppointment(a.id, { status: 'Checked In', version: a.version });
       notify(`${a.patientName} checked in. Opening token slip.`);
       onPrintToken?.(a, 1);
       loadData();
@@ -433,7 +433,7 @@ function OverviewSection({
 
   const handleCallIn = async (a: Appointment) => {
     try {
-      await api.updateAppointment(a.id, { status: 'In Consultation' });
+      await api.updateAppointment(a.id, { status: 'In Consultation', version: a.version });
       notify(`${a.patientName} called into consultation`);
       loadData();
     } catch (e) {
@@ -707,7 +707,7 @@ function QueueSection({
 
   const handleStatusChange = async (a: Appointment, status: string) => {
     try {
-      await api.updateAppointment(a.id, { status });
+      await api.updateAppointment(a.id, { status, version: a.version });
       notify(`${a.patientName} status updated to "${status}"`);
       load();
     } catch (e) {
@@ -971,7 +971,7 @@ function AppointmentsSection({
 
   const handleStatus = async (a: Appointment, status: string) => {
     try {
-      await api.updateAppointment(a.id, { status });
+      await api.updateAppointment(a.id, { status, version: a.version });
       notify(`Appointment marked as "${status}"`);
       loadAppointments();
     } catch (e) {
@@ -1824,8 +1824,8 @@ function EditPatientModal({
     setBusy(true);
     setError('');
     try {
-      // rev lets the server refuse the save if someone else changed this patient while the form was open.
-      const res = await api.updatePatient(patient.id, { ...form, rev: patient.rev ?? 0 });
+      // version lets the server refuse the save if someone else changed this patient while the form was open.
+      const res = await api.updatePatient(patient.id, { ...form, version: patient.version });
       onSaved(res);
     } catch (e: any) {
       setError(e.message || 'Failed to update demographics');
@@ -2150,7 +2150,7 @@ function RescheduleModal({
     setBusy(true);
     setError('');
     try {
-      await api.updateAppointment(appointment.id, { date, time, reason });
+      await api.updateAppointment(appointment.id, { date, time, reason, version: appointment.version });
       onSaved();
     } catch (e: any) {
       setError(e.message || 'Failed to reschedule appointment');

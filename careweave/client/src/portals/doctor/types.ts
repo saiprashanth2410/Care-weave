@@ -66,7 +66,7 @@ export type CarePlan={
   status:'Active'|'Completed'|'Under Review';
 };
 
-export type Prescription={
+export type Prescription={version?:number;
   id:string;
   patientId:string;
   encounterId?:string;
@@ -118,7 +118,7 @@ export type Patient={
 
 export type Doctor={id:string;name:string;facility:string};
 
-export type Appointment={
+export type Appointment={version?:number;
   id:string;
   patientId:string;
   patientName:string;

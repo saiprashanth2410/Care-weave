@@ -39,7 +39,7 @@ export function DoctorAppointments({
 
   const handleStatus = async (a: Appointment, status: string) => {
     try {
-      await api.updateAppointment(a.id, { status });
+      await api.updateAppointment(a.id, { status, version: a.version });
       notify(`Appointment marked ${status}`);
       load();
     } catch (e) {

@@ -27,7 +27,8 @@ export type Patient = {
   emergencyContact?: string;
   createdAt: string;
   risk?: string;
-  rev?: number;
+  /** Counter the server bumps on every save. Send it back with an edit so the server can tell the copy is out of date. */
+  version?: number;
 };
 
 export type Doctor = {
@@ -50,6 +51,7 @@ export type Appointment = {
   status: string;
   checkedInAt?: string;
   rescheduledAt?: string;
+  version?: number;
 };
 
 export type AdminPatientRecord = Patient & {

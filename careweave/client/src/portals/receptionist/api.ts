@@ -1,11 +1,16 @@
 import type { AdminPatientRecord, Appointment, Dashboard, Doctor, Patient, User } from './types';
 
+// The server answers 409 with this text when a record changed after this screen read it.
+const CONFLICT = 'Record was changed by someone else, reload and retry';
+const RELOAD = 'Someone else changed this record while you had it open. Reload the page to see the latest version, then try again.';
+
 const json = async <T>(res: Response): Promise<T> => {
   const body = await res.json().catch(() => ({}));
   if (res.status === 401) {
     localStorage.removeItem('cw_token');
     window.location.assign('/login');
   }
+  if (res.status === 409 && body.error === CONFLICT) throw new Error(RELOAD);
   if (!res.ok) throw new Error(body.error || 'Request failed');
   return body;
 };
@@ -39,6 +44,6 @@ export const api = {
       }`
     ),
   createAppointment: (body: any) => request<Appointment>('/api/appointments', { method: 'POST', body: JSON.stringify(body) }),
-  updateAppointment: (id: string, body: { status?: string; date?: string; time?: string; reason?: string }) =>
+  updateAppointment: (id: string, body: { status?: string; date?: string; time?: string; reason?: string; version?: number }) =>
     request<Appointment>(`/api/appointments/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 };

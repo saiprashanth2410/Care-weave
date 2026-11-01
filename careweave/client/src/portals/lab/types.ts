@@ -48,6 +48,8 @@ export interface Attachment {
 }
 
 export interface LabOrder {
+  /** Counter the server bumps on every save; sent back with an edit so an out-of-date copy is refused. */
+  version?: number
   id: string
   patientId: string
   encounterId: string

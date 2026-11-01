@@ -4,8 +4,25 @@ import type { LabOrder, LabOrderStatus, Priority, TestResultItem } from './types
 export { TEST_TEMPLATES } from './testCatalog'
 import { TEST_TEMPLATES } from './testCatalog'
 
+// The server answers 409 with this text when a record changed after this screen read it.
+const CONFLICT = 'Record was changed by someone else, reload and retry'
+const RELOAD = 'Someone else changed this order while you had it open. Reload the page to see the latest version, then try again.'
+
+// The version of each order as this screen last read it. An edit sends it back, so the server can refuse an out-of-date copy
+// instead of overwriting a newer one. Chained edits (collect, then submit) keep working because every response refreshes it.
+const seenVersion = new Map<string, number>()
+const remember = (o: unknown) => {
+  const x = o as { id?: unknown; version?: unknown } | null
+  if (x && typeof x.id === 'string' && Number.isInteger(x.version)) seenVersion.set(x.id, x.version as number)
+}
+
 async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
   const token = getToken()
+  const edit = init.method === 'PATCH' ? url.match(/^\/api\/lab\/orders\/([^/]+)$/) : null
+  if (edit && typeof init.body === 'string') {
+    const version = seenVersion.get(decodeURIComponent(edit[1]))
+    if (version !== undefined) init = { ...init, body: JSON.stringify({ ...JSON.parse(init.body), version }) }
+  }
   const res = await fetch(url, {
     ...init,
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -18,10 +35,13 @@ async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
       window.location.assign('/login')
       throw new Error('Your session has ended. Sign in again.')
     }
-    const message = body.error || `Request failed (${res.status})`
+    const message = res.status === 409 && body.error === CONFLICT ? RELOAD : body.error || `Request failed (${res.status})`
     window.dispatchEvent(new CustomEvent('cw:error', { detail: { message, write: !!init.method && init.method !== 'GET' } }))
     throw new Error(message)
   }
+  const data = (body as { data?: unknown }).data
+  if (Array.isArray(data)) data.forEach(remember)
+  else remember(data)
   return body as T
 }
 
