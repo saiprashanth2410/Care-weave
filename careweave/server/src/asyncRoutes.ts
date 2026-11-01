@@ -1,8 +1,8 @@
-import type { Express } from 'express';
+import type { IRouter } from 'express';
 
 // Express 4 does not catch a rejected async handler: one bad request body would crash the whole process.
 // Wrapping every route handler once makes a throw reach the error middleware instead.
-export function catchAsyncRoutes(app: Express) {
+export function catchAsyncRoutes(app: IRouter) {
   for (const method of ['get', 'post', 'put', 'patch', 'delete'] as const) {
     const register = (app[method] as any).bind(app);
     (app as any)[method] = (path: any, ...handlers: any[]) =>

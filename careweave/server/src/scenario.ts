@@ -3,7 +3,7 @@
 export const SAMPLE_NAME = 'Priya Raman';
 export const SAMPLE_DOB = '1984-03-12';
 
-type Mint = (userId: string) => string;
+type Mint = (userId: string) => Promise<string>;
 
 export async function runScenario(base: string, users: any[], patients: any[], mint: Mint, requester: any) {
   if (patients.some((p) => p.sample)) return { loaded: false, message: 'The sample scenario is already loaded.' };
@@ -15,7 +15,7 @@ export async function runScenario(base: string, users: any[], patients: any[], m
   const enterer = labs.find((u) => u.id !== verifier?.id);
   if (!doctor || !receptionist || !verifier || !enterer) throw new Error('Needs a front desk, a doctor, a lab user and a second lab user who can verify.');
 
-  const tok = { rec: mint(receptionist.id), doc: mint(doctor.id), lab: mint(enterer.id), ver: mint(verifier.id) };
+  const tok = { rec: await mint(receptionist.id), doc: await mint(doctor.id), lab: await mint(enterer.id), ver: await mint(verifier.id) };
   const call = async (method: string, path: string, token: string, body?: unknown) => {
     const r = await fetch(`${base}${path}`, { method, headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: body ? JSON.stringify(body) : undefined });
     const json: any = await r.json().catch(() => ({}));

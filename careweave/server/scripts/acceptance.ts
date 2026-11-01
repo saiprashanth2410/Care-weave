@@ -153,8 +153,8 @@ async function main() {
     check('two receptionists booking the same doctor slot at once: exactly one wins', two.map((r) => r.status).sort().join() === '201,409', two.map((r) => r.status).join());
 
     const p1 = (await call('GET', `/api/patients?query=${encodeURIComponent(pat.patientId)}`, rec)).json[0];
-    const first = await call('PATCH', `/api/patients/${pat.id}`, rec, { phone: '+1 415 555 0111', rev: p1.rev });
-    const stale = await call('PATCH', `/api/patients/${pat.id}`, rec, { phone: '+1 415 555 0222', rev: p1.rev });
+    const first = await call('PATCH', `/api/patients/${pat.id}`, rec, { phone: '+1 415 555 0111', version: p1.version });
+    const stale = await call('PATCH', `/api/patients/${pat.id}`, rec, { phone: '+1 415 555 0222', version: p1.version });
     check('an edit made on a stale copy is refused, not silently applied', first.status === 200 && stale.status === 409, `${first.status}/${stale.status}`);
     const paged = await call('GET', '/api/patients?limit=1', rec);
     check('patient directory is paged and reports its total', paged.json.length === 1 && Number(paged.headers.get('x-total-count')) >= 3);
