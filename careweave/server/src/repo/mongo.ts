@@ -1,5 +1,5 @@
 import type mongoose from 'mongoose';
-import { ConflictError, DuplicateError, VERSIONED, splitChanges, type Collection, type Filter, type FindOpts, type IndexSpec, type Store } from './store.js';
+import { ConflictError, DuplicateError, VERSIONED, splitChanges, type Collection, type FileStore, type Filter, type FindOpts, type IndexSpec, type Store } from './store.js';
 
 type Db = NonNullable<typeof mongoose.connection.db>;
 type MongoColl<T = any> = ReturnType<Db['collection']> & { __t?: T };
@@ -105,6 +105,16 @@ class MongoCollection implements Collection {
 
 export class MongoStore implements Store {
   readonly mode = 'mongo' as const;
+  /** One document per file: { id, size, data }. Files are at most 10 MB, under MongoDB's 16 MB document limit. */
+  readonly files: FileStore = {
+    put: async (id, data) => { await this.db.collection('files').replaceOne({ id }, { id, size: data.length, data, at: new Date() }, { upsert: true }); },
+    get: async (id) => {
+      const doc = await this.db.collection('files').findOne({ id });
+      return doc ? Buffer.from((doc.data as any).buffer) : null;
+    },
+    delete: async (id) => { await this.db.collection('files').deleteOne({ id }); },
+  };
+
   private transactionsSupported = true;
   constructor(
     private db: Db, private closeFn: () => Promise<void>, private onChange: (name: string) => void = () => {},

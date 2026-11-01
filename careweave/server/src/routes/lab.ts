@@ -245,8 +245,8 @@ export function labRoutes(ctx: AppCtx) {
     if (!buf.length || buf.length > 10 * 1024 * 1024) return res.status(400).json({ error: 'The file must be smaller than 10 MB' });
     if (!type.magic.every((byte, i) => buf[i] === byte)) return res.status(400).json({ error: 'The file content does not match its type' });
     const attId = id('att');
-    await fs.mkdir(ctx.config.uploadsDir, { recursive: true });
-    await fs.writeFile(path.join(ctx.config.uploadsDir, `${attId}.${type.ext}`), buf);
+    // The file goes to the shared store (MongoDB), not to this server's disk, so every instance can serve it.
+    await ctx.repos.store.files.put(attId, buf);
     const meta = {
       id: attId,
       name: text(req.body?.name, 120).replace(/[^\w.\- ()]/g, '_') || `report.${type.ext}`,
@@ -256,7 +256,13 @@ export function labRoutes(ctx: AppCtx) {
       uploadedBy: req.user.name,
       uploadedAt: now()
     };
-    const saved = await ctx.repos.orders.update(o, { attachments: [...(o.attachments || []), meta] }, expectedVersion(req, o));
+    let saved;
+    try {
+      saved = await ctx.repos.orders.update(o, { attachments: [...(o.attachments || []), meta] }, expectedVersion(req, o));
+    } catch (err) {
+      await ctx.repos.store.files.delete(attId).catch(() => {}); // the order moved on; do not leave an unreferenced file
+      throw err;
+    }
     await audit(req, 'attach', 'labOrder', o.id, `${meta.name} (${Math.round(buf.length / 1024)} KB)`);
     res.status(201).json({ data: saved });
   });
@@ -271,7 +277,8 @@ export function labRoutes(ctx: AppCtx) {
     }
     const ext = FILE_TYPES[meta.mimeType].ext;
     try {
-      const buf = await fs.readFile(path.join(ctx.config.uploadsDir, `${meta.id}.${ext}`));
+      // Files saved before the shared store existed are still on that server's disk.
+      const buf = (await ctx.repos.store.files.get(meta.id)) ?? await fs.readFile(path.join(ctx.config.uploadsDir, `${meta.id}.${ext}`));
       await audit(req, 'download', 'labOrder', o.id, meta.name);
       res.setHeader('Content-Type', meta.mimeType);
       res.setHeader('X-Content-Type-Options', 'nosniff');

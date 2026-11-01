@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { idIndex } from './base.js';
 import { usersRepo, usersIndexes } from './users.js';
 import { patientsRepo, patientsIndexes } from './patients.js';
 import { appointmentsRepo, appointmentsIndexes } from './appointments.js';
@@ -19,7 +20,7 @@ import { MongoStore } from './mongo.js';
 import { LocalStore } from './local.js';
 import type { Store } from './store.js';
 
-export { ConflictError, DuplicateError, type Store } from './store.js';
+export { ConflictError, DuplicateError, type Store, type FileStore } from './store.js';
 export { LocalStore } from './local.js';
 
 function collections(store: Store) {
@@ -58,7 +59,7 @@ export const INDEXES = {
   users: usersIndexes, patients: patientsIndexes, appointments: appointmentsIndexes, labOrders: ordersIndexes,
   encounters: encountersIndexes, prescriptions: prescriptionsIndexes, auditLogs: auditIndexes, sessions: sessionsIndexes, rateLimits: rateLimitsIndexes,
   vitals: vitalsIndexes, referrals: referralsIndexes, carePlans: carePlansIndexes, externalRecords: externalRecordsIndexes,
-  cases: casesIndexes, syntheticHistory: syntheticHistoryIndexes, whatsappPrefs: whatsappPrefsIndexes,
+  cases: casesIndexes, syntheticHistory: syntheticHistoryIndexes, whatsappPrefs: whatsappPrefsIndexes, files: [idIndex],
 };
 
 /** Quiet collections change on every sign-in or page view; they are not worth waking other screens for. */

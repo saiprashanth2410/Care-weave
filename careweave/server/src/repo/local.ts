@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { ConflictError, DuplicateError, UNIQUE_FIELDS, VERSIONED, splitChanges, type Collection, type Filter, type FindOpts, type IndexSpec, type Store } from './store.js';
+import { ConflictError, DuplicateError, UNIQUE_FIELDS, VERSIONED, splitChanges, type Collection, type FileStore, type Filter, type FindOpts, type IndexSpec, type Store } from './store.js';
 
 // Development fallback used only when MONGODB_URI is not set. Documents live in process memory and are saved to one JSON
 // file after every write. It is single-process: two server instances would overwrite each other's file, which is exactly
@@ -122,8 +122,25 @@ export class LocalStore implements Store {
   private colls = new Map<string, LocalCollection>();
   private writing: Promise<void> = Promise.resolve();
 
-  /** `file` is where data is saved; null keeps everything in memory (tests). `onChange` fires after each write. */
-  constructor(private file: string | null, private onChange: (name: string) => void = () => {}) {}
+  /** `file` is where data is saved; null keeps everything in memory (tests). `onChange` fires after each write. Files go to `filesDir` (memory when null). */
+  constructor(private file: string | null, private onChange: (name: string) => void = () => {}, private filesDir: string | null = null) {}
+
+  private memFiles = new Map<string, Buffer>();
+  readonly files: FileStore = {
+    put: async (id, data) => {
+      if (!this.filesDir) return void this.memFiles.set(id, data);
+      await fs.mkdir(this.filesDir, { recursive: true });
+      await fs.writeFile(path.join(this.filesDir, `${id}.bin`), data);
+    },
+    get: async (id) => {
+      if (!this.filesDir) return this.memFiles.get(id) ?? null;
+      return fs.readFile(path.join(this.filesDir, `${id}.bin`)).catch(() => null);
+    },
+    delete: async (id) => {
+      if (!this.filesDir) return void this.memFiles.delete(id);
+      await fs.rm(path.join(this.filesDir, `${id}.bin`), { force: true });
+    },
+  };
 
   /** Loads the JSON file if there is one and gives every versioned document a version (documents older than the field get 1). */
   async load(seed: () => Promise<Record<string, any[]>>) {

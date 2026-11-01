@@ -57,7 +57,15 @@ export interface Collection {
   hit(key: string, windowMs: number): Promise<{ count: number; resetAt: Date }>;
 }
 
+/** Binary files (lab report attachments). MongoDB keeps them in the `files` collection; the local fallback keeps them on disk. */
+export interface FileStore {
+  put(id: string, data: Buffer): Promise<void>;
+  get(id: string): Promise<Buffer | null>;
+  delete(id: string): Promise<void>;
+}
+
 export interface Store {
+  readonly files: FileStore;
   /** 'mongo' = every read and write goes to MongoDB. 'local' = in-process arrays saved to a JSON file (development only). */
   readonly mode: 'mongo' | 'local';
   collection(name: string): Collection;

@@ -30,7 +30,7 @@ async function openStore(): Promise<Store> {
   if ((isProd || isVercel) && process.env.ALLOW_LOCAL_STORE !== 'true') {
     throw new Error('MONGODB_URI is not set. Production needs MongoDB; the local JSON file is for development only (ALLOW_LOCAL_STORE=true overrides, for a single instance).');
   }
-  const store = new LocalStore(DATA, onChange);
+  const store = new LocalStore(DATA, onChange, path.join(SERVER_DIR, 'uploads/store'));
   await store.load(async () => ({ ...(await buildSeed()) }));
   console.warn(`[storage] LOCAL JSON FILE (${DATA}): development fallback because MONGODB_URI is not set. Single process only; not for production.`);
   return store;
