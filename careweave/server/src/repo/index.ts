@@ -7,6 +7,7 @@ import { encountersRepo, encountersIndexes } from './encounters.js';
 import { prescriptionsRepo, prescriptionsIndexes } from './prescriptions.js';
 import { auditRepo, auditIndexes } from './audit.js';
 import { sessionsRepo, sessionsIndexes } from './sessions.js';
+import { rateLimitsRepo, rateLimitsIndexes } from './rateLimits.js';
 import { vitalsRepo, vitalsIndexes } from './vitals.js';
 import { referralsRepo, referralsIndexes } from './referrals.js';
 import { carePlansRepo, carePlansIndexes } from './carePlans.js';
@@ -33,6 +34,7 @@ export function createRepos(store: Store) {
     prescriptions: prescriptionsRepo(c('prescriptions')),
     audit: auditRepo(c('auditLogs')),
     sessions: sessionsRepo(c('sessions')),
+    rateLimits: rateLimitsRepo(c('rateLimits')),
     vitals: vitalsRepo(c('vitals')),
     referrals: referralsRepo(c('referrals')),
     carePlans: carePlansRepo(c('carePlans')),
@@ -45,13 +47,13 @@ export type Repos = ReturnType<typeof createRepos>;
 
 export const INDEXES = {
   users: usersIndexes, patients: patientsIndexes, appointments: appointmentsIndexes, labOrders: ordersIndexes,
-  encounters: encountersIndexes, prescriptions: prescriptionsIndexes, auditLogs: auditIndexes, sessions: sessionsIndexes,
+  encounters: encountersIndexes, prescriptions: prescriptionsIndexes, auditLogs: auditIndexes, sessions: sessionsIndexes, rateLimits: rateLimitsIndexes,
   vitals: vitalsIndexes, referrals: referralsIndexes, carePlans: carePlansIndexes, externalRecords: externalRecordsIndexes,
   cases: casesIndexes, syntheticHistory: syntheticHistoryIndexes,
 };
 
 /** Quiet collections change on every sign-in or page view; they are not worth waking other screens for. */
-export const QUIET = new Set(['auditLogs', 'sessions']);
+export const QUIET = new Set(['auditLogs', 'sessions', 'rateLimits']);
 
 /** Connects to MongoDB. A failed connection is an error: it never quietly turns into per-instance local data. */
 export async function openMongoStore(uri: string, dbName: string, onChange: (name: string) => void) {

@@ -8,7 +8,7 @@ import { errorHandler, rateLimit, roles } from './middleware.js';
 import type { Repos } from './repo/index.js';
 import type { AppConfig, AppCtx } from './context.js';
 import { makeAudit } from './services/audit.js';
-import { userForRequest } from './services/sessions.js';
+import { BROWSER_HEADER, credentialOf, userForToken } from './services/sessions.js';
 import { authRoutes, sessionRoutes } from './routes/auth.js';
 import { adminRoutes, healthRoutes } from './routes/admin.js';
 import { patientRoutes } from './routes/patients.js';
@@ -39,14 +39,20 @@ export function createApp(opts: CreateAppOptions) {
     get repos() { return getRepos(); },
     audit, auditOnce, roles, config,
     async auth(req: any, res: any, next: any) {
-      const u = await userForRequest(getRepos(), req);
+      const { token, via } = credentialOf(req);
+      const u = await userForToken(getRepos(), token);
       if (!u) return res.status(401).json({ error: 'Authentication required' });
+      // A cookie is sent by the browser on any request to this site, including one a hostile page triggers. SameSite=Strict
+      // already stops that; this custom header (which a cross-site page cannot add) is the second guard.
+      if (via === 'cookie' && !['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.get(BROWSER_HEADER) !== 'cookie') {
+        return res.status(403).json({ error: 'Missing browser session header' });
+      }
       req.user = u;
       next();
     },
     limits: {
-      login: rateLimit(15 * 60 * 1000, 10, (r) => `${r.ip}|${String(r.body?.email || '').toLowerCase()}`),
-      upload: rateLimit(60 * 1000, 20, (r) => `${r.user?.id || r.ip}`),
+      login: rateLimit(getRepos, 'login', 15 * 60 * 1000, 10, (r) => `${r.ip}|${String(r.body?.email || '').toLowerCase()}`),
+      upload: rateLimit(getRepos, 'upload', 60 * 1000, 20, (r) => `${r.user?.id || r.ip}`),
     },
   };
 

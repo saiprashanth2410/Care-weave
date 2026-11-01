@@ -1,4 +1,3 @@
-import { getToken } from '@/auth/session'
 import type { Priority, TestResultItem } from '../types'
 
 export interface ExtractedReportData {
@@ -33,10 +32,9 @@ export const SCAN_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application
 export async function parseMedicalDocumentWithAI(file: File): Promise<ExtractedReportData> {
   if (!SCAN_TYPES.includes(file.type)) throw new Error('Upload a JPG, PNG, WebP or PDF report. Phone photos in HEIC format must be saved as JPG first.')
   if (file.size > 10 * 1024 * 1024) throw new Error('The file must be smaller than 10 MB')
-  const token = getToken()
   const res = await fetch('/api/lab/extract', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ mimeType: file.type, data: await fileToBase64(file) }),
   })
   const body = await res.json().catch(() => ({}))

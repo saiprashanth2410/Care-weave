@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react'
-import { getToken } from '@/auth/session'
 
 // Offers to load one clearly labelled synthetic patient journey. Hidden once it is loaded or when the server has it off.
 export default function SampleScenario({ className = '' }: { className?: string }) {
   const [state, setState] = useState<'hidden' | 'ready' | 'loading'>('hidden')
   const [error, setError] = useState('')
-  const headers = () => ({ 'content-type': 'application/json', authorization: `Bearer ${getToken()}` })
+  const headers = () => ({ 'content-type': 'application/json' })
 
   useEffect(() => {
     fetch('/api/demo/scenario', { headers: headers() })

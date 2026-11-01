@@ -78,3 +78,48 @@ test('sessions are not written to the JSON file used as the development fallback
     await a.close();
   }
 });
+
+test('browser sign-in uses an httpOnly SameSite=Strict cookie and never puts the token in the response body', async () => {
+  const a = await startInstance(await memoryStore());
+  const b = await startInstance(a.repos.store);
+  try {
+    const login = await a.call('POST', '/api/auth/login', { body: { email: 'reception@careweave.test', password: 'demo123' }, headers: { 'x-cw-session': 'cookie' } });
+    assert.equal(login.status, 200);
+    assert.equal(login.json.token, undefined);
+    assert.ok(!login.text.match(/[0-9a-f]{64}/), 'no 64-hex token anywhere in the body');
+    const set = login.headers.get('set-cookie') || '';
+    assert.match(set, /^cw_session=[0-9a-f]{64};/);
+    assert.match(set, /HttpOnly/);
+    assert.match(set, /SameSite=Strict/);
+    assert.match(set, /Max-Age=28800/);
+    const cookie = set.split(';')[0];
+
+    // The cookie works on another instance too, for reads.
+    assert.equal((await b.call('GET', '/api/me', { headers: { cookie } })).status, 200);
+
+    // A state-changing request that carries only the cookie (what a hostile page could cause) is refused.
+    const body = { name: 'Asha Rao', dob: '1990-02-03', phone: '+91 98765 43210' };
+    assert.equal((await a.call('POST', '/api/patients', { headers: { cookie }, body })).status, 403);
+    assert.equal((await a.call('POST', '/api/patients', { headers: { cookie, 'x-cw-session': 'cookie' }, body })).status, 201);
+
+    // Logout deletes the session and clears the cookie.
+    const out = await a.call('POST', '/api/auth/logout', { headers: { cookie, 'x-cw-session': 'cookie' } });
+    assert.equal(out.status, 200);
+    assert.match(out.headers.get('set-cookie') || '', /Max-Age=0/);
+    assert.equal((await b.call('GET', '/api/me', { headers: { cookie } })).status, 401);
+  } finally {
+    await a.close(); await b.close();
+  }
+});
+
+test('API clients without the browser header still get a token in the body and can use Bearer', async () => {
+  const a = await startInstance(await memoryStore());
+  try {
+    const login = await a.call('POST', '/api/auth/login', { body: { email: 'doctor@careweave.test', password: 'demo123' } });
+    assert.ok(login.json.token);
+    assert.equal(login.headers.get('set-cookie'), null);
+    assert.equal((await a.call('GET', '/api/me', { token: login.json.token })).status, 200);
+  } finally {
+    await a.close();
+  }
+});

@@ -6,13 +6,12 @@ type Msg = { from: 'me' | 'bot'; text: string }
 type Pt = { name: string; uhid: string; phone: string }
 type Push = { seq: number; phone: string; text: string }
 
-const authed = () => {
-  try { return !!localStorage.getItem('cw_token') } catch { return false }
-}
+// Only shown inside signed-in pages; the server still checks the session cookie on every call.
+const authed = () => true
 const call = async <T,>(url: string, body?: unknown): Promise<T> => {
   const res = await fetch(url, {
     method: body ? 'POST' : 'GET',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('cw_token')}` },
+    headers: { 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
   })
   if (!res.ok) throw new Error('request failed')

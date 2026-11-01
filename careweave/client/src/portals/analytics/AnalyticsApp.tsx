@@ -27,7 +27,6 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { getToken } from '@/auth/session';
 
 interface AnalyticsData {
   status: {
@@ -97,12 +96,8 @@ export default function AnalyticsApp() {
     try {
       setLoading(true);
       setError(null);
-      const token = getToken();
       const res = await fetch('/api/analytics/overview', {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
       });
 
       if (!res.ok) {
@@ -121,13 +116,9 @@ export default function AnalyticsApp() {
     try {
       setSyncing(true);
       setNotification(null);
-      const token = getToken();
       const res = await fetch('/api/analytics/sync', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
       });
       const result = await res.json().catch(() => ({}));
       if (!res.ok || !result.success) throw new Error(result.error || 'Sync failed');
@@ -147,10 +138,9 @@ export default function AnalyticsApp() {
   const handleSampleHistory = async (remove: boolean) => {
     try {
       setSyncing(true);
-      const token = getToken();
       const res = await fetch('/api/analytics/sample-history', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ remove }),
       });
       const result = await res.json().catch(() => ({}));

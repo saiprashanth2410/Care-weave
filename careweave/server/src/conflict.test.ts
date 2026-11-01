@@ -47,6 +47,17 @@ function suite(name: string, open: () => Promise<Store>) {
     await assert.rejects(repos.appointments.insert({ id: 'a-2', doctorId: 'd', date: '2026-01-01', time: '10:00', status: 'Scheduled', slotKey: 'd|2026-01-01|10:00' }), DuplicateError);
   });
 
+  test(`${name}: rate-limit hits from 25 concurrent callers are each counted once, and a new window starts after the old one ends`, async () => {
+    const repos = createRepos(await open());
+    const hits = await Promise.all(Array.from({ length: 25 }, () => repos.rateLimits.hit('k', 60_000)));
+    assert.deepEqual(hits.map((h) => h.count).sort((a, b) => a - b), Array.from({ length: 25 }, (_, i) => i + 1));
+    assert.equal(new Set(hits.map((h) => h.resetAt.getTime())).size, 1, 'one window for everyone');
+    assert.equal((await repos.rateLimits.hit('other', 60_000)).count, 1, 'keys are independent');
+    await repos.rateLimits.hit('short', 30);
+    await new Promise((r) => setTimeout(r, 60));
+    assert.equal((await repos.rateLimits.hit('short', 30)).count, 1, 'window restarted');
+  });
+
   test(`${name}: a field set to undefined is removed`, async () => {
     const repos = createRepos(await open());
     const p = await repos.patients.insert({ id: 'p-2', patientId: 'CW-2', name: 'B', dob: '2000-01-01', phone: '1', email: 'b@x.test' });

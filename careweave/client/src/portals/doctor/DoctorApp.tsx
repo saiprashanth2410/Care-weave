@@ -1,3 +1,4 @@
+import { clearSession } from '@/auth/session';
 import { useEffect, useState } from 'react';
 import { useLiveRefresh } from '../../useLiveRefresh';
 import { CriticalBanner, type CriticalAlert } from './CriticalBanner';
@@ -307,7 +308,7 @@ export default function DoctorApp({ user }: { user: User }) {
       <DoctorWorkspace
         user={user}
         onLogout={() => {
-          localStorage.removeItem('cw_token');
+          clearSession();
           navigate('/login', { replace: true });
         }}
       />

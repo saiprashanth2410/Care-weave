@@ -4,7 +4,7 @@ import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import type { AppCtx } from '../context.js';
 import { catchAsyncRoutes } from '../asyncRoutes.js';
-import { endSession, startSession } from '../services/sessions.js';
+import { BROWSER_HEADER, clearedCookie, endSession, sessionCookie, startSession } from '../services/sessions.js';
 
 // ── Sign-in ────────────────────────────────────────────────────────────────
 // With FIREBASE_PROJECT_ID set, staff sign in with Firebase Authentication (email and password) and the server
@@ -24,10 +24,15 @@ export function authRoutes(ctx: AppCtx) {
   // email is not proof of who someone is. Turn this off only after disabling sign-up in Firebase.
   const requireVerifiedEmail = process.env.FIREBASE_REQUIRE_VERIFIED_EMAIL !== 'false';
 
-  async function signIn(u: any, how: string, res: any) {
+  const secure = (req: any) => ctx.config.isProd || req.secure || req.get('x-forwarded-proto') === 'https';
+
+  async function signIn(u: any, how: string, req: any, res: any) {
     const token = await startSession(ctx.repos, u.id);
     await ctx.audit({ user: u }, 'login', how, u.id, `Successful ${u.role} sign-in`);
-    res.json({ token, user: { id: u.id, name: u.name, email: u.email, role: u.role, facility: u.facility, permissions: u.permissions || [] } });
+    // The browser app asks for a cookie and never receives the token in the response body. Other clients still get the token.
+    const browser = req.get(BROWSER_HEADER) === 'cookie';
+    if (browser) res.setHeader('Set-Cookie', sessionCookie(token, secure(req)));
+    res.json({ ...(browser ? {} : { token }), user: { id: u.id, name: u.name, email: u.email, role: u.role, facility: u.facility, permissions: u.permissions || [] } });
   }
 
   router.get('/auth/config', (_req, res) => res.json({ firebase: firebaseOn, localLogin: localLoginAllowed }));
@@ -41,7 +46,7 @@ export function authRoutes(ctx: AppCtx) {
     const hash = u?.passwordHash || '$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidi';
     const ok = await bcrypt.compare(String(password || ''), hash).catch(() => false);
     if (!u || !u.passwordHash || !ok) return res.status(401).json({ error: 'Invalid email or password' });
-    await signIn(u, 'session', res);
+    await signIn(u, 'session', req, res);
   });
 
   if (firebaseAuth) {
@@ -69,7 +74,7 @@ export function authRoutes(ctx: AppCtx) {
         }
         u = await ctx.repos.users.update(u, { firebaseUid: uid });
       }
-      await signIn(u, 'firebase_auth', res);
+      await signIn(u, 'firebase_auth', req, res);
     });
   } else {
     router.post('/auth/firebase-login', (_req, res) => res.status(404).json({ error: 'Not found' }));
@@ -85,6 +90,7 @@ export function sessionRoutes(ctx: AppCtx) {
 
   router.post('/auth/logout', async (req, res) => {
     await endSession(ctx.repos, req);
+    res.setHeader('Set-Cookie', clearedCookie(ctx.config.isProd || req.secure || req.get('x-forwarded-proto') === 'https'));
     res.json({ ok: true });
   });
 

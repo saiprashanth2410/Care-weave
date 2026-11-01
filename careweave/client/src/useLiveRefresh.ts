@@ -34,9 +34,7 @@ export function useLiveRefresh(onTick: () => void, ms = 5000, onEvent?: LiveEven
     async function connect() {
       while (!stopped) {
         try {
-          const token = localStorage.getItem('cw_token')
-          if (!token) return
-          const res = await fetch('/api/events', { headers: { Authorization: `Bearer ${token}` }, signal: ctrl.signal })
+          const res = await fetch('/api/events', { signal: ctrl.signal })
           if (!res.ok || !res.body || !(res.headers.get('content-type') || '').includes('text/event-stream')) return // no stream here: polling carries on
           live = true
           const reader = res.body.getReader()

@@ -1,23 +1,23 @@
-import { ConflictError } from './repo/index.js';
+import { ConflictError, type Repos } from './repo/index.js';
 
-// Small in-memory limiter: enough to slow password guessing and runaway uploads on one server instance. Each instance counts
-// separately, so on several instances the effective limit is higher.
-export function rateLimit(windowMs: number, max: number, keyOf: (req: any) => string) {
-  const hits = new Map<string, { n: number; reset: number }>();
-  return (req: any, res: any, next: any) => {
-    const k = keyOf(req);
-    const t = Date.now();
-    const h = hits.get(k);
-    if (!h || h.reset < t) {
-      hits.set(k, { n: 1, reset: t + windowMs });
-      if (hits.size > 5000) for (const [key, v] of hits) if (v.reset < t) hits.delete(key);
+/**
+ * Fixed-window limiter. The count is kept in the database (one atomic upsert per request), so every server instance shares it
+ * and a restart does not reset it. If the database cannot be reached the request is let through and the failure is logged:
+ * the sign-in and upload routes need the same database and would fail anyway.
+ */
+export function rateLimit(repos: () => Repos, name: string, windowMs: number, max: number, keyOf: (req: any) => string) {
+  return async (req: any, res: any, next: any) => {
+    let hit;
+    try {
+      hit = await repos().rateLimits.hit(`${name}:${keyOf(req)}`, windowMs);
+    } catch (err: any) {
+      console.error(`Rate limiter could not reach the database (${name}):`, err?.message);
       return next();
     }
-    if (h.n >= max) {
-      res.setHeader('Retry-After', String(Math.ceil((h.reset - t) / 1000)));
+    if (hit.count > max) {
+      res.setHeader('Retry-After', String(Math.max(1, Math.ceil((hit.resetAt.getTime() - Date.now()) / 1000))));
       return res.status(429).json({ error: 'Too many attempts. Wait a few minutes and try again.' });
     }
-    h.n++;
     next();
   };
 }

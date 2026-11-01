@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
-import { clearSession, currentUser, getToken, HOME, type Role, type SessionUser } from './session'
+import { clearSession, currentUser, HOME, type Role, type SessionUser } from './session'
 
 type State = { status: 'checking' } | { status: 'out' } | { status: 'in'; user: SessionUser }
 
@@ -12,10 +12,9 @@ export default function RequireRole({
   role: Role | Role[]
   children: (user: SessionUser) => React.ReactNode
 }) {
-  const [state, setState] = useState<State>(() => (getToken() ? { status: 'checking' } : { status: 'out' }))
+  const [state, setState] = useState<State>({ status: 'checking' })
 
   useEffect(() => {
-    if (!getToken()) return
     currentUser()
       .then((user) => setState({ status: 'in', user }))
       .catch(() => {

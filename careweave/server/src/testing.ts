@@ -34,7 +34,7 @@ export async function startInstance(store: Store) {
     const text = await res.text();
     let json: any = {};
     try { json = JSON.parse(text); } catch {}
-    return { status: res.status, json, text };
+    return { status: res.status, json, text, headers: res.headers };
   };
   const login = async (who = 'reception') =>
     (await call('POST', '/api/auth/login', { body: { email: `${who}@careweave.test`, password: 'demo123' } })).json.token as string;

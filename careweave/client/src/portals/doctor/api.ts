@@ -22,7 +22,7 @@ const RELOAD='Someone else changed this record while you had it open. Reload the
 
 const json=async<T>(res:Response):Promise<T>=>{
   const body=await res.json().catch(()=>({}));
-  if(res.status===401){localStorage.removeItem('cw_token');window.location.assign('/login');}
+  if(res.status===401){window.location.assign('/login');}
   if(res.status===409&&body.error===CONFLICT)throw Object.assign(new Error(RELOAD),{body,status:409,conflict:true});
   if(!res.ok)throw Object.assign(new Error(body.error||'Request failed'),{body,status:res.status});
   return body;
@@ -34,8 +34,7 @@ const request=async<T>(url:string,init:RequestInit={}):Promise<T>=>
       ...init,
       headers:{
         'Content-Type':'application/json',
-        ...(init.headers||{}),
-        ...(localStorage.getItem('cw_token')?{Authorization:`Bearer ${localStorage.getItem('cw_token')}`}:{})
+        ...(init.headers||{})
       }
     })
   );

@@ -95,6 +95,8 @@ Arrows show the real direction of each call. The browser never talks to MongoDB,
 - **What the client does on 409.** It shows "Someone else changed this record while you had it open. Reload the page to see the latest version, then try again." It does not retry or merge automatically.
 - **Unique indexes** guard inserts: `id` on every collection, `patientId` on patients, and `slotKey` on appointments (set only while a booking is active, so one doctor cannot be double-booked even by two simultaneous requests).
 - **Sessions** are documents `{ tokenHash, userId, expiresAt }` in the `sessions` collection. Only the SHA-256 of the token is stored. MongoDB removes expired documents with a TTL index, and every lookup also checks `expiresAt`. Logout deletes the document. Sessions last 8 hours.
+- **Browser sign-in uses an httpOnly cookie.** The server sets `cw_session` (`HttpOnly; SameSite=Strict; Secure` in production) and the response body does not contain the token, so no page script can read it; the client stores nothing in `localStorage`. Because a cookie is sent automatically, every state-changing request from the browser must also carry an `X-CW-Session: cookie` header (a cross-site page cannot add it) or it gets 403. Scripts and tests can still sign in without that header, receive the token in the body and use `Authorization: Bearer`.
+- **Rate limits are shared.** Login (10 attempts per 15 minutes per IP and email) and upload (20 per minute per user) counters are one atomic upsert per request in the `rateLimits` collection, so every instance and every restart sees the same count. If the database cannot be reached the request is let through and the error is logged.
 - **Not covered:** `users`, `vitals`, `referrals`, `carePlans`, `externalRecords`, review `cases` and `auditLogs` are written without a version check (last write wins). There are **no multi-document transactions**: for example saving an encounter with vitals is two inserts, and if the second fails the first stays.
 
 ---
@@ -263,7 +265,8 @@ cd careweave/client && npm test
 
 Still true after the changes above:
 
-- **Rate limiter is in memory.** Login and upload limits are counted per server instance, so with several instances the real limit is higher and a restart resets it.
+- **Rate limiter fails open.** If MongoDB cannot be reached the limiter lets the request through (those routes need the same database and would fail anyway). In the local-file development mode its counters are in memory.
+- **XSS is still a risk.** The httpOnly cookie keeps the token out of reach of scripts, but a script injected into the page can still make requests as the signed-in user while the page is open. There is no Content-Security-Policy on Vercel (Helmet is only enabled outside serverless).
 - **Clinical rules are demo-grade.** The allergy check knows four drug families; the plausibility check covers about ten analytes; the drug-drug interaction check is a hand-written matrix of 12 drug pairs (`DRUG_INTERACTIONS` in `server/src/safety/molecules.ts`), so most real interactions are not detected; the duplicate-therapy check depends on the brand catalogue's composition text; reconciliation scoring is a fixed point scheme. None of it has been clinically validated.
 - **No multi-document transactions.** Operations that write several documents (encounter + vitals, import + review cases, sample scenario) can stop half-way if the database fails between writes.
 - **Optimistic concurrency covers five collections only.** Referrals, care plans, vitals, external records, review cases and users are last-write-wins.

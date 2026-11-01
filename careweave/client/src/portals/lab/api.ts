@@ -1,4 +1,4 @@
-import { clearSession, getToken } from '@/auth/session'
+import { clearSession } from '@/auth/session'
 import type { LabOrder, LabOrderStatus, Priority, TestResultItem } from './types'
 
 export { TEST_TEMPLATES } from './testCatalog'
@@ -17,7 +17,6 @@ const remember = (o: unknown) => {
 }
 
 async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const token = getToken()
   const edit = init.method === 'PATCH' ? url.match(/^\/api\/lab\/orders\/([^/]+)$/) : null
   if (edit && typeof init.body === 'string') {
     const version = seenVersion.get(decodeURIComponent(edit[1]))
@@ -25,7 +24,7 @@ async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
   }
   const res = await fetch(url, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    headers: { 'Content-Type': 'application/json' },
   })
   const body = await res.json().catch(() => ({}))
   if (!res.ok) {
@@ -119,12 +118,9 @@ export async function attachReport(id: string, file: File): Promise<LabOrder> {
   return body.data
 }
 
-// Files need the session token, so they are fetched and opened as a blob rather than linked directly.
+// Files are fetched with the session cookie and opened as a blob rather than linked directly.
 export async function openReportFile(orderId: string, attId: string): Promise<void> {
-  const token = getToken()
-  const res = await fetch(`/api/lab/orders/${encodeURIComponent(orderId)}/attachments/${encodeURIComponent(attId)}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  })
+  const res = await fetch(`/api/lab/orders/${encodeURIComponent(orderId)}/attachments/${encodeURIComponent(attId)}`)
   if (!res.ok) {
     window.dispatchEvent(new CustomEvent('cw:error', { detail: { message: 'Could not open the file', write: false } }))
     return

@@ -24,6 +24,7 @@ export const UNIQUE_FIELDS: Record<string, string[]> = {
   patients: ['id', 'patientId'],
   appointments: ['id', 'slotKey'],
   sessions: ['tokenHash'],
+  rateLimits: ['key'],
 };
 
 /** Collections whose documents carry a `version` and are written with optimistic concurrency. */
@@ -45,6 +46,11 @@ export interface Collection {
    */
   update(current: any, changes: Filter, expected?: number): Promise<any>;
   remove(filter: Filter): Promise<number>;
+  /**
+   * Counts one hit for `key` in a window that starts at the first hit and lasts `windowMs`, as one atomic operation, so
+   * concurrent callers on any number of instances are all counted.
+   */
+  hit(key: string, windowMs: number): Promise<{ count: number; resetAt: Date }>;
 }
 
 export interface Store {

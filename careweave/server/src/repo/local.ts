@@ -6,7 +6,7 @@ import { ConflictError, DuplicateError, UNIQUE_FIELDS, VERSIONED, splitChanges, 
 // file after every write. It is single-process: two server instances would overwrite each other's file, which is exactly
 // why production uses MongoDB. Sessions are never written to the file.
 
-const NOT_PERSISTED = new Set(['sessions']);
+const NOT_PERSISTED = new Set(['sessions', 'rateLimits']);
 
 /** The subset of MongoDB query operators the repos use: equality, $in, $nin, $ne, $gte, $lte, $regex and $or. */
 export function matches(doc: any, filter: Filter = {}): boolean {
@@ -97,6 +97,17 @@ class LocalCollection implements Collection {
     await this.save();
     this.changed(this.name);
     return structuredClone(stored);
+  }
+  async hit(key: string, windowMs: number) {
+    const t = Date.now();
+    let row = this.docs.find((d) => d.key === key);
+    if (!row || row.resetAt.getTime() <= t) {
+      this.docs = this.docs.filter((d) => d.resetAt.getTime() > t && d.key !== key); // also sweeps expired rows
+      row = { key, count: 0, resetAt: new Date(t + windowMs) };
+      this.docs.push(row);
+    }
+    row.count++;
+    return { count: row.count, resetAt: row.resetAt };
   }
   async remove(filter: Filter) {
     const before = this.docs.length;

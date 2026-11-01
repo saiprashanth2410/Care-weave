@@ -71,6 +71,26 @@ class MongoCollection implements Collection {
     if (this.versioned) next.version = want + 1;
     return next;
   }
+  async hit(key: string, windowMs: number) {
+    const t = new Date();
+    const expired = { $lte: [{ $ifNull: ['$resetAt', new Date(0)] }, t] };
+    const run = () => this.c.findOneAndUpdate(
+      { key },
+      [{ $set: {
+        count: { $cond: [expired, 1, { $add: [{ $ifNull: ['$count', 0] }, 1] }] },
+        resetAt: { $cond: [expired, new Date(t.getTime() + windowMs), '$resetAt'] },
+      } }],
+      { upsert: true, returnDocument: 'after' }
+    );
+    let doc;
+    try {
+      doc = await run();
+    } catch (err: any) {
+      if (err?.code !== 11000) throw err;
+      doc = await run(); // two first hits raced to create the row; the second now updates it
+    }
+    return { count: doc!.count as number, resetAt: doc!.resetAt as Date };
+  }
   async remove(filter: Filter) {
     const res = await this.c.deleteMany(filter);
     if (res.deletedCount) this.changed(this.name);

@@ -1,3 +1,4 @@
+import { clearSession } from '@/auth/session';
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useLiveRefresh } from '../../useLiveRefresh';
 import {
@@ -76,7 +77,7 @@ function App({ user }: { user: User }) {
     <Workspace
       user={user}
       onLogout={() => {
-        localStorage.removeItem('cw_token');
+        clearSession();
         navigate('/login', { replace: true });
       }}
     />
@@ -1665,10 +1666,7 @@ function PatientRegistrationModal({
                 try {
                   const res = await fetch('/api/patients', {
                     method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      Authorization: `Bearer ${localStorage.getItem('cw_token')}`
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ ...form, _forceCreate: true, risk: 'Reviewed duplicate override' })
                   });
                   const body = await res.json();
