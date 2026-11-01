@@ -2,6 +2,8 @@ import crypto from 'node:crypto';
 import { checksum, findIssues, matchPatient } from './reconcile.js';
 import { searchMedicines } from './medicines.js';
 import { checkDuplicateTherapy } from './safety/molecules.js';
+import { emitEvent } from './whatsapp/emitter.js';
+import { makeBrief } from './clinicalSummary.js';
 const STATUS_FOR_DOCTOR = {
     requested: 'Requested',
     collection_pending: 'Sample Collection Pending',
@@ -178,6 +180,9 @@ export function registerDoctorRoutes(c) {
                 awaitingVerification: labs.filter((l) => l.status === 'Awaiting Verification').length,
                 openCases: casesFor(req).length
             },
+            // Verified in the last 3 days with a critical value: stays on the screen until it ages out, even if the live alert was missed.
+            criticalLabs: labs.filter((l) => l.result?.parameters?.some((x) => x.flag === 'critical') && Date.now() - Date.parse(l.result.verifiedAt || l.requestedAt) < 3 * 86400000)
+                .map((l) => ({ orderId: l.orderId, patientName: l.patientName, testName: l.testName, verifiedAt: l.result.verifiedAt, values: l.result.parameters.filter((x) => x.flag === 'critical').map((x) => ({ parameter: x.parameter, value: x.value, unit: x.unit })) })),
             appointments: today.sort((a, b) => String(a.time).localeCompare(String(b.time))),
             labOrders: labs.slice(0, 60),
             cases: casesFor(req),
@@ -226,6 +231,35 @@ export function registerDoctorRoutes(c) {
             labOrders: labsFor(p).map(doctorLab),
             prescriptions: db().prescriptions.filter((r) => r.patientId === p.id)
         });
+    });
+    // Pre-consultation brief. One request per doctor every few seconds, so it cannot be used to run up the model quota.
+    const lastBrief = new Map();
+    app.post('/api/patients/:id/summary', roles('doctor'), async (req, res) => {
+        const p = patientFor(req, res, req.params.id);
+        if (!p)
+            return;
+        const t = Date.now();
+        if (t - (lastBrief.get(req.user.id) ?? 0) < 4000)
+            return res.status(429).json({ error: 'Wait a few seconds before asking for another brief.' });
+        lastBrief.set(req.user.id, t);
+        const labs = labsFor(p).filter((o) => ['verified', 'released'].includes(o.status)).slice(0, 6)
+            .flatMap((o) => (o.results ?? []).filter((r) => r.value).map((r) => ({ test: r.parameter, value: r.value, unit: r.unit, flag: r.flag, date: o.verifiedAt })));
+        const vitals = db().vitals.find((v) => v.patientId === p.id);
+        const brief = await makeBrief({
+            ageYears: ageFromDob(p.dob), sex: p.gender || 'O',
+            allergies: p.allergies || [], problems: (p.problems || []).slice(0, 12),
+            vitals,
+            medicines: db().prescriptions.filter((r) => r.patientId === p.id && r.status === 'Active').slice(0, 12),
+            labs: labs.slice(0, 14),
+            encounters: db().encounters.filter((e) => e.patientId === p.id).slice(0, 3),
+            openItems: [
+                ...db().referrals.filter((r) => r.patientId === p.id && r.status !== 'Completed').map((r) => `Referral to ${r.specialty} is ${String(r.status).toLowerCase()}`),
+                ...labsFor(p).filter((o) => !['verified', 'released', 'cancelled'].includes(o.status)).map((o) => `${o.testName} not yet verified`),
+            ].slice(0, 6),
+        });
+        audit(req, 'read', 'summary', p.id, `Pre-consultation brief (${brief.source})`);
+        void save();
+        res.json({ ...brief, generatedAt: now(), note: 'A reading aid made from the chart. Check it against the record before acting on it.' });
     });
     // ── encounters (SOAP) ─────────────────────────────────────────────────────
     app.post('/api/encounters', roles('doctor'), async (req, res) => {
@@ -509,6 +543,10 @@ export function registerDoctorRoutes(c) {
         if (high.length)
             audit(req, 'override', 'prescription', r.id, `Duplicate therapy override for ${molecules}: ${text(ov.overrideReason, 500)}`);
         await save();
+        emitEvent('PRESCRIPTION_PRESCRIBED', {
+            patientId: p.patientId, name: p.name, phone: p.phone, doctor: req.user.name,
+            medicines: [{ name: medicine, dosage, frequency, foodInstruction: r.instructions || '' }],
+        });
         res.status(201).json(r);
     });
     app.patch('/api/prescriptions/:id', roles('doctor'), async (req, res) => {

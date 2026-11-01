@@ -86,6 +86,23 @@ export interface ClinicalSafetyMetric {
   criticalLabResults: number;
 }
 
+export interface DepartmentPredictionMetric {
+  department: string;
+  historicalDailyAvg: number;
+  dayOfWeek: string;
+  predictedVisitsTomorrow: number;
+  recommendedStaffingDoctors: number;
+  expectedWaitMinutes: number;
+  riskLevel: 'Low' | 'Moderate' | 'High Capacity Surge';
+}
+
+export interface BenchmarkSpeedMetric {
+  mongoReadMs: number;
+  exasolInMemoryMs: number;
+  speedupRatio: number;
+  recordsEvaluated: number;
+}
+
 export interface ExecutedQuery {
   id: string;
   title: string;
@@ -120,6 +137,8 @@ export interface AnalyticsOverviewResponse {
   labStages: LabStageMetric;
   pharmacyConsumption: PharmacyConsumptionMetric[];
   safety: ClinicalSafetyMetric;
+  predictions: DepartmentPredictionMetric[];
+  benchmark: BenchmarkSpeedMetric;
   dataQuality: DataQuality;
   queries: ExecutedQuery[];
   generatedAt: string;

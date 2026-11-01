@@ -107,9 +107,9 @@ export default function WhatsAppSimulator() {
             ))}
             <div ref={end} />
           </div>
-          <div className="flex gap-1 border-t border-neutral-200 bg-neutral-50 px-2 pt-1">
-            {['QUEUE', 'REPORT', 'MEDS'].map((k) => (
-              <button key={k} type="button" onClick={() => send(k)} className="rounded-full border border-neutral-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-neutral-700">{k}</button>
+          <div className="flex flex-wrap gap-1 border-t border-neutral-200 bg-neutral-50 px-2 pt-1">
+            {['QUEUE', 'REPORT', 'MEDS', 'LANG TA', 'LANG EN'].map((k) => (
+              <button key={k} type="button" onClick={() => send(k)} className="rounded-full border border-neutral-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-neutral-700 hover:bg-neutral-100">{k}</button>
             ))}
           </div>
           <form onSubmit={(e) => { e.preventDefault(); send(input) }} className="flex gap-1 bg-neutral-50 p-2">

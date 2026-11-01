@@ -31,6 +31,18 @@ export function findPatients(db, q) {
     const tail = want.slice(-10);
     return db.patients.filter((p) => digits(p.phone).slice(-10) === tail);
 }
+/**
+ * Reports and medicines are private health data, and a phone number alone is not proof of who is asking (numbers are
+ * shared, spoofed and recycled). They are shown only when the sender's phone AND the patient's UHID both match.
+ */
+export function verifiedPatients(db, q) {
+    if (!String(q.uhid || '').trim() || digits(q.phone).length < 7)
+        return { status: 'needs_uhid', patients: [] };
+    const byUhid = findPatients(db, { uhid: q.uhid });
+    const tail = digits(q.phone).slice(-10);
+    const patients = byUhid.filter((p) => digits(p.phone).slice(-10) === tail);
+    return patients.length ? { status: 'ok', patients } : { status: 'mismatch', patients: [] };
+}
 /** The next OP token for a day: A-001, A-002 ... counted over appointments that already hold one. */
 export function nextToken(db, date) {
     const n = db.appointments.filter((a) => a.token && (a.date === date || (isToday(a.date) && isToday(date)))).length + 1;
@@ -61,7 +73,10 @@ export function queueStatus(db, q) {
     return { found: true, active: false, patient: { name: patients[0].name, uhid: patients[0].patientId } };
 }
 export function latestReport(db, q) {
-    const patients = findPatients(db, q);
+    const v = verifiedPatients(db, q);
+    if (v.status === 'needs_uhid')
+        return { found: true, verificationRequired: true };
+    const patients = v.patients;
     if (!patients.length)
         return { found: false };
     const ids = new Set(patients.flatMap((p) => [p.id, p.patientId]));
@@ -122,73 +137,141 @@ function stillRunning(rx) {
     return Date.now() - new Date(rx.date).getTime() <= days * 86400000;
 }
 export function activePrescriptions(db, q) {
-    const patients = findPatients(db, q);
+    const v = verifiedPatients(db, q);
+    if (v.status === 'needs_uhid')
+        return { found: true, verificationRequired: true };
+    const patients = v.patients;
     if (!patients.length)
         return { found: false };
     const ids = new Set(patients.map((p) => p.id));
-    const shared = patients.length > 1; // one phone, several people: say whose medicine each line is
     const meds = db.prescriptions.filter((r) => ids.has(r.patientId) && r.status === 'Active' && stillRunning(r)).map((r) => {
         const slots = scheduleOf(r.frequency);
-        const owner = shared ? patients.find((p) => p.id === r.patientId)?.name : '';
         return {
-            medicine: owner ? `${r.medicine} (${owner})` : r.medicine, dosage: r.dosage, frequency: r.frequency, duration: r.duration || '',
+            medicine: r.medicine, dosage: r.dosage, frequency: r.frequency, duration: r.duration || '',
             food: foodNote(`${r.frequency} ${r.instructions || ''}`), instructions: r.instructions || '',
             schedule: slots ? { morning: slots.includes('morning') ? r.dosage : null, afternoon: slots.includes('afternoon') ? r.dosage : null, night: slots.includes('night') ? r.dosage : null } : null
         };
     });
     return { found: true, patient: { name: patients[0].name, uhid: patients[0].patientId }, medications: meds };
 }
-// ── wording ────────────────────────────────────────────────────────────────
-export const HELP_TEXT = 'CareWeave on WhatsApp. Reply with:\n*QUEUE* - your token and wait time\n*REPORT* - your latest verified lab report\n*MEDS* - your medicine timings\n*HELP* - this list';
-const NOT_FOUND = 'We could not find a CareWeave record for this number. Please check with the front desk.';
-export function queueText(r) {
-    if (!r.found)
-        return NOT_FOUND;
-    if (!r.active)
-        return `Hello ${r.patient.name}, you are not in today's queue. Please check in at the front desk.`;
-    if (r.status === 'In Consultation')
-        return `Hello ${r.patient.name}, ${r.doctor} is seeing you now (${r.room}).`;
-    return `Hello ${r.patient.name}, your token is *${r.token}* with ${r.doctor} (${r.room}).\n${r.aheadCount} patient${r.aheadCount === 1 ? '' : 's'} ahead of you. Estimated wait: about ${r.estimatedWaitMinutes} min (an estimate, it can change).`;
+// In-memory language preference store (phone -> 'en' | 'ta')
+const patientLang = new Map();
+export function setPatientLanguage(phone, lang) {
+    patientLang.set(digits(phone).slice(-10), lang);
 }
-export function reportText(r) {
+export function getPatientLanguage(phone) {
+    return patientLang.get(digits(phone).slice(-10)) || 'en';
+}
+// ── wording ────────────────────────────────────────────────────────────────
+export const HELP_TEXT = `🏥 CareWeave on WhatsApp. Reply with:
+*QUEUE* - your token and live wait time
+*REPORT <your UHID>* - your verified lab report
+*MEDS <your UHID>* - your daily medicine timings
+*LANG TA* - தமிழுக்கு மாற்ற (Switch to Tamil)
+*LANG EN* - Switch to English
+*HELP* - this menu
+
+Your UHID is on your token slip and patient card.`;
+export const HELP_TEXT_TA = `🏥 CareWeave வாட்ஸ்அப் உதவி மையம்:
+*QUEUE* - உங்கள் டோக்கன் & காத்திருக்கும் நேரம்
+*REPORT <UHID>* - உங்கள் ஆய்வக பரிசோதனை முடிவு
+*MEDS <UHID>* - உங்கள் தினசரி மாத்திரை நேரங்கள்
+*LANG EN* - Switch to English
+*LANG TA* - தமிழில் தொடர
+
+(உங்கள் UHID எண் டோக்கன் ரசீதில் இருக்கும்)`;
+const NEEDS_UHID = 'To protect your health records, add your UHID after the word, for example: *REPORT CW-12345*. It is on your token slip and patient card.';
+const NEEDS_UHID_TA = 'உங்கள் மருத்துவ ரகசியத்தைப் பாதுகாக்க, வார்த்தைக்குப் பின் உங்கள் UHID எண்ணை அனுப்பவும். எ.கா: *REPORT CW-12345*. இது உங்கள் டோக்கன் சீட்டில் இருக்கும்.';
+const NOT_FOUND = 'We could not find a CareWeave record for this number. Please check with the front desk.';
+const NOT_FOUND_TA = 'இந்த எண்ணிற்கான CareWeave பதிவு கிடைக்கவில்லை. தயவுசெய்து வரவேற்பறையை அணுகவும்.';
+export function queueText(r, lang = 'en') {
     if (!r.found)
-        return NOT_FOUND;
-    if (!r.available)
-        return `Hello ${r.patient.name}, you have no verified lab report yet.`;
+        return lang === 'ta' ? NOT_FOUND_TA : NOT_FOUND;
+    if (!r.active) {
+        return lang === 'ta'
+            ? `வணக்கம் ${r.patient.name}, நீங்கள் இன்றைய வரிசையில் இல்லை. வரவேற்பறையில் பதிவு செய்யவும்.`
+            : `Hello ${r.patient.name}, you are not in today's queue. Please check in at the front desk.`;
+    }
+    if (r.status === 'In Consultation') {
+        return lang === 'ta'
+            ? `வணக்கம் ${r.patient.name}, மருத்துவர் ${r.doctor} இப்போது உங்களைப் பார்க்கிறார் (${r.room}).`
+            : `Hello ${r.patient.name}, ${r.doctor} is seeing you now (${r.room}).`;
+    }
+    return lang === 'ta'
+        ? `வணக்கம் ${r.patient.name}! உங்கள் டோக்கன் எண் *${r.token}* (${r.doctor} - ${r.room}).\nஉங்களுக்கு முன் *${r.aheadCount}* நோயாளிகள் உள்ளனர். உத்தேச காத்திருப்பு: சுமார் *${r.estimatedWaitMinutes}* நிமிடங்கள்.`
+        : `Hello ${r.patient.name}, your token is *${r.token}* with ${r.doctor} (${r.room}).\n${r.aheadCount} patient${r.aheadCount === 1 ? '' : 's'} ahead of you. Estimated wait: about ${r.estimatedWaitMinutes} min (an estimate, it can change).`;
+}
+export function reportText(r, lang = 'en') {
+    if (!r.found)
+        return lang === 'ta' ? NOT_FOUND_TA : NOT_FOUND;
+    if ('verificationRequired' in r)
+        return lang === 'ta' ? NEEDS_UHID_TA : NEEDS_UHID;
+    if (!r.available) {
+        return lang === 'ta'
+            ? `வணக்கம் ${r.patient.name}, உங்களுக்கான ஆய்வக முடிவுகள் இன்னும் சரிபார்க்கப்படவில்லை.`
+            : `Hello ${r.patient.name}, you have no verified lab report yet.`;
+    }
     const { report } = r;
     const lines = report.results.slice(0, 12).map((x) => `${x.flag === 'critical' ? '🔴' : x.flag === 'abnormal' ? '🟠' : '▫️'} ${x.parameter}: ${x.value} ${x.unit}${x.flag !== 'normal' ? ` (${x.flag.toUpperCase()})` : ''}`);
-    return `🧪 ${report.testName} - verified by ${report.verifiedBy || 'the laboratory'}.\n${lines.join('\n')}\nCritical flags: ${report.criticalCount}. Abnormal: ${report.abnormalCount}.\nPlease discuss these results with your doctor.`;
+    return lang === 'ta'
+        ? `🧪 ${report.testName} - மருத்துவர்/ஆய்வகம்: ${report.verifiedBy || 'CareWeave Central Lab'}.\n${lines.join('\n')}\nமுக்கிய எச்சரிக்கைகள்: ${report.criticalCount}. மாறுபட்டவை: ${report.abnormalCount}.\nதயவுசெய்து இந்த முடிவுகளை உங்கள் மருத்துவரிடம் கலந்தாலோசிக்கவும்.`
+        : `🧪 ${report.testName} - verified by ${report.verifiedBy || 'the laboratory'}.\n${lines.join('\n')}\nCritical flags: ${report.criticalCount}. Abnormal: ${report.abnormalCount}.\nPlease discuss these results with your doctor.`;
 }
-export function medsText(r) {
+export function medsText(r, lang = 'en') {
     if (!r.found)
-        return NOT_FOUND;
-    if (!r.medications.length)
-        return `Hello ${r.patient.name}, you have no active prescriptions.`;
+        return lang === 'ta' ? NOT_FOUND_TA : NOT_FOUND;
+    if ('verificationRequired' in r)
+        return lang === 'ta' ? NEEDS_UHID_TA : NEEDS_UHID;
+    if (!r.medications.length) {
+        return lang === 'ta'
+            ? `வணக்கம் ${r.patient.name}, உங்களுக்கு தற்போது நடைமுறையில் மருந்துகள் ஏதுமில்லை.`
+            : `Hello ${r.patient.name}, you have no active prescriptions.`;
+    }
     const part = (label, slot) => {
         const rows = r.medications.filter((m) => m.schedule?.[slot]).map((m) => `  • ${m.medicine} - ${m.schedule[slot]}${m.food ? ` (${m.food})` : ''}`);
         return rows.length ? `*${label}*\n${rows.join('\n')}` : '';
     };
     const unclear = r.medications.filter((m) => !m.schedule).map((m) => `  • ${m.medicine} - ${m.dosage}, ${m.frequency}`);
-    return [`💊 Medicines for ${r.patient.name}`, part('Morning', 'morning'), part('Afternoon', 'afternoon'), part('Night', 'night'), unclear.length ? `*As directed*\n${unclear.join('\n')}` : ''].filter(Boolean).join('\n');
+    const morningLbl = lang === 'ta' ? '🌅 காலை (Morning)' : 'Morning';
+    const afternoonLbl = lang === 'ta' ? '☀️ மதியம் (Afternoon)' : 'Afternoon';
+    const nightLbl = lang === 'ta' ? '🌙 இரவு (Night)' : 'Night';
+    const directedLbl = lang === 'ta' ? 'மருத்துவர் கூறியபடி (As directed)' : 'As directed';
+    const title = lang === 'ta' ? `💊 ${r.patient.name} அவர்களுக்கான மருந்துகள்:` : `💊 Medicines for ${r.patient.name}`;
+    return [title, part(morningLbl, 'morning'), part(afternoonLbl, 'afternoon'), part(nightLbl, 'night'), unclear.length ? `*${directedLbl}*\n${unclear.join('\n')}` : ''].filter(Boolean).join('\n');
 }
 /** One keyword in, one reply out. Unknown text gets the help list. */
 export function replyTo(db, phone, body) {
-    const word = String(body || '').trim().split(/\s+/)[0]?.toUpperCase() || '';
+    const [first, second] = String(body || '').trim().split(/\s+/);
+    const word = first?.toUpperCase() || '';
+    const uhid = second || '';
+    // Language switch handlers
+    if (word === 'LANG' || word === 'LANGUAGE') {
+        const sub = second?.toUpperCase() || '';
+        if (sub === 'TA' || sub === 'TAMIL') {
+            setPatientLanguage(phone, 'ta');
+            return { command: 'LANG', reply: '✅ மொழி தமிழுக்கு மாற்றப்பட்டது!\nஇனி உங்கள் டோக்கன் மற்றும் மருத்துவ தகவல்கள் தமிழில் வரும்.\nதகவல்களை அறிய *QUEUE*, *MEDS*, அல்லது *REPORT* என அனுப்பவும்.' };
+        }
+        if (sub === 'EN' || sub === 'ENGLISH') {
+            setPatientLanguage(phone, 'en');
+            return { command: 'LANG', reply: '✅ Language switched to English!\nReply with QUEUE, MEDS, or REPORT at any time.' };
+        }
+    }
+    const lang = getPatientLanguage(phone);
     if (word === 'QUEUE' || word === 'TOKEN')
-        return { command: 'QUEUE', reply: queueText(queueStatus(db, { phone })) };
+        return { command: 'QUEUE', reply: queueText(queueStatus(db, { phone }), lang) };
     if (word === 'REPORT')
-        return { command: 'REPORT', reply: reportText(latestReport(db, { phone })) };
+        return { command: 'REPORT', reply: reportText(latestReport(db, { phone, uhid }), lang) };
     if (word === 'MEDS' || word === 'RX')
-        return { command: 'MEDS', reply: medsText(activePrescriptions(db, { phone })) };
-    return { command: 'HELP', reply: HELP_TEXT };
+        return { command: 'MEDS', reply: medsText(activePrescriptions(db, { phone, uhid }), lang) };
+    return { command: 'HELP', reply: lang === 'ta' ? HELP_TEXT_TA : HELP_TEXT };
 }
 /** What a patient is sent when each event fires. */
 export function eventText(e) {
     if (e.event === 'PATIENT_CHECKED_IN')
         return `Welcome ${e.name}! Your token is *${e.token}* with ${e.doctor} (${e.room}). Queue position: ${e.queuePosition}. Reply QUEUE any time for your live wait.`;
     if (e.event === 'LAB_REPORT_RELEASED')
-        return `🧪 CareWeave Lab Alert: Hello ${e.name}, your ${e.testName} results have been verified by ${e.pathologist || 'the laboratory'}. Critical flags: ${e.criticalCount}. Reply REPORT to view them.`;
+        return `🧪 CareWeave Lab Alert: Hello ${e.name}, your ${e.testName} results have been verified by ${e.pathologist || 'the laboratory'}. Critical flags: ${e.criticalCount}. Reply REPORT ${e.patientId || '<your UHID>'} to view them.`;
     if (e.event === 'PRESCRIPTION_PRESCRIBED')
-        return `💊 Hello ${e.name}, ${e.doctor || 'your doctor'} prescribed: ${(e.medicines || []).map((m) => m.name).join(', ')}. Reply MEDS for your timings.`;
+        return `💊 Hello ${e.name}, ${e.doctor || 'your doctor'} prescribed: ${(e.medicines || []).map((m) => m.name).join(', ')}. Reply MEDS ${e.patientId || '<your UHID>'} for your timings.`;
     return '';
 }

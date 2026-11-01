@@ -8,7 +8,7 @@ test('a weekly or as-needed medicine is not read as a daily morning dose', () =>
     assert.deepEqual(scheduleOf('once daily'), ['morning']);
     assert.deepEqual(scheduleOf('1-0-1'), ['morning', 'night']);
 });
-test('people who share a phone number never see each other under the wrong name', () => {
+test('people who share a phone number only see the patient whose UHID they send', () => {
     const db = {
         patients: [
             { id: 'p1', patientId: 'CW-1', name: 'Asha', phone: '98765 43210' },
@@ -18,8 +18,10 @@ test('people who share a phone number never see each other under the wrong name'
         labOrders: [{ id: 'o1', status: 'verified', registeredPatientRef: 'p2', patientId: 'CW-2', testName: 'CBC', verifiedAt: '2026-01-01', results: [{ parameter: 'Hb', value: '13', unit: 'g/dL' }] }],
         appointments: [],
     };
-    const report = latestReport(db, { phone: '9876543210' });
+    const report = latestReport(db, { phone: '9876543210', uhid: 'CW-2' });
     assert.equal(report.found && report.patient.name, 'Ravi');
-    const meds = activePrescriptions(db, { phone: '9876543210' });
-    assert.equal(meds.found && meds.medications[0].medicine, 'Metformin (Ravi)');
+    const meds = activePrescriptions(db, { phone: '9876543210', uhid: 'CW-2' });
+    assert.equal(meds.found && 'medications' in meds && meds.medications[0].medicine, 'Metformin');
+    const other = activePrescriptions(db, { phone: '9876543210', uhid: 'CW-1' });
+    assert.equal(other.medications.length, 0, 'Asha does not see Ravi\'s medicines');
 });
