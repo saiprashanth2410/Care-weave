@@ -62,7 +62,7 @@ export function PrescribeModal({ patient: initPatient, onClose, onSaved }: { pat
   const submit = async (e?: React.FormEvent, override: DuplicateOverride | null = dupOverride) => {
     e?.preventDefault();
     if (!selectedPatient) return setError('Please select a patient');
-    if (allergyBlock && overrideReason.trim().length < 5) return setError('Give a reason (at least 5 characters) to prescribe despite the allergy.');
+    if (allergyBlock && overrideReason.trim().length < 15) return setError('Give a reason (at least 15 characters) to prescribe despite the allergy.');
     setBusy(true);
     setError('');
     try {

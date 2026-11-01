@@ -471,10 +471,10 @@ export function registerDoctorRoutes(c: Ctx) {
     const enc = db().encounters.find((e: any) => e.patientId === p.id && e.doctorId === req.user.id && (!b.encounterId || e.id === b.encounterId));
     if (!enc) return res.status(400).json({ error: 'Document an encounter for this patient first, so the prescription is linked to it' });
     const allergy = (p.allergies || []).find((a: any) => conflictsWith(String(a.allergen), medicine));
-    if (allergy && !text(b.allergyOverrideReason)) {
+    if (allergy && text(b.allergyOverrideReason, 300).length < 15) {
       audit(req, 'blocked', 'prescription', p.id, 'Allergy conflict');
       await save();
-      return res.status(409).json({ error: `Allergy on record: ${allergy.allergen} (${allergy.severity}). Choose another medicine, or send an override reason.` });
+      return res.status(409).json({ error: `Allergy on record: ${allergy.allergen} (${allergy.severity}). Choose another medicine, or send an override reason of at least 15 characters.` });
     }
     const alerts = await duplicateAlerts(p, medicine, dosage, frequency);
     const high = alerts.filter((x) => x.severity === 'HIGH_COLLISION');

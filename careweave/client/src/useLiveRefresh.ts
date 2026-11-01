@@ -6,7 +6,7 @@ import { useEffect, useRef } from 'react'
  */
 export function useLiveRefresh(onTick: () => void, ms = 5000) {
   const cb = useRef(onTick)
-  cb.current = onTick
+  useEffect(() => { cb.current = onTick })
   useEffect(() => {
     const tick = () => { if (document.visibilityState === 'visible') cb.current() }
     const timer = setInterval(tick, ms)
