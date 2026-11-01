@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLiveRefresh } from '../../useLiveRefresh';
+import { CriticalBanner, type CriticalAlert } from './CriticalBanner';
 import { Activity, CalendarDays, Check, ClipboardList, FileText, FlaskConical, HeartPulse, LayoutDashboard, LogOut, Menu, RefreshCw, Stethoscope, Users } from './icons';
 import { api } from './api';
 import type { Patient, User } from './types';
@@ -28,7 +29,12 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
   const [section, setSection] = useState('overview');
   const [collapsed, setCollapsed] = useState(false);
   const [refresh, setRefresh] = useState(0);
-  useLiveRefresh(() => setRefresh(r => r + 1));
+  const [alerts, setAlerts] = useState<CriticalAlert[]>([]);
+  useLiveRefresh(() => setRefresh(r => r + 1), 5000, (type, data) => {
+    if (type !== 'critical') return;
+    setAlerts(a => [data as CriticalAlert, ...a.filter(x => x.orderId !== data.orderId)]);
+    notify(`Critical result: ${data.patientName}`);
+  });
   const [toast, setToast] = useState('');
   const [openCases, setOpenCases] = useState(0);
   useEffect(() => { api.cases().then(c => setOpenCases(c.length)).catch(() => setOpenCases(0)); }, [refresh]);
@@ -135,6 +141,7 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
         </header>
 
         <div className="content">
+          {section !== 'overview' && <CriticalBanner items={alerts} onDismiss={id => setAlerts(a => a.filter(x => x.orderId !== id))} />}
           <PortalBoundary key={section}>
           {section === 'overview' && (
             <DoctorOverview

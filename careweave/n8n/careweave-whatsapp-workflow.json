@@ -137,7 +137,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const e = $json.body;\nconst raw = e.phone;\nconst digits = String(raw || '').replace(/\\D/g, '');\nconst cc = ($env.DEFAULT_COUNTRY_CODE || '91').replace(/\\D/g, '');\nconst to = digits.length === 10 ? cc + digits : digits; // WhatsApp wants country code + number, no plus sign\nconst status = e.criticalCount > 0 ? 'Needs attention' : (e.abnormalCount > 0 ? 'Some values outside range' : 'Normal');\nconst text = `🧪 CareWeave Lab Alert: Hello ${e.name}, your ${e.testName} results have been verified by ${e.pathologist || 'the laboratory'}. Status: ${status} / Critical flags: ${e.criticalCount}.\\nReply REPORT to see the values.`;\nreturn [{ json: { to, text } }];"
+        "jsCode": "const e = $json.body;\nconst raw = e.phone;\nconst digits = String(raw || '').replace(/\\D/g, '');\nconst cc = ($env.DEFAULT_COUNTRY_CODE || '91').replace(/\\D/g, '');\nconst to = digits.length === 10 ? cc + digits : digits; // WhatsApp wants country code + number, no plus sign\nconst status = e.criticalCount > 0 ? 'Needs attention' : (e.abnormalCount > 0 ? 'Some values outside range' : 'Normal');\nconst text = `🧪 CareWeave Lab Alert: Hello ${e.name}, your ${e.testName} results have been verified by ${e.pathologist || 'the laboratory'}. Status: ${status} / Critical flags: ${e.criticalCount}.\\nReply REPORT ${e.patientId || '<your UHID>'} to see the values.`;\nreturn [{ json: { to, text } }];"
       },
       "id": "format-lab-report",
       "name": "Format Lab Report",
@@ -150,7 +150,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const e = $json.body;\nconst raw = e.phone;\nconst digits = String(raw || '').replace(/\\D/g, '');\nconst cc = ($env.DEFAULT_COUNTRY_CODE || '91').replace(/\\D/g, '');\nconst to = digits.length === 10 ? cc + digits : digits; // WhatsApp wants country code + number, no plus sign\nconst lines = (e.medicines || []).map(m => `• ${m.name} - ${m.dosage}, ${m.frequency}${m.foodInstruction ? ' (' + m.foodInstruction + ')' : ''}`);\nconst text = `💊 Hello ${e.name}, ${e.doctor || 'your doctor'} prescribed:\\n${lines.join('\\n')}\\nReply MEDS for your daily timings.`;\nreturn [{ json: { to, text } }];"
+        "jsCode": "const e = $json.body;\nconst raw = e.phone;\nconst digits = String(raw || '').replace(/\\D/g, '');\nconst cc = ($env.DEFAULT_COUNTRY_CODE || '91').replace(/\\D/g, '');\nconst to = digits.length === 10 ? cc + digits : digits; // WhatsApp wants country code + number, no plus sign\nconst lines = (e.medicines || []).map(m => `• ${m.name} - ${m.dosage}, ${m.frequency}${m.foodInstruction ? ' (' + m.foodInstruction + ')' : ''}`);\nconst text = `💊 Hello ${e.name}, ${e.doctor || 'your doctor'} prescribed:\\n${lines.join('\\n')}\\nReply MEDS ${e.patientId || '<your UHID>'} for your daily timings.`;\nreturn [{ json: { to, text } }];"
       },
       "id": "format-prescription",
       "name": "Format Prescription",
@@ -163,7 +163,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const e = $json.body;\nconst raw = e.from;\nconst digits = String(raw || '').replace(/\\D/g, '');\nconst cc = ($env.DEFAULT_COUNTRY_CODE || '91').replace(/\\D/g, '');\nconst to = digits.length === 10 ? cc + digits : digits; // WhatsApp wants country code + number, no plus sign\nconst keyword = String(e.body || '').trim().split(/\\s+/)[0].toUpperCase();\nreturn [{ json: { to, phone: to, keyword } }];"
+        "jsCode": "const e = $json.body;\nconst raw = e.from;\nconst digits = String(raw || '').replace(/\\D/g, '');\nconst cc = ($env.DEFAULT_COUNTRY_CODE || '91').replace(/\\D/g, '');\nconst to = digits.length === 10 ? cc + digits : digits; // WhatsApp wants country code + number, no plus sign\nconst parts = String(e.body || '').trim().split(/\\s+/);\nconst keyword = (parts[0] || '').toUpperCase();\nconst uhid = parts[1] || ''; // reports and medicines also need the patient's UHID\nreturn [{ json: { to, phone: to, keyword, uhid } }];"
       },
       "id": "parse-inbound-message",
       "name": "Parse Inbound Message",
@@ -320,6 +320,10 @@
             {
               "name": "phone",
               "value": "={{ $json.phone }}"
+            },
+            {
+              "name": "uhid",
+              "value": "={{ $json.uhid }}"
             }
           ]
         },
@@ -355,6 +359,10 @@
             {
               "name": "phone",
               "value": "={{ $json.phone }}"
+            },
+            {
+              "name": "uhid",
+              "value": "={{ $json.uhid }}"
             }
           ]
         },
@@ -395,7 +403,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const to = $('Parse Inbound Message').first().json.to;\nconst r = $json;\nlet text;\nif (!r.found) text = 'We could not find a CareWeave record for this number. Please check with the front desk.';\nelse if (!r.available) text = `Hello ${r.patient.name}, you have no verified lab report yet.`;\nelse {\n  const rep = r.report;\n  const rows = rep.results.slice(0, 12).map(x => `${x.flag === 'critical' ? '🔴' : x.flag === 'abnormal' ? '🟠' : '▫️'} ${x.parameter}: ${x.value} ${x.unit}${x.flag !== 'normal' ? ' (' + x.flag.toUpperCase() + ')' : ''}`);\n  text = `🧪 ${rep.testName} - verified by ${rep.verifiedBy || 'the laboratory'}\\n${rows.join('\\n')}\\nCritical flags: ${rep.criticalCount}. Please discuss these results with your doctor.`;\n}\nreturn [{ json: { to, text } }];"
+        "jsCode": "const to = $('Parse Inbound Message').first().json.to;\nconst r = $json;\nlet text;\nif (r.verificationRequired) text = \"To protect your health records, add your UHID after the word, for example: REPORT CW-12345. It is on your token slip and patient card.\";\nelse if (!r.found) text = 'We could not find a CareWeave record for this number. Please check with the front desk.';\nelse if (!r.available) text = `Hello ${r.patient.name}, you have no verified lab report yet.`;\nelse {\n  const rep = r.report;\n  const rows = rep.results.slice(0, 12).map(x => `${x.flag === 'critical' ? '🔴' : x.flag === 'abnormal' ? '🟠' : '▫️'} ${x.parameter}: ${x.value} ${x.unit}${x.flag !== 'normal' ? ' (' + x.flag.toUpperCase() + ')' : ''}`);\n  text = `🧪 ${rep.testName} - verified by ${rep.verifiedBy || 'the laboratory'}\\n${rows.join('\\n')}\\nCritical flags: ${rep.criticalCount}. Please discuss these results with your doctor.`;\n}\nreturn [{ json: { to, text } }];"
       },
       "id": "format-report-reply",
       "name": "Format Report Reply",
@@ -408,7 +416,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const to = $('Parse Inbound Message').first().json.to;\nconst r = $json;\nlet text;\nif (!r.found) text = 'We could not find a CareWeave record for this number. Please check with the front desk.';\nelse if (!r.medications.length) text = `Hello ${r.patient.name}, you have no active prescriptions.`;\nelse {\n  const part = (label, slot) => {\n    const rows = r.medications.filter(m => m.schedule && m.schedule[slot]).map(m => `  • ${m.medicine} - ${m.schedule[slot]}${m.food ? ' (' + m.food + ')' : ''}`);\n    return rows.length ? `*${label}*\\n${rows.join('\\n')}` : '';\n  };\n  const other = r.medications.filter(m => !m.schedule).map(m => `  • ${m.medicine} - ${m.dosage}, ${m.frequency}`);\n  text = ['💊 Medicines for ' + r.patient.name, part('Morning','morning'), part('Afternoon','afternoon'), part('Night','night'), other.length ? '*As directed*\\n' + other.join('\\n') : ''].filter(Boolean).join('\\n');\n}\nreturn [{ json: { to, text } }];"
+        "jsCode": "const to = $('Parse Inbound Message').first().json.to;\nconst r = $json;\nlet text;\nif (r.verificationRequired) text = \"To protect your health records, add your UHID after the word, for example: REPORT CW-12345. It is on your token slip and patient card.\";\nelse if (!r.found) text = 'We could not find a CareWeave record for this number. Please check with the front desk.';\nelse if (!r.medications.length) text = `Hello ${r.patient.name}, you have no active prescriptions.`;\nelse {\n  const part = (label, slot) => {\n    const rows = r.medications.filter(m => m.schedule && m.schedule[slot]).map(m => `  • ${m.medicine} - ${m.schedule[slot]}${m.food ? ' (' + m.food + ')' : ''}`);\n    return rows.length ? `*${label}*\\n${rows.join('\\n')}` : '';\n  };\n  const other = r.medications.filter(m => !m.schedule).map(m => `  • ${m.medicine} - ${m.dosage}, ${m.frequency}`);\n  text = ['💊 Medicines for ' + r.patient.name, part('Morning','morning'), part('Afternoon','afternoon'), part('Night','night'), other.length ? '*As directed*\\n' + other.join('\\n') : ''].filter(Boolean).join('\\n');\n}\nreturn [{ json: { to, text } }];"
       },
       "id": "format-meds-reply",
       "name": "Format Meds Reply",
@@ -421,7 +429,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const to = $json.to;\nconst text = 'CareWeave on WhatsApp. Reply with:\\n*QUEUE* - your token and wait time\\n*REPORT* - your latest verified lab report\\n*MEDS* - your medicine timings';\nreturn [{ json: { to, text } }];"
+        "jsCode": "const to = $json.to;\nconst text = 'CareWeave on WhatsApp. Reply with:\\n*QUEUE* - your token and wait time\\n*REPORT <your UHID>* - your latest verified lab report\\n*MEDS <your UHID>* - your medicine timings\\nYour UHID is on your token slip and patient card.';\nreturn [{ json: { to, text } }];"
       },
       "id": "format-help-reply",
       "name": "Format Help Reply",

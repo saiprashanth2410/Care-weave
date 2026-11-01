@@ -137,9 +137,15 @@ Exasol Personal was benchmarked against **5 million synthetic visit records** ge
 - Automated event pushes: `PATIENT_CHECKED_IN`, `LAB_REPORT_RELEASED`, `PRESCRIPTION_PRESCRIBED`.
 - Interactive two-way keywords:
   - `QUEUE` / `TOKEN` — Live queue position, assigned doctor, consultation room, and estimated wait.
-  - `MEDS` / `RX` — Active medication schedule segmented by Morning, Afternoon, and Night.
-  - `REPORT` — Latest verified laboratory test parameters and critical flags.
+  - `MEDS <UHID>` / `RX <UHID>` — Active medication schedule segmented by Morning, Afternoon, and Night.
+  - `REPORT <UHID>` — Latest verified laboratory test parameters and critical flags.
+  - Reports and medicines are private: they are shown only when the sender's phone number and the UHID belong to the same patient.
 - Built-in **WhatsApp Simulator Widget** allows evaluators to simulate the entire WhatsApp experience directly inside the browser without needing third-party hardware.
+
+### 5. Live Operations
+- **Live sync:** a server-sent-events stream (`/api/events`) refreshes the front desk and doctor screens the moment anything changes. Where the host cannot hold a connection open (serverless), screens fall back to polling every 5 seconds.
+- **Critical lab alerts:** when a verifier releases a result with a critical value, the ordering and linked doctors get a banner at once, and their Overview keeps it for 3 days.
+- **Pre-consult brief:** one click on a patient chart summarises allergies, flagged labs, medicines and open items. It uses Gemma/Gemini when `GEMINI_API_KEY` is set (no name, phone or UHID is sent) and plain rules otherwise.
 
 ---
 

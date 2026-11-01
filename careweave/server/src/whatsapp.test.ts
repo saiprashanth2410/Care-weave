@@ -38,7 +38,7 @@ test('next token follows the tokens already issued today', () => {
 });
 
 test('medicines split into morning and night, and stopped ones are left out', () => {
-  const r: any = activePrescriptions(db, { phone: '+919876543210' });
+  const r: any = activePrescriptions(db, { phone: '+919876543210', uhid: 'CW-1' });
   assert.equal(r.medications.length, 2);
   assert.equal(r.medications[0].schedule.morning, '1 tablet');
   assert.equal(r.medications[0].schedule.afternoon, null);
@@ -48,7 +48,7 @@ test('medicines split into morning and night, and stopped ones are left out', ()
 test('keywords route to the right answer, anything else gets help', () => {
   assert.equal(replyTo(db, '9876543210', 'queue A-002').command, 'QUEUE');
   assert.equal(replyTo(db, '9876543210', 'rx').command, 'MEDS');
-  assert.match(replyTo(db, '9876543210', 'MEDS').reply, /Morning/);
+  assert.match(replyTo(db, '9876543210', 'MEDS CW-1').reply, /Morning/);
   assert.equal(replyTo(db, '9876543210', 'hello').command, 'HELP');
 });
 
@@ -62,4 +62,13 @@ test('an unreachable n8n never blocks or throws', async () => {
   process.env.NODE_ENV = prev;
   assert.ok(recentEvents().some((e) => e.event === 'PATIENT_CHECKED_IN'));
   await new Promise((r) => setTimeout(r, 200));
+});
+
+test('reports and medicines need the UHID as well as the phone, and both must match the same patient', () => {
+  assert.match(replyTo(db, '9876543210', 'MEDS').reply, /add your UHID/);
+  assert.match(replyTo(db, '9876543210', 'REPORT').reply, /add your UHID/);
+  assert.match(replyTo(db, '9876543210', 'MEDS CW-999').reply, /could not find/);
+  assert.match(replyTo(db, '9000000000', 'MEDS CW-1').reply, /could not find/);
+  assert.match(replyTo(db, '9876543210', 'meds cw-1').reply, /Morning/);
+  assert.equal((activePrescriptions(db, { uhid: 'CW-1' }) as any).verificationRequired, true);
 });

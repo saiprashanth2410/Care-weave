@@ -3,6 +3,8 @@ import crypto from 'node:crypto';
 import { checksum, findIssues, matchPatient, type Identity, type Issue } from './reconcile.js';
 import { searchMedicines } from './medicines.js';
 import { checkDuplicateTherapy } from './safety/molecules.js';
+import { emitEvent } from './whatsapp/emitter.js';
+import { makeBrief } from './clinicalSummary.js';
 
 // Doctor portal API. Every route checks the role here on the server, and patient data is only
 // reachable for a patient the doctor is linked to (an appointment assigned to them, or their own encounter).
@@ -196,6 +198,9 @@ export function registerDoctorRoutes(c: Ctx) {
         awaitingVerification: labs.filter((l: any) => l.status === 'Awaiting Verification').length,
         openCases: casesFor(req).length
       },
+      // Verified in the last 3 days with a critical value: stays on the screen until it ages out, even if the live alert was missed.
+      criticalLabs: labs.filter((l: any) => l.result?.parameters?.some((x: any) => x.flag === 'critical') && Date.now() - Date.parse(l.result.verifiedAt || l.requestedAt) < 3 * 86400000)
+        .map((l: any) => ({ orderId: l.orderId, patientName: l.patientName, testName: l.testName, verifiedAt: l.result.verifiedAt, values: l.result.parameters.filter((x: any) => x.flag === 'critical').map((x: any) => ({ parameter: x.parameter, value: x.value, unit: x.unit })) })),
       appointments: today.sort((a: any, b: any) => String(a.time).localeCompare(String(b.time))),
       labOrders: labs.slice(0, 60),
       cases: casesFor(req),
@@ -243,6 +248,34 @@ export function registerDoctorRoutes(c: Ctx) {
       labOrders: labsFor(p).map(doctorLab),
       prescriptions: db().prescriptions.filter((r: any) => r.patientId === p.id)
     });
+  });
+
+  // Pre-consultation brief. One request per doctor every few seconds, so it cannot be used to run up the model quota.
+  const lastBrief = new Map<string, number>();
+  app.post('/api/patients/:id/summary', roles('doctor'), async (req: any, res) => {
+    const p = patientFor(req, res, req.params.id);
+    if (!p) return;
+    const t = Date.now();
+    if (t - (lastBrief.get(req.user.id) ?? 0) < 4000) return res.status(429).json({ error: 'Wait a few seconds before asking for another brief.' });
+    lastBrief.set(req.user.id, t);
+    const labs = labsFor(p).filter((o: any) => ['verified', 'released'].includes(o.status)).slice(0, 6)
+      .flatMap((o: any) => (o.results ?? []).filter((r: any) => r.value).map((r: any) => ({ test: r.parameter, value: r.value, unit: r.unit, flag: r.flag, date: o.verifiedAt })));
+    const vitals = db().vitals.find((v: any) => v.patientId === p.id);
+    const brief = await makeBrief({
+      ageYears: ageFromDob(p.dob), sex: p.gender || 'O',
+      allergies: p.allergies || [], problems: (p.problems || []).slice(0, 12),
+      vitals,
+      medicines: db().prescriptions.filter((r: any) => r.patientId === p.id && r.status === 'Active').slice(0, 12),
+      labs: labs.slice(0, 14),
+      encounters: db().encounters.filter((e: any) => e.patientId === p.id).slice(0, 3),
+      openItems: [
+        ...db().referrals.filter((r: any) => r.patientId === p.id && r.status !== 'Completed').map((r: any) => `Referral to ${r.specialty} is ${String(r.status).toLowerCase()}`),
+        ...labsFor(p).filter((o: any) => !['verified', 'released', 'cancelled'].includes(o.status)).map((o: any) => `${o.testName} not yet verified`),
+      ].slice(0, 6),
+    });
+    audit(req, 'read', 'summary', p.id, `Pre-consultation brief (${brief.source})`);
+    void save();
+    res.json({ ...brief, generatedAt: now(), note: 'A reading aid made from the chart. Check it against the record before acting on it.' });
   });
 
   // ── encounters (SOAP) ─────────────────────────────────────────────────────
@@ -501,6 +534,10 @@ export function registerDoctorRoutes(c: Ctx) {
     audit(req, 'create', 'prescription', r.id, `${medicine} ${dosage}${allergy ? ' (allergy override)' : ''}`);
     if (high.length) audit(req, 'override', 'prescription', r.id, `Duplicate therapy override for ${molecules}: ${text(ov.overrideReason, 500)}`);
     await save();
+    emitEvent('PRESCRIPTION_PRESCRIBED', {
+      patientId: p.patientId, name: p.name, phone: p.phone, doctor: req.user.name,
+      medicines: [{ name: medicine, dosage, frequency, foodInstruction: r.instructions || '' }],
+    });
     res.status(201).json(r);
   });
 

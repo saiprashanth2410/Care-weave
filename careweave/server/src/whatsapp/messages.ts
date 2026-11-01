@@ -28,6 +28,18 @@ export function findPatients(db: any, q: { phone?: string; uhid?: string }) {
   return db.patients.filter((p: any) => digits(p.phone).slice(-10) === tail);
 }
 
+/**
+ * Reports and medicines are private health data, and a phone number alone is not proof of who is asking (numbers are
+ * shared, spoofed and recycled). They are shown only when the sender's phone AND the patient's UHID both match.
+ */
+export function verifiedPatients(db: any, q: { phone?: string; uhid?: string }) {
+  if (!String(q.uhid || '').trim() || digits(q.phone).length < 7) return { status: 'needs_uhid' as const, patients: [] as any[] };
+  const byUhid = findPatients(db, { uhid: q.uhid });
+  const tail = digits(q.phone).slice(-10);
+  const patients = byUhid.filter((p: any) => digits(p.phone).slice(-10) === tail);
+  return patients.length ? { status: 'ok' as const, patients } : { status: 'mismatch' as const, patients: [] as any[] };
+}
+
 /** The next OP token for a day: A-001, A-002 ... counted over appointments that already hold one. */
 export function nextToken(db: any, date: string) {
   const n = db.appointments.filter((a: any) => a.token && (a.date === date || (isToday(a.date) && isToday(date)))).length + 1;
@@ -61,7 +73,9 @@ export function queueStatus(db: any, q: { phone?: string; uhid?: string }) {
 }
 
 export function latestReport(db: any, q: { phone?: string; uhid?: string }) {
-  const patients = findPatients(db, q);
+  const v = verifiedPatients(db, q);
+  if (v.status === 'needs_uhid') return { found: true as const, verificationRequired: true as const };
+  const patients = v.patients;
   if (!patients.length) return { found: false as const };
   const ids = new Set(patients.flatMap((p: any) => [p.id, p.patientId]));
   const order = db.labOrders
@@ -116,15 +130,15 @@ function stillRunning(rx: any) {
 }
 
 export function activePrescriptions(db: any, q: { phone?: string; uhid?: string }) {
-  const patients = findPatients(db, q);
+  const v = verifiedPatients(db, q);
+  if (v.status === 'needs_uhid') return { found: true as const, verificationRequired: true as const };
+  const patients = v.patients;
   if (!patients.length) return { found: false as const };
   const ids = new Set(patients.map((p: any) => p.id));
-  const shared = patients.length > 1; // one phone, several people: say whose medicine each line is
   const meds = db.prescriptions.filter((r: any) => ids.has(r.patientId) && r.status === 'Active' && stillRunning(r)).map((r: any) => {
     const slots = scheduleOf(r.frequency);
-    const owner = shared ? patients.find((p: any) => p.id === r.patientId)?.name : '';
     return {
-      medicine: owner ? `${r.medicine} (${owner})` : r.medicine, dosage: r.dosage, frequency: r.frequency, duration: r.duration || '',
+      medicine: r.medicine, dosage: r.dosage, frequency: r.frequency, duration: r.duration || '',
       food: foodNote(`${r.frequency} ${r.instructions || ''}`), instructions: r.instructions || '',
       schedule: slots ? { morning: slots.includes('morning') ? r.dosage : null, afternoon: slots.includes('afternoon') ? r.dosage : null, night: slots.includes('night') ? r.dosage : null } : null
     };
@@ -133,7 +147,8 @@ export function activePrescriptions(db: any, q: { phone?: string; uhid?: string 
 }
 
 // ── wording ────────────────────────────────────────────────────────────────
-export const HELP_TEXT = 'CareWeave on WhatsApp. Reply with:\n*QUEUE* - your token and wait time\n*REPORT* - your latest verified lab report\n*MEDS* - your medicine timings\n*HELP* - this list';
+export const HELP_TEXT = 'CareWeave on WhatsApp. Reply with:\n*QUEUE* - your token and wait time\n*REPORT <your UHID>* - your latest verified lab report\n*MEDS <your UHID>* - your medicine timings\n*HELP* - this list\nYour UHID is on your token slip and patient card.';
+const NEEDS_UHID = 'To protect your health records, add your UHID after the word, for example: *REPORT CW-12345*. It is on your token slip and patient card.';
 const NOT_FOUND = 'We could not find a CareWeave record for this number. Please check with the front desk.';
 
 export function queueText(r: ReturnType<typeof queueStatus>) {
@@ -145,6 +160,7 @@ export function queueText(r: ReturnType<typeof queueStatus>) {
 
 export function reportText(r: ReturnType<typeof latestReport>) {
   if (!r.found) return NOT_FOUND;
+  if ('verificationRequired' in r) return NEEDS_UHID;
   if (!r.available) return `Hello ${r.patient.name}, you have no verified lab report yet.`;
   const { report } = r;
   const lines = report.results.slice(0, 12).map((x: any) => `${x.flag === 'critical' ? '🔴' : x.flag === 'abnormal' ? '🟠' : '▫️'} ${x.parameter}: ${x.value} ${x.unit}${x.flag !== 'normal' ? ` (${x.flag.toUpperCase()})` : ''}`);
@@ -153,6 +169,7 @@ export function reportText(r: ReturnType<typeof latestReport>) {
 
 export function medsText(r: ReturnType<typeof activePrescriptions>) {
   if (!r.found) return NOT_FOUND;
+  if ('verificationRequired' in r) return NEEDS_UHID;
   if (!r.medications.length) return `Hello ${r.patient.name}, you have no active prescriptions.`;
   const part = (label: string, slot: 'morning' | 'afternoon' | 'night') => {
     const rows = r.medications.filter((m: any) => m.schedule?.[slot]).map((m: any) => `  • ${m.medicine} - ${m.schedule[slot]}${m.food ? ` (${m.food})` : ''}`);
@@ -164,17 +181,19 @@ export function medsText(r: ReturnType<typeof activePrescriptions>) {
 
 /** One keyword in, one reply out. Unknown text gets the help list. */
 export function replyTo(db: any, phone: string, body: string) {
-  const word = String(body || '').trim().split(/\s+/)[0]?.toUpperCase() || '';
+  const [first, second] = String(body || '').trim().split(/\s+/);
+  const word = first?.toUpperCase() || '';
+  const uhid = second || '';
   if (word === 'QUEUE' || word === 'TOKEN') return { command: 'QUEUE', reply: queueText(queueStatus(db, { phone })) };
-  if (word === 'REPORT') return { command: 'REPORT', reply: reportText(latestReport(db, { phone })) };
-  if (word === 'MEDS' || word === 'RX') return { command: 'MEDS', reply: medsText(activePrescriptions(db, { phone })) };
+  if (word === 'REPORT') return { command: 'REPORT', reply: reportText(latestReport(db, { phone, uhid })) };
+  if (word === 'MEDS' || word === 'RX') return { command: 'MEDS', reply: medsText(activePrescriptions(db, { phone, uhid })) };
   return { command: 'HELP', reply: HELP_TEXT };
 }
 
 /** What a patient is sent when each event fires. */
 export function eventText(e: any): string {
   if (e.event === 'PATIENT_CHECKED_IN') return `Welcome ${e.name}! Your token is *${e.token}* with ${e.doctor} (${e.room}). Queue position: ${e.queuePosition}. Reply QUEUE any time for your live wait.`;
-  if (e.event === 'LAB_REPORT_RELEASED') return `🧪 CareWeave Lab Alert: Hello ${e.name}, your ${e.testName} results have been verified by ${e.pathologist || 'the laboratory'}. Critical flags: ${e.criticalCount}. Reply REPORT to view them.`;
-  if (e.event === 'PRESCRIPTION_PRESCRIBED') return `💊 Hello ${e.name}, ${e.doctor || 'your doctor'} prescribed: ${(e.medicines || []).map((m: any) => m.name).join(', ')}. Reply MEDS for your timings.`;
+  if (e.event === 'LAB_REPORT_RELEASED') return `🧪 CareWeave Lab Alert: Hello ${e.name}, your ${e.testName} results have been verified by ${e.pathologist || 'the laboratory'}. Critical flags: ${e.criticalCount}. Reply REPORT ${e.patientId || '<your UHID>'} to view them.`;
+  if (e.event === 'PRESCRIPTION_PRESCRIBED') return `💊 Hello ${e.name}, ${e.doctor || 'your doctor'} prescribed: ${(e.medicines || []).map((m: any) => m.name).join(', ')}. Reply MEDS ${e.patientId || '<your UHID>'} for your timings.`;
   return '';
 }

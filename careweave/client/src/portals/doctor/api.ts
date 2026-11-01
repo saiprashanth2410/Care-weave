@@ -44,6 +44,7 @@ export const api={
   patients:(q='')=>request<Patient[]>(`/api/patients?query=${encodeURIComponent(q)}`),
   patient:(id:string)=>request<PatientRecord>(`/api/patients/${id}/record`),
   openPatient:(patientId:string,reason:string)=>request<Patient>('/api/patients/open',{method:'POST',body:JSON.stringify({patientId,reason})}),
+  summary:(id:string)=>request<{text:string;source:'ai'|'rules';model?:string;generatedAt:string;note:string}>(`/api/patients/${id}/summary`,{method:'POST'}),
   patientAdmin:(id:string)=>request<AdminPatientRecord>(`/api/patients/${id}/admin`),
   createPatient:(body:Partial<Patient>)=>request<Patient>('/api/patients',{method:'POST',body:JSON.stringify(body)}),
   updatePatient:(id:string,body:Partial<Patient>)=>request<Patient>(`/api/patients/${id}`,{method:'PATCH',body:JSON.stringify(body)}),

@@ -7,8 +7,8 @@ CareWeave posts `PATIENT_CHECKED_IN`, `LAB_REPORT_RELEASED` and `PRESCRIPTION_PR
 (when `META_WHATSAPP_TOKEN` is set) or Twilio.
 
 Replies: post `{"event":"INBOUND_MESSAGE","from":"<phone>","body":"QUEUE"}` to the same webhook (for example
-from an n8n Twilio Trigger or a Meta webhook relay). `QUEUE`/`TOKEN`, `REPORT` and `MEDS`/`RX` call the
-CareWeave `/api/whatsapp/*` endpoints and answer with live data. Without n8n, point Twilio or Meta straight at
+from an n8n Twilio Trigger or a Meta webhook relay). `QUEUE`/`TOKEN`, `REPORT <UHID>` and `MEDS <UHID>` (or `RX`) call the
+CareWeave `/api/whatsapp/*` endpoints and answer with live data. Reports and medicines need the patient's UHID as well as the sending phone number, and both must match one patient. Without n8n, point Twilio or Meta straight at
 `POST /api/whatsapp/inbound?key=<WHATSAPP_API_KEY>`.
 
 ## Environment variables (n8n)

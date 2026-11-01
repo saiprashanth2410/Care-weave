@@ -18,6 +18,7 @@ import { importMedicines } from './medicines.js';
 import { buildSeed, ensureSeed } from './seed.js';
 import { registerExasolAnalyticsRoutes } from './exasol/routes.js';
 import { catchAsyncRoutes } from './asyncRoutes.js';
+import { addClient, announceChange, broadcast } from './liveEvents.js';
 import { emitEvent } from './whatsapp/emitter.js';
 import { registerWhatsAppRoutes, registerWhatsAppSimulator } from './whatsapp/routes.js';
 import { nextToken, queueAhead, roomFor } from './whatsapp/messages.js';
@@ -132,7 +133,10 @@ async function canTransact() {
 // One save is one unit: every changed document across every collection is written together, or (on a replica set)
 // not at all. The "last written" snapshot only moves forward after the write succeeded, so a failed save is retried
 // with the same changes on the next one.
-async function saveToMongo() {
+// Audit entries and sessions change on every sign-in or page view; they are not worth waking other screens for.
+const QUIET = new Set(['auditLogs', 'sessions']);
+
+async function saveToMongo(): Promise<boolean> {
   const plan: { c: string; changed: any[]; removed: string[]; after: Map<string, string> }[] = [];
   for (const c of COLLECTIONS) {
     const docs: any[] = db[c] || [];
@@ -163,6 +167,7 @@ async function saveToMongo() {
     }
   }
   for (const p of plan) written.set(p.c, p.after);
+  return plan.some((p) => !QUIET.has(p.c) && (p.changed.length || p.removed.length));
 }
 
 // Indexes the lookups rely on. Failure here is not fatal: the server still works, only slower.
@@ -179,18 +184,24 @@ async function ensureIndexes() {
 }
 
 let saving: Promise<void> = Promise.resolve();
+let lastSig = '';
 function save() {
   const nowMs = Date.now();
   for (const [k, v] of sessions) if (v.expires < nowMs) sessions.delete(k);
   db.sessions = [...sessions].map(([id, v]) => ({ id, ...v }));
   // Serialise writes so two requests never interleave their bulk operations.
   saving = saving.then(async () => {
-    if (mongoConnected) return saveToMongo();
+    if (mongoConnected) {
+      if (await saveToMongo()) announceChange();
+      return;
+    }
     await fs.mkdir(path.dirname(DATA), { recursive: true });
     // Write a temp file, then rename it over the real one. A crash mid-write leaves the old file intact.
     const tmp = `${DATA}.${process.pid}.tmp`;
     await fs.writeFile(tmp, JSON.stringify(db, null, 2));
     await fs.rename(tmp, DATA);
+    const sig = crypto.createHash('sha1').update(JSON.stringify({ ...db, auditLogs: 0, sessions: 0 })).digest('hex');
+    if (sig !== lastSig) { lastSig = sig; announceChange(); }
   });
   return saving;
 }
@@ -352,6 +363,12 @@ if (firebaseAuth) {
 registerWhatsAppRoutes({ app, db: () => db });
 app.use('/api', auth);
 registerWhatsAppSimulator({ app, db: () => db });
+
+// Live updates. A serverless host cannot hold the connection open, so there the screens fall back to polling.
+app.get('/api/events', (req: any, res) => {
+  if (isVercel) return res.status(204).end();
+  addClient(res, req.user.id, req.user.role);
+});
 
 app.get('/api/me', (req: any, res) =>
   res.json({
@@ -832,6 +849,19 @@ app.patch('/api/lab/orders/:id', roles('lab'), async (req: any, res) => {
       criticalCount: rs.filter((r: any) => r.flag === 'critical').length, abnormalCount: rs.filter((r: any) => r.flag === 'abnormal').length,
       summary: rs.slice(0, 10).map((r: any) => ({ parameter: r.parameter, value: r.value, unit: r.unit, flag: r.flag || 'normal' }))
     });
+    // A critical value cannot wait for the doctor to open the lab page: tell the ordering and linked doctors now.
+    const critical = rs.filter((r: any) => r.flag === 'critical');
+    if (critical.length) {
+      const doctors: any[] = db.users.filter((u: any) => u.role === 'doctor');
+      const linked = pt ? (app.locals as any).doctorLinkedPatientIds : null;
+      const who = new Set(doctors.filter((d) => d.id === o.createdBy || d.name === o.orderingDoctor || (linked && linked(d.id).has(pt.id))).map((d) => d.id));
+      broadcast('critical', {
+        orderId: o.id, patientName: o.patientName, patientId: o.patientId, testName: o.testName, at: now(),
+        values: critical.slice(0, 6).map((r: any) => ({ parameter: r.parameter, value: r.value, unit: r.unit })),
+      }, (userId) => who.has(userId));
+      audit(req, 'alert', 'labOrder', o.id, `Critical value pushed to ${who.size} doctor(s)`);
+      await save();
+    }
   }
   res.json({ data: o });
 });

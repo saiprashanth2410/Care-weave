@@ -52,6 +52,15 @@ export function DoctorPatientRecords({
     }
   };
 
+  const [brief, setBrief] = useState<{ text: string; source: 'ai' | 'rules'; model?: string; note: string } | null>(null);
+  const [briefBusy, setBriefBusy] = useState(false);
+  useEffect(() => { setBrief(null); }, [selected?.id]);
+  const makeBrief = () => {
+    if (!selected) return;
+    setBriefBusy(true);
+    api.summary(selected.id).then(setBrief).catch(e => notify(e.message)).finally(() => setBriefBusy(false));
+  };
+
   const latestVital = selected?.vitals?.[0];
 
   return (
@@ -147,11 +156,22 @@ export function DoctorPatientRecords({
                 </div>
 
                 <div className="row-actions">
+                  <button className="action-pill" disabled={briefBusy} onClick={makeBrief}>
+                    <FileText size={14} /> {briefBusy ? 'Reading chart…' : 'Pre-consult brief'}
+                  </button>
                   <button className="action-pill amber" onClick={() => onReferral(selected)}>
                     <ClipboardList size={14} /> Specialist Referral
                   </button>
                 </div>
               </div>
+
+              {brief && (
+                <div className="card" style={{ margin: '12px 0', padding: 14, borderLeft: '4px solid #0c6b6d' }}>
+                  <b>{brief.source === 'ai' ? `AI brief (${brief.model})` : 'Chart brief'}</b>
+                  <pre style={{ whiteSpace: 'pre-wrap', font: 'inherit', margin: '8px 0 6px' }}>{brief.text}</pre>
+                  <small className="muted">{brief.note}</small>
+                </div>
+              )}
 
               {/* ALLERGIES & CHRONIC PROBLEMS CHIPS */}
               <div className="patient-tags">

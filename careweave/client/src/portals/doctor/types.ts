@@ -198,6 +198,7 @@ export type Dashboard={
   labOrders:LabOrder[];
   cases:any[];
   recent:any[];
+  criticalLabs?:{orderId:string;patientName:string;testName:string;values:{parameter:string;value:string;unit?:string}[]}[];
 };
 
 export type CollisionAlert = {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Activity, ArrowRight, CalendarDays, ChevronRight, Clock3, FlaskConical, RefreshCw, Search, Stethoscope, CheckCircle2 } from '../icons';
+import { CriticalBanner } from '../CriticalBanner';
 import { api } from '../api';
 import type { Dashboard, Patient, User } from '../types';
 import { fmtDate, initials, waitDuration } from '../helpers';
@@ -52,6 +53,8 @@ export function DoctorOverview({
           </div>
         }
       />
+
+      <CriticalBanner items={data.criticalLabs ?? []} />
 
       <div className="stat-grid">
         <StatCard
