@@ -254,12 +254,11 @@ export function registerDoctorRoutes(c: Ctx) {
     const e: any = { id: id('enc'), patientId: p.id, doctorId: req.user.id, date: now(), source: 'CareWeave Clinic', imported: false };
     for (const f of fields) e[f] = text(b[f], 4000);
     if (!fields.some((f) => e[f])) return res.status(400).json({ error: 'Write at least a note, a complaint or an assessment' });
+    // Check the vitals before storing anything, so a refusal does not leave a half-saved encounter behind.
+    const v = b.vitals && typeof b.vitals === 'object' ? cleanVitals(b.vitals) : {};
+    if (v.error) return res.status(400).json({ error: v.error });
     db().encounters.unshift(e);
-    if (b.vitals && typeof b.vitals === 'object') {
-      const v = cleanVitals(b.vitals);
-      if (v.error) return res.status(400).json({ error: v.error });
-      if (v.ok) { db().vitals.unshift({ id: id('vt'), patientId: p.id, date: now(), ...v.ok, recordedBy: req.user.name }); e.vitals = v.ok; }
-    }
+    if (v.ok) { db().vitals.unshift({ id: id('vt'), patientId: p.id, date: now(), ...v.ok, recordedBy: req.user.name }); e.vitals = v.ok; }
     audit(req, 'create', 'encounter', e.id, 'SOAP documentation');
     await save();
     res.status(201).json(e);
@@ -408,7 +407,9 @@ export function registerDoctorRoutes(c: Ctx) {
     const enc = db().encounters.find((e: any) => e.patientId === p.id && e.doctorId === req.user.id && (!wanted || e.id === wanted))
       ?? db().appointments.find((a: any) => a.patientId === p.id && a.doctorId === req.user.id && !['Cancelled', 'No Show'].includes(a.status) && (!wanted || a.id === wanted));
     if (!enc) return res.status(400).json({ error: 'Open an encounter (SOAP note) or have an appointment for this patient before ordering a test' });
-    const orderId = `ORD-${Date.now().toString().slice(-7)}${crypto.randomInt(10, 99)}`;
+    let orderId: string;
+    do orderId = `ORD-${Date.now().toString().slice(-7)}${crypto.randomInt(10, 100)}`;
+    while (db().labOrders.some((x: any) => x.id === orderId));
     const o: any = {
       id: orderId, external: false, patientId: p.patientId, registeredPatientRef: p.id, patientName: p.name,
       patientAge: ageFromDob(p.dob), patientGender: p.gender || 'O', encounterId: enc.id, testName,

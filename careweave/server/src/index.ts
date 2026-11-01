@@ -231,6 +231,16 @@ function audit(req: any, action: string, entity: string, entityId: string, detai
   });
 }
 
+// A screen that refreshes itself would otherwise write the same "opened the directory" entry every few seconds.
+function auditOnce(req: any, action: string, entity: string, entityId: string, detail: string, withinMs = 60_000) {
+  const t = Date.now();
+  for (let i = db.auditLogs.length - 1, seen = 0; i >= 0 && seen < 50; i--, seen++) {
+    const l = db.auditLogs[i];
+    if (l.actorId === req.user.id && l.action === action && l.entity === entity && l.detail === detail && t - Date.parse(l.timestamp) < withinMs) return;
+  }
+  audit(req, action, entity, entityId, detail);
+}
+
 function patientById(value: string) {
   return db.patients.find((p: any) => p.id === value || p.patientId === value);
 }
@@ -369,7 +379,7 @@ app.get('/api/dashboard', (req: any, res) => {
     todayCompleted: todayAppts.filter((a: any) => a.status === 'Completed').length,
     todayScheduled: todayAppts.filter((a: any) => a.status === 'Scheduled').length,
   };
-  const appointments = todayAppts.sort((a: any, b: any) => a.time.localeCompare(b.time));
+  const appointments = todayAppts.sort((a: any, b: any) => String(a.time).localeCompare(String(b.time)));
   res.json({ stats, appointments, recent: db.auditLogs.slice(-15).reverse() });
 });
 
@@ -380,13 +390,21 @@ app.get('/api/patients', roles('receptionist', 'doctor'), (req: any, res) => {
   const rows = db.patients.filter(
     (p: any) => (!linked || linked.has(p.id)) && (!q || [p.name, p.patientId, p.phone, p.email].some(v => String(v || '').toLowerCase().includes(q)))
   );
-  audit(req, 'search', 'patient', 'directory', q ? 'Search by permitted identifiers' : 'Open patient directory');
+  auditOnce(req, 'search', 'patient', 'directory', q ? 'Search by permitted identifiers' : 'Open patient directory');
   // Paged so a large directory never goes to the browser in one response.
   const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 200));
   const offset = Math.max(0, Number(req.query.offset) || 0);
   res.setHeader('X-Total-Count', String(rows.length));
   res.json(rows.slice(offset, offset + limit).map(adminPatientView));
 });
+
+// A repeated code would make two patients share one chart identifier.
+function newPatientCode() {
+  for (;;) {
+    const code = `CW-${crypto.randomInt(10000, 100000)}`;
+    if (!db.patients.some((p: any) => p.patientId === code)) return code;
+  }
+}
 
 app.post('/api/patients', roles('receptionist', 'doctor', 'lab'), async (req: any, res) => {
   const { name, dob, phone, email, emergencyContact, _forceCreate, risk, gender } = req.body || {};
@@ -406,7 +424,7 @@ app.post('/api/patients', roles('receptionist', 'doctor', 'lab'), async (req: an
 
   const p = {
     id: id('p'),
-    patientId: `CW-${Math.floor(10000 + Math.random() * 89999)}`,
+    patientId: newPatientCode(),
     name: String(name).trim(),
     dob,
     gender: ['M', 'F', 'O'].includes(gender) ? gender : 'O',
@@ -476,15 +494,15 @@ app.get('/api/appointments', roles('receptionist', 'doctor'), (req: any, res) =>
 });
 
 app.post('/api/appointments', roles('receptionist', 'doctor'), async (req: any, res) => {
-  const p = patientById(req.body.patientId);
+  const p = patientById(String(req.body?.patientId ?? ''));
   if (!p) return res.status(404).json({ error: 'Patient not found' });
   if (req.user.role === 'doctor') {
     if (!(app.locals as any).doctorLinkedPatientIds(req.user.id).has(p.id)) return res.status(403).json({ error: 'You are not linked to this patient' });
     req.body.doctorId = req.user.id;
   }
   const { date, time, reason, doctorId } = req.body;
-  if (!date || !time) return res.status(400).json({ error: 'Date and time are required' });
-  if (!reason || !reason.trim()) return res.status(400).json({ error: 'Reason for appointment is required' });
+  if (typeof date !== 'string' || typeof time !== 'string' || !date || !time) return res.status(400).json({ error: 'Date and time are required' });
+  if (typeof reason !== 'string' || !reason.trim()) return res.status(400).json({ error: 'Reason for appointment is required' });
 
   const conflict = db.appointments.find(
     (a: any) => a.patientId === p.id && a.date === date && a.time === time && !['Cancelled', 'Completed', 'No Show'].includes(a.status)
@@ -516,7 +534,8 @@ app.post('/api/appointments', roles('receptionist', 'doctor'), async (req: any, 
 app.patch('/api/appointments/:id', roles('receptionist', 'doctor'), async (req: any, res) => {
   const a = db.appointments.find((x: any) => x.id === req.params.id);
   if (!a) return res.status(404).json({ error: 'Appointment not found' });
-  const { status, date, time, reason, rev } = req.body;
+  const { status, date, time, reason, rev } = req.body || {};
+  if ([status, date, time, reason].some((v) => v !== undefined && typeof v !== 'string')) return res.status(400).json({ error: 'Status, date, time and reason must be text' });
   if (rev !== undefined && Number(rev) !== (a.rev || 0)) return res.status(409).json({ error: 'This appointment was changed by someone else. Reload and try again.' });
   // Check the new slot before changing anything, so a refusal leaves the appointment untouched.
   const nd = date || a.date, nt = time || a.time;
@@ -659,7 +678,10 @@ app.post('/api/lab/orders', roles('lab'), async (req: any, res) => {
   if (!patientName) return res.status(400).json({ error: 'Patient name is required' });
   if (!Number.isFinite(age) || age < 0 || age > 130) return res.status(400).json({ error: 'Enter a valid patient age' });
 
-  const orderId = `ORD-${Date.now().toString().slice(-7)}${crypto.randomInt(10, 99)}`;
+  // The id is the database key: a repeat would silently replace an older order, so draw again until it is free.
+  let orderId: string;
+  do orderId = `ORD-${Date.now().toString().slice(-7)}${crypto.randomInt(10, 100)}`;
+  while (db.labOrders.some((x: any) => x.id === orderId));
   const o = {
     id: orderId,
     external,

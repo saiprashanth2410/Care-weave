@@ -67,7 +67,8 @@ export function latestReport(db: any, q: { phone?: string; uhid?: string }) {
   const order = db.labOrders
     .filter((o: any) => ['verified', 'released'].includes(o.status) && (ids.has(o.registeredPatientRef) || ids.has(o.patientId)))
     .sort((a: any, b: any) => String(b.verifiedAt || '').localeCompare(String(a.verifiedAt || '')))[0];
-  const patient = patients[0];
+  // Family members can share one phone number: name the person the report belongs to, not just the first match.
+  const patient = (order && patients.find((p: any) => p.id === order.registeredPatientRef || p.patientId === order.patientId)) || patients[0];
   if (!order) return { found: true as const, available: false, patient: { name: patient.name, uhid: patient.patientId } };
   const results = (order.results || []).filter((r: any) => r.value).map((r: any) => ({
     parameter: r.parameter, value: r.value, unit: r.unit || '', referenceRange: r.referenceRange || '', flag: r.flag || 'normal'
@@ -88,6 +89,8 @@ type Slot = 'morning' | 'afternoon' | 'night';
 /** Reads "1-0-1", "BD", "twice daily", "at bedtime" and the like. Anything it cannot read is not guessed at. */
 export function scheduleOf(frequency: string): Slot[] | null {
   const f = String(frequency || '').toLowerCase();
+  // "once weekly", "alternate days", "as needed" are not daily: leave them as directed rather than guess.
+  if (/week|month|alternate|every other|\bsos\b|\bprn\b|as needed|when required/.test(f)) return null;
   const dash = f.match(/\b([01])\s*-\s*([01])\s*-\s*([01])\b/);
   if (dash) return (['morning', 'afternoon', 'night'] as Slot[]).filter((_, i) => dash[i + 1] === '1');
   if (/\b(tds|tid)\b|three times|thrice|\b3 times|four times|\bqid\b|\bqds\b|every [4-6] hours/.test(f)) return ['morning', 'afternoon', 'night'];
@@ -116,10 +119,12 @@ export function activePrescriptions(db: any, q: { phone?: string; uhid?: string 
   const patients = findPatients(db, q);
   if (!patients.length) return { found: false as const };
   const ids = new Set(patients.map((p: any) => p.id));
+  const shared = patients.length > 1; // one phone, several people: say whose medicine each line is
   const meds = db.prescriptions.filter((r: any) => ids.has(r.patientId) && r.status === 'Active' && stillRunning(r)).map((r: any) => {
     const slots = scheduleOf(r.frequency);
+    const owner = shared ? patients.find((p: any) => p.id === r.patientId)?.name : '';
     return {
-      medicine: r.medicine, dosage: r.dosage, frequency: r.frequency, duration: r.duration || '',
+      medicine: owner ? `${r.medicine} (${owner})` : r.medicine, dosage: r.dosage, frequency: r.frequency, duration: r.duration || '',
       food: foodNote(`${r.frequency} ${r.instructions || ''}`), instructions: r.instructions || '',
       schedule: slots ? { morning: slots.includes('morning') ? r.dosage : null, afternoon: slots.includes('afternoon') ? r.dosage : null, night: slots.includes('night') ? r.dosage : null } : null
     };
