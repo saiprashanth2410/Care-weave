@@ -17,17 +17,34 @@ import { registerDoctorRoutes } from './doctor.js';
 import { importMedicines } from './medicines.js';
 import { buildSeed, ensureSeed } from './seed.js';
 import { registerExasolAnalyticsRoutes } from './exasol/routes.js';
+import { catchAsyncRoutes } from './asyncRoutes.js';
+import { emitEvent } from './whatsapp/emitter.js';
+import { registerWhatsAppRoutes, registerWhatsAppSimulator } from './whatsapp/routes.js';
+import { nextToken, queueAhead, roomFor } from './whatsapp/messages.js';
 // Everything the server reads or writes lives next to the server code, whichever folder it was started from.
 const isVercel = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 const SERVER_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 loadEnv({ path: path.join(SERVER_DIR, '.env') });
 const app = express();
+catchAsyncRoutes(app);
 const PORT = Number(process.env.PORT || 4000);
 const DATA = isVercel ? '/tmp/careweave.json' : path.join(SERVER_DIR, 'data/careweave.json');
+const isProd = process.env.NODE_ENV === 'production';
 if (!isVercel) {
-    app.use(helmet({ contentSecurityPolicy: false }));
+    app.use(helmet());
 }
-app.use(cors({ origin: true, credentials: true }));
+// Browsers on these origins may call the API. CLIENT_ORIGIN is a comma-separated list. Requests with no Origin
+// header (same-origin, curl, server to server) are not a CORS concern and pass. Outside production, localhost is open.
+const allowedOrigins = String(process.env.CLIENT_ORIGIN || '').split(',').map((o) => o.trim().replace(/\/$/, '')).filter(Boolean);
+app.use(cors({
+    credentials: true,
+    origin(origin, cb) {
+        if (!origin)
+            return cb(null, true);
+        const ok = allowedOrigins.includes(origin) || (!isProd && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin));
+        cb(null, ok);
+    },
+}));
 app.use(express.json({ limit: '14mb' })); // 10 MB scan images arrive base64-encoded
 // Small in-memory limiter: enough to slow password guessing and runaway uploads on one server.
 function rateLimit(windowMs, max, keyOf) {
@@ -56,6 +73,30 @@ const loginLimit = rateLimit(15 * 60 * 1000, 10, (r) => `${r.ip}|${String(r.body
 const uploadLimit = rateLimit(60 * 1000, 20, (r) => `${r.user?.id || r.ip}`);
 let db;
 let mongoConnected = false;
+// Each serverless instance keeps its own in-memory copy of the data, so a change made through one instance is
+// invisible to the others. Re-read MongoDB when the copy is a couple of seconds old, but only while nothing else
+// on this instance is mid-request, so an unsaved change is never replaced by the reload.
+let inflight = 0;
+let lastLoad = Date.now();
+app.use(async (req, res, next) => {
+    inflight++;
+    res.once('close', () => { inflight--; });
+    if (isVercel && mongoConnected && inflight === 1 && Date.now() - lastLoad > 2000 && req.path.startsWith('/api') && req.path !== '/api/health') {
+        try {
+            db = await loadFromMongo();
+            for (const c of COLLECTIONS)
+                db[c] ||= [];
+            for (const x of db.sessions)
+                if (x.expires > Date.now())
+                    sessions.set(x.id, { userId: x.userId, expires: x.expires });
+            lastLoad = Date.now();
+        }
+        catch (err) {
+            console.warn('Refreshing data from MongoDB failed:', err?.message);
+        }
+    }
+    next();
+});
 // Sessions are keyed by a hash of the token, so the database never holds a usable token.
 const sessions = new Map();
 const tokenKey = (raw) => crypto.createHash('sha256').update(raw).digest('hex');
@@ -195,6 +236,16 @@ function audit(req, action, entity, entityId, detail = '') {
         timestamp: now()
     });
 }
+// A screen that refreshes itself would otherwise write the same "opened the directory" entry every few seconds.
+function auditOnce(req, action, entity, entityId, detail, withinMs = 60_000) {
+    const t = Date.now();
+    for (let i = db.auditLogs.length - 1, seen = 0; i >= 0 && seen < 50; i--, seen++) {
+        const l = db.auditLogs[i];
+        if (l.actorId === req.user.id && l.action === action && l.entity === entity && l.detail === detail && t - Date.parse(l.timestamp) < withinMs)
+            return;
+    }
+    audit(req, action, entity, entityId, detail);
+}
 function patientById(value) {
     return db.patients.find((p) => p.id === value || p.patientId === value);
 }
@@ -238,7 +289,8 @@ const FIREBASE_PROJECT_ID = String(process.env.FIREBASE_PROJECT_ID || '').trim()
 const firebaseOn = !!FIREBASE_PROJECT_ID;
 const firebaseAuth = firebaseOn ? getAuth(getApps()[0] ?? initializeApp({ projectId: FIREBASE_PROJECT_ID })) : null;
 // Email and password sign-in with a local password is for development. It is off once Firebase is configured.
-const localLoginAllowed = !firebaseOn || process.env.ALLOW_LOCAL_LOGIN === 'true';
+// In production it is also off unless ALLOW_LOCAL_LOGIN=true is set on purpose.
+const localLoginAllowed = process.env.ALLOW_LOCAL_LOGIN === 'true' || (!firebaseOn && !isProd);
 // A Firebase account can be created by anyone unless sign-up is switched off in the console, so an unverified
 // email is not proof of who someone is. Turn this off only after disabling sign-up in Firebase.
 const requireVerifiedEmail = process.env.FIREBASE_REQUIRE_VERIFIED_EMAIL !== 'false';
@@ -299,7 +351,9 @@ if (firebaseAuth) {
 else {
     app.post('/api/auth/firebase-login', (_req, res) => res.status(404).json({ error: 'Not found' }));
 }
+registerWhatsAppRoutes({ app, db: () => db });
 app.use('/api', auth);
+registerWhatsAppSimulator({ app, db: () => db });
 app.get('/api/me', (req, res) => res.json({
     id: req.user.id,
     name: req.user.name,
@@ -324,7 +378,7 @@ app.get('/api/dashboard', (req, res) => {
         todayCompleted: todayAppts.filter((a) => a.status === 'Completed').length,
         todayScheduled: todayAppts.filter((a) => a.status === 'Scheduled').length,
     };
-    const appointments = todayAppts.sort((a, b) => a.time.localeCompare(b.time));
+    const appointments = todayAppts.sort((a, b) => String(a.time).localeCompare(String(b.time)));
     res.json({ stats, appointments, recent: db.auditLogs.slice(-15).reverse() });
 });
 // Patient endpoints
@@ -332,20 +386,30 @@ app.get('/api/patients', roles('receptionist', 'doctor'), (req, res) => {
     const q = String(req.query.query || '').toLowerCase();
     const linked = req.user.role === 'doctor' ? app.locals.doctorLinkedPatientIds(req.user.id) : null;
     const rows = db.patients.filter((p) => (!linked || linked.has(p.id)) && (!q || [p.name, p.patientId, p.phone, p.email].some(v => String(v || '').toLowerCase().includes(q))));
-    audit(req, 'search', 'patient', 'directory', q ? 'Search by permitted identifiers' : 'Open patient directory');
+    auditOnce(req, 'search', 'patient', 'directory', q ? 'Search by permitted identifiers' : 'Open patient directory');
     // Paged so a large directory never goes to the browser in one response.
     const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 200));
     const offset = Math.max(0, Number(req.query.offset) || 0);
     res.setHeader('X-Total-Count', String(rows.length));
     res.json(rows.slice(offset, offset + limit).map(adminPatientView));
 });
+// A repeated code would make two patients share one chart identifier.
+function newPatientCode() {
+    for (;;) {
+        const code = `CW-${crypto.randomInt(10000, 100000)}`;
+        if (!db.patients.some((p) => p.patientId === code))
+            return code;
+    }
+}
 app.post('/api/patients', roles('receptionist', 'doctor', 'lab'), async (req, res) => {
     const { name, dob, phone, email, emergencyContact, _forceCreate, risk, gender } = req.body || {};
-    if (!name || !name.trim())
+    if (typeof name !== 'string' || !name.trim())
         return res.status(400).json({ error: 'Full name is required' });
-    if (!dob)
+    if (typeof dob !== 'string' || !dob)
         return res.status(400).json({ error: 'Date of birth is required' });
-    if (!phone || !phone.trim())
+    if (!(Date.parse(dob) <= Date.now()))
+        return res.status(400).json({ error: 'Date of birth must be a valid date that is not in the future' });
+    if (typeof phone !== 'string' || !phone.trim())
         return res.status(400).json({ error: 'Phone number is required' });
     const nameNorm = String(name).trim().toLowerCase();
     const duplicates = db.patients.filter((p) => p.name.toLowerCase() === nameNorm && p.dob === dob);
@@ -357,7 +421,7 @@ app.post('/api/patients', roles('receptionist', 'doctor', 'lab'), async (req, re
     }
     const p = {
         id: id('p'),
-        patientId: `CW-${Math.floor(10000 + Math.random() * 89999)}`,
+        patientId: newPatientCode(),
         name: String(name).trim(),
         dob,
         gender: ['M', 'F', 'O'].includes(gender) ? gender : 'O',
@@ -432,7 +496,7 @@ app.get('/api/appointments', roles('receptionist', 'doctor'), (req, res) => {
     res.json(rows);
 });
 app.post('/api/appointments', roles('receptionist', 'doctor'), async (req, res) => {
-    const p = patientById(req.body.patientId);
+    const p = patientById(String(req.body?.patientId ?? ''));
     if (!p)
         return res.status(404).json({ error: 'Patient not found' });
     if (req.user.role === 'doctor') {
@@ -441,9 +505,9 @@ app.post('/api/appointments', roles('receptionist', 'doctor'), async (req, res) 
         req.body.doctorId = req.user.id;
     }
     const { date, time, reason, doctorId } = req.body;
-    if (!date || !time)
+    if (typeof date !== 'string' || typeof time !== 'string' || !date || !time)
         return res.status(400).json({ error: 'Date and time are required' });
-    if (!reason || !reason.trim())
+    if (typeof reason !== 'string' || !reason.trim())
         return res.status(400).json({ error: 'Reason for appointment is required' });
     const conflict = db.appointments.find((a) => a.patientId === p.id && a.date === date && a.time === time && !['Cancelled', 'Completed', 'No Show'].includes(a.status));
     if (conflict)
@@ -474,7 +538,9 @@ app.patch('/api/appointments/:id', roles('receptionist', 'doctor'), async (req, 
     const a = db.appointments.find((x) => x.id === req.params.id);
     if (!a)
         return res.status(404).json({ error: 'Appointment not found' });
-    const { status, date, time, reason, rev } = req.body;
+    const { status, date, time, reason, rev } = req.body || {};
+    if ([status, date, time, reason].some((v) => v !== undefined && typeof v !== 'string'))
+        return res.status(400).json({ error: 'Status, date, time and reason must be text' });
     if (rev !== undefined && Number(rev) !== (a.rev || 0))
         return res.status(409).json({ error: 'This appointment was changed by someone else. Reload and try again.' });
     // Check the new slot before changing anything, so a refusal leaves the appointment untouched.
@@ -491,6 +557,14 @@ app.patch('/api/appointments/:id', roles('receptionist', 'doctor'), async (req, 
         a.status = status;
         if ((status === 'Checked In' || status === 'Waiting') && !a.checkedInAt)
             a.checkedInAt = now();
+        if ((status === 'Checked In' || status === 'Waiting') && !a.token) {
+            a.token = nextToken(db, a.date);
+            const pt = patientById(a.patientId);
+            emitEvent('PATIENT_CHECKED_IN', {
+                patientId: a.patientIdCode || pt?.patientId, name: a.patientName, phone: pt?.phone, token: a.token, doctor: a.doctorName,
+                room: roomFor(a.doctorName), triagePriority: a.priority || 'Normal OPD', queuePosition: queueAhead(db, a) + 1
+            });
+        }
         // Analytics measures the wait as check-in to the start of the consultation, so both moments are recorded.
         if (status === 'In Consultation' && !a.startedAt)
             a.startedAt = now();
@@ -618,7 +692,11 @@ app.post('/api/lab/orders', roles('lab'), async (req, res) => {
         return res.status(400).json({ error: 'Patient name is required' });
     if (!Number.isFinite(age) || age < 0 || age > 130)
         return res.status(400).json({ error: 'Enter a valid patient age' });
-    const orderId = `ORD-${Date.now().toString().slice(-7)}${crypto.randomInt(10, 99)}`;
+    // The id is the database key: a repeat would silently replace an older order, so draw again until it is free.
+    let orderId;
+    do
+        orderId = `ORD-${Date.now().toString().slice(-7)}${crypto.randomInt(10, 100)}`;
+    while (db.labOrders.some((x) => x.id === orderId));
     const o = {
         id: orderId,
         external,
@@ -676,6 +754,7 @@ app.patch('/api/lab/orders/:id', roles('lab'), async (req, res) => {
     const resultsChanged = results !== undefined && sig(results) !== sig(o.results);
     const submitted = ['awaiting_verification', 'verified', 'released'].includes(o.status);
     const t = new Date();
+    let labReleased = false;
     let observedAt;
     if (b.observedAt !== undefined) {
         const d = new Date(b.observedAt);
@@ -751,7 +830,10 @@ app.patch('/api/lab/orders/:id', roles('lab'), async (req, res) => {
         }
     }
     if (status) {
+        const wasFinal = ['verified', 'released'].includes(o.status);
         o.status = status;
+        if (!wasFinal && ['verified', 'released'].includes(status))
+            labReleased = true;
         if (status === 'collected') {
             o.collectedAt = now();
             o.collectedBy = o.collectedBy || req.user.name;
@@ -775,6 +857,15 @@ app.patch('/api/lab/orders/:id', roles('lab'), async (req, res) => {
     o.updatedAt = now();
     audit(req, amendment ? 'amend' : status ? `status:${status}` : 'update', 'labOrder', o.id, amendment ? `${amendment.changes.length} value(s) amended · ${amendment.reason}` : status ? `${status}${o.statusReason ? ' · ' + o.statusReason : ''}` : 'Fields updated');
     await save();
+    if (labReleased) {
+        const pt = o.registeredPatientRef ? patientById(o.registeredPatientRef) : null;
+        const rs = (o.results || []).filter((r) => r.value);
+        emitEvent('LAB_REPORT_RELEASED', {
+            patientId: o.patientId, name: o.patientName, phone: pt?.phone, testName: o.testName, pathologist: o.verifiedBy, verifiedAt: o.verifiedAt,
+            criticalCount: rs.filter((r) => r.flag === 'critical').length, abnormalCount: rs.filter((r) => r.flag === 'abnormal').length,
+            summary: rs.slice(0, 10).map((r) => ({ parameter: r.parameter, value: r.value, unit: r.unit, flag: r.flag || 'normal' }))
+        });
+    }
     res.json({ data: o });
 });
 // ── Report files ────────────────────────────────────────────────────────────
@@ -840,8 +931,8 @@ app.get('/api/lab/orders/:id/attachments/:attId', roles('lab', 'doctor'), async 
     }
 });
 // ── Synthetic sample scenario ───────────────────────────────────────────────
-// One labelled, made-up patient journey for demonstrations. Off when ALLOW_SAMPLE_DATA=false.
-const sampleAllowed = process.env.ALLOW_SAMPLE_DATA !== 'false';
+// One labelled, made-up patient journey for demonstrations. Off when ALLOW_SAMPLE_DATA=false, and off by default in production.
+const sampleAllowed = process.env.ALLOW_SAMPLE_DATA ? process.env.ALLOW_SAMPLE_DATA === 'true' : !isProd;
 let scenarioRunning = false;
 app.get('/api/demo/scenario', (_req, res) => res.json({ available: sampleAllowed, loaded: db.patients.some((p) => p.sample) }));
 app.post('/api/demo/scenario', roles('receptionist', 'doctor', 'lab'), async (req, res) => {
@@ -879,6 +970,10 @@ registerDoctorRoutes({
 });
 registerExasolAnalyticsRoutes({ app, db: () => db, roles, audit, save, sampleAllowed });
 app.use((err, _req, res, _next) => {
+    if (err?.type === 'entity.parse.failed')
+        return res.status(400).json({ error: 'Request body is not valid JSON' });
+    if (err?.type === 'entity.too.large')
+        return res.status(413).json({ error: 'Request body is too large' });
     console.error(err);
     res.status(500).json({ error: 'Unexpected server error' });
 });
@@ -898,6 +993,8 @@ export async function ensureInitialized() {
             }
         }
         else {
+            if (isVercel)
+                console.warn('No MongoDB on Vercel: data is kept in /tmp per instance and will not sync between devices. Set MONGODB_URI.');
             db = await ensureSeed(DATA);
         }
         for (const c of COLLECTIONS)

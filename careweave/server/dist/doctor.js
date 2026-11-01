@@ -239,15 +239,14 @@ export function registerDoctorRoutes(c) {
             e[f] = text(b[f], 4000);
         if (!fields.some((f) => e[f]))
             return res.status(400).json({ error: 'Write at least a note, a complaint or an assessment' });
+        // Check the vitals before storing anything, so a refusal does not leave a half-saved encounter behind.
+        const v = b.vitals && typeof b.vitals === 'object' ? cleanVitals(b.vitals) : {};
+        if (v.error)
+            return res.status(400).json({ error: v.error });
         db().encounters.unshift(e);
-        if (b.vitals && typeof b.vitals === 'object') {
-            const v = cleanVitals(b.vitals);
-            if (v.error)
-                return res.status(400).json({ error: v.error });
-            if (v.ok) {
-                db().vitals.unshift({ id: id('vt'), patientId: p.id, date: now(), ...v.ok, recordedBy: req.user.name });
-                e.vitals = v.ok;
-            }
+        if (v.ok) {
+            db().vitals.unshift({ id: id('vt'), patientId: p.id, date: now(), ...v.ok, recordedBy: req.user.name });
+            e.vitals = v.ok;
         }
         audit(req, 'create', 'encounter', e.id, 'SOAP documentation');
         await save();
@@ -411,7 +410,10 @@ export function registerDoctorRoutes(c) {
             ?? db().appointments.find((a) => a.patientId === p.id && a.doctorId === req.user.id && !['Cancelled', 'No Show'].includes(a.status) && (!wanted || a.id === wanted));
         if (!enc)
             return res.status(400).json({ error: 'Open an encounter (SOAP note) or have an appointment for this patient before ordering a test' });
-        const orderId = `ORD-${Date.now().toString().slice(-7)}${crypto.randomInt(10, 99)}`;
+        let orderId;
+        do
+            orderId = `ORD-${Date.now().toString().slice(-7)}${crypto.randomInt(10, 100)}`;
+        while (db().labOrders.some((x) => x.id === orderId));
         const o = {
             id: orderId, external: false, patientId: p.patientId, registeredPatientRef: p.id, patientName: p.name,
             patientAge: ageFromDob(p.dob), patientGender: p.gender || 'O', encounterId: enc.id, testName,
@@ -477,10 +479,10 @@ export function registerDoctorRoutes(c) {
         if (!enc)
             return res.status(400).json({ error: 'Document an encounter for this patient first, so the prescription is linked to it' });
         const allergy = (p.allergies || []).find((a) => conflictsWith(String(a.allergen), medicine));
-        if (allergy && !text(b.allergyOverrideReason)) {
+        if (allergy && text(b.allergyOverrideReason, 300).length < 15) {
             audit(req, 'blocked', 'prescription', p.id, 'Allergy conflict');
             await save();
-            return res.status(409).json({ error: `Allergy on record: ${allergy.allergen} (${allergy.severity}). Choose another medicine, or send an override reason.` });
+            return res.status(409).json({ error: `Allergy on record: ${allergy.allergen} (${allergy.severity}). Choose another medicine, or send an override reason of at least 15 characters.` });
         }
         const alerts = await duplicateAlerts(p, medicine, dosage, frequency);
         const high = alerts.filter((x) => x.severity === 'HIGH_COLLISION');
