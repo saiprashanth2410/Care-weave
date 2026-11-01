@@ -17,6 +17,10 @@ import { registerDoctorRoutes } from './doctor.js';
 import { importMedicines } from './medicines.js';
 import { buildSeed, ensureSeed } from './seed.js';
 import { registerExasolAnalyticsRoutes } from './exasol/routes.js';
+import { catchAsyncRoutes } from './asyncRoutes.js';
+import { emitEvent } from './whatsapp/emitter.js';
+import { registerWhatsAppRoutes, registerWhatsAppSimulator } from './whatsapp/routes.js';
+import { nextToken, queueAhead, roomFor } from './whatsapp/messages.js';
 
 // Everything the server reads or writes lives next to the server code, whichever folder it was started from.
 const isVercel = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
@@ -24,13 +28,26 @@ const SERVER_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.
 loadEnv({ path: path.join(SERVER_DIR, '.env') });
 
 const app = express();
+
+catchAsyncRoutes(app);
 const PORT = Number(process.env.PORT || 4000);
 const DATA = isVercel ? '/tmp/careweave.json' : path.join(SERVER_DIR, 'data/careweave.json');
 
+const isProd = process.env.NODE_ENV === 'production';
 if (!isVercel) {
-  app.use(helmet({ contentSecurityPolicy: false }));
+  app.use(helmet());
 }
-app.use(cors({ origin: true, credentials: true }));
+// Browsers on these origins may call the API. CLIENT_ORIGIN is a comma-separated list. Requests with no Origin
+// header (same-origin, curl, server to server) are not a CORS concern and pass. Outside production, localhost is open.
+const allowedOrigins = String(process.env.CLIENT_ORIGIN || '').split(',').map((o) => o.trim().replace(/\/$/, '')).filter(Boolean);
+app.use(cors({
+  credentials: true,
+  origin(origin, cb) {
+    if (!origin) return cb(null, true);
+    const ok = allowedOrigins.includes(origin) || (!isProd && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin));
+    cb(null, ok);
+  },
+}));
 app.use(express.json({ limit: '14mb' })); // 10 MB scan images arrive base64-encoded
 
 // Small in-memory limiter: enough to slow password guessing and runaway uploads on one server.
@@ -241,7 +258,8 @@ const FIREBASE_PROJECT_ID = String(process.env.FIREBASE_PROJECT_ID || '').trim()
 const firebaseOn = !!FIREBASE_PROJECT_ID;
 const firebaseAuth = firebaseOn ? getAuth(getApps()[0] ?? initializeApp({ projectId: FIREBASE_PROJECT_ID })) : null;
 // Email and password sign-in with a local password is for development. It is off once Firebase is configured.
-const localLoginAllowed = !firebaseOn || process.env.ALLOW_LOCAL_LOGIN === 'true';
+// In production it is also off unless ALLOW_LOCAL_LOGIN=true is set on purpose.
+const localLoginAllowed = process.env.ALLOW_LOCAL_LOGIN === 'true' || (!firebaseOn && !isProd);
 // A Firebase account can be created by anyone unless sign-up is switched off in the console, so an unverified
 // email is not proof of who someone is. Turn this off only after disabling sign-up in Firebase.
 const requireVerifiedEmail = process.env.FIREBASE_REQUIRE_VERIFIED_EMAIL !== 'false';
@@ -300,7 +318,9 @@ if (firebaseAuth) {
   app.post('/api/auth/firebase-login', (_req, res) => res.status(404).json({ error: 'Not found' }));
 }
 
+registerWhatsAppRoutes({ app, db: () => db });
 app.use('/api', auth);
+registerWhatsAppSimulator({ app, db: () => db });
 
 app.get('/api/me', (req: any, res) =>
   res.json({
@@ -349,9 +369,10 @@ app.get('/api/patients', roles('receptionist', 'doctor'), (req: any, res) => {
 
 app.post('/api/patients', roles('receptionist', 'doctor', 'lab'), async (req: any, res) => {
   const { name, dob, phone, email, emergencyContact, _forceCreate, risk, gender } = req.body || {};
-  if (!name || !name.trim()) return res.status(400).json({ error: 'Full name is required' });
-  if (!dob) return res.status(400).json({ error: 'Date of birth is required' });
-  if (!phone || !phone.trim()) return res.status(400).json({ error: 'Phone number is required' });
+  if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'Full name is required' });
+  if (typeof dob !== 'string' || !dob) return res.status(400).json({ error: 'Date of birth is required' });
+  if (!(Date.parse(dob) <= Date.now())) return res.status(400).json({ error: 'Date of birth must be a valid date that is not in the future' });
+  if (typeof phone !== 'string' || !phone.trim()) return res.status(400).json({ error: 'Phone number is required' });
 
   const nameNorm = String(name).trim().toLowerCase();
   const duplicates = db.patients.filter((p: any) => p.name.toLowerCase() === nameNorm && p.dob === dob);
@@ -486,6 +507,14 @@ app.patch('/api/appointments/:id', roles('receptionist', 'doctor'), async (req: 
     if (status === a.status) return res.status(409).json({ error: `Patient is already marked as ${status}` });
     a.status = status;
     if ((status === 'Checked In' || status === 'Waiting') && !a.checkedInAt) a.checkedInAt = now();
+    if ((status === 'Checked In' || status === 'Waiting') && !a.token) {
+      a.token = nextToken(db, a.date);
+      const pt = patientById(a.patientId);
+      emitEvent('PATIENT_CHECKED_IN', {
+        patientId: a.patientIdCode || pt?.patientId, name: a.patientName, phone: pt?.phone, token: a.token, doctor: a.doctorName,
+        room: roomFor(a.doctorName), triagePriority: a.priority || 'Normal OPD', queuePosition: queueAhead(db, a) + 1
+      });
+    }
     // Analytics measures the wait as check-in to the start of the consultation, so both moments are recorded.
     if (status === 'In Consultation' && !a.startedAt) a.startedAt = now();
     if (status === 'Completed' && !a.completedAt) a.completedAt = now();
@@ -668,6 +697,7 @@ app.patch('/api/lab/orders/:id', roles('lab'), async (req: any, res) => {
   const resultsChanged = results !== undefined && sig(results) !== sig(o.results);
   const submitted = ['awaiting_verification', 'verified', 'released'].includes(o.status);
   const t = new Date();
+  let labReleased = false;
 
   let observedAt: string | undefined;
   if (b.observedAt !== undefined) {
@@ -738,7 +768,9 @@ app.patch('/api/lab/orders/:id', roles('lab'), async (req: any, res) => {
     }
   }
   if (status) {
+    const wasFinal = ['verified', 'released'].includes(o.status);
     o.status = status;
+    if (!wasFinal && ['verified', 'released'].includes(status)) labReleased = true;
     if (status === 'collected') { o.collectedAt = now(); o.collectedBy = o.collectedBy || req.user.name; }
     if (['processing', 'awaiting_verification'].includes(status) && o.status !== 'released') { o.processedBy = req.user.name; o.processedById = req.user.id; }
     if (status === 'awaiting_verification') { o.reportedAt = now(); o.observedAt = observedAt || o.observedAt || now(); }
@@ -749,6 +781,15 @@ app.patch('/api/lab/orders/:id', roles('lab'), async (req: any, res) => {
   audit(req, amendment ? 'amend' : status ? `status:${status}` : 'update', 'labOrder', o.id,
     amendment ? `${amendment.changes.length} value(s) amended · ${amendment.reason}` : status ? `${status}${o.statusReason ? ' · ' + o.statusReason : ''}` : 'Fields updated');
   await save();
+  if (labReleased) {
+    const pt = o.registeredPatientRef ? patientById(o.registeredPatientRef) : null;
+    const rs = (o.results || []).filter((r: any) => r.value);
+    emitEvent('LAB_REPORT_RELEASED', {
+      patientId: o.patientId, name: o.patientName, phone: pt?.phone, testName: o.testName, pathologist: o.verifiedBy, verifiedAt: o.verifiedAt,
+      criticalCount: rs.filter((r: any) => r.flag === 'critical').length, abnormalCount: rs.filter((r: any) => r.flag === 'abnormal').length,
+      summary: rs.slice(0, 10).map((r: any) => ({ parameter: r.parameter, value: r.value, unit: r.unit, flag: r.flag || 'normal' }))
+    });
+  }
   res.json({ data: o });
 });
 
@@ -811,8 +852,8 @@ app.get('/api/lab/orders/:id/attachments/:attId', roles('lab', 'doctor'), async 
 });
 
 // ── Synthetic sample scenario ───────────────────────────────────────────────
-// One labelled, made-up patient journey for demonstrations. Off when ALLOW_SAMPLE_DATA=false.
-const sampleAllowed = process.env.ALLOW_SAMPLE_DATA !== 'false';
+// One labelled, made-up patient journey for demonstrations. Off when ALLOW_SAMPLE_DATA=false, and off by default in production.
+const sampleAllowed = process.env.ALLOW_SAMPLE_DATA ? process.env.ALLOW_SAMPLE_DATA === 'true' : !isProd;
 let scenarioRunning = false;
 app.get('/api/demo/scenario', (_req, res) => res.json({ available: sampleAllowed, loaded: db.patients.some((p: any) => p.sample) }));
 app.post('/api/demo/scenario', roles('receptionist', 'doctor', 'lab'), async (req: any, res) => {
@@ -847,6 +888,8 @@ registerDoctorRoutes({
 registerExasolAnalyticsRoutes({ app, db: () => db, roles, audit, save, sampleAllowed });
 
 app.use((err: any, _req: any, res: any, _next: any) => {
+  if (err?.type === 'entity.parse.failed') return res.status(400).json({ error: 'Request body is not valid JSON' });
+  if (err?.type === 'entity.too.large') return res.status(413).json({ error: 'Request body is too large' });
   console.error(err);
   res.status(500).json({ error: 'Unexpected server error' });
 });

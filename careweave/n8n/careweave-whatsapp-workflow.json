@@ -1,0 +1,766 @@
+{
+  "name": "CareWeave WhatsApp Notifications",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "careweave-events",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "careweave-events-webhook",
+      "name": "CareWeave Events Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "PATIENT_CHECKED_IN",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "PATIENT_CHECKED_IN"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "LAB_REPORT_RELEASED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "LAB_REPORT_RELEASED"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "PRESCRIPTION_PRESCRIBED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "PRESCRIPTION_PRESCRIBED"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "INBOUND_MESSAGE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "INBOUND_MESSAGE"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "route-event",
+      "name": "Route Event",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = $json.body;\nconst raw = e.phone;\nconst digits = String(raw || '').replace(/\\D/g, '');\nconst cc = ($env.DEFAULT_COUNTRY_CODE || '91').replace(/\\D/g, '');\nconst to = digits.length === 10 ? cc + digits : digits; // WhatsApp wants country code + number, no plus sign\nconst live = ($env.CAREWEAVE_PUBLIC_URL || $env.CAREWEAVE_API_URL || '') + '/receptionist';\nconst text = `Welcome to CareWeave, ${e.name}! 🏥\\nToken: *${e.token}*\\nDoctor: ${e.doctor} (${e.room})\\nQueue position: ${e.queuePosition}\\nReply QUEUE any time for your live wait.\\nLive queue: ${live}`;\nreturn [{ json: { to, text } }];"
+      },
+      "id": "format-check-in",
+      "name": "Format Check-in",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = $json.body;\nconst raw = e.phone;\nconst digits = String(raw || '').replace(/\\D/g, '');\nconst cc = ($env.DEFAULT_COUNTRY_CODE || '91').replace(/\\D/g, '');\nconst to = digits.length === 10 ? cc + digits : digits; // WhatsApp wants country code + number, no plus sign\nconst status = e.criticalCount > 0 ? 'Needs attention' : (e.abnormalCount > 0 ? 'Some values outside range' : 'Normal');\nconst text = `🧪 CareWeave Lab Alert: Hello ${e.name}, your ${e.testName} results have been verified by ${e.pathologist || 'the laboratory'}. Status: ${status} / Critical flags: ${e.criticalCount}.\\nReply REPORT to see the values.`;\nreturn [{ json: { to, text } }];"
+      },
+      "id": "format-lab-report",
+      "name": "Format Lab Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = $json.body;\nconst raw = e.phone;\nconst digits = String(raw || '').replace(/\\D/g, '');\nconst cc = ($env.DEFAULT_COUNTRY_CODE || '91').replace(/\\D/g, '');\nconst to = digits.length === 10 ? cc + digits : digits; // WhatsApp wants country code + number, no plus sign\nconst lines = (e.medicines || []).map(m => `• ${m.name} - ${m.dosage}, ${m.frequency}${m.foodInstruction ? ' (' + m.foodInstruction + ')' : ''}`);\nconst text = `💊 Hello ${e.name}, ${e.doctor || 'your doctor'} prescribed:\\n${lines.join('\\n')}\\nReply MEDS for your daily timings.`;\nreturn [{ json: { to, text } }];"
+      },
+      "id": "format-prescription",
+      "name": "Format Prescription",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = $json.body;\nconst raw = e.from;\nconst digits = String(raw || '').replace(/\\D/g, '');\nconst cc = ($env.DEFAULT_COUNTRY_CODE || '91').replace(/\\D/g, '');\nconst to = digits.length === 10 ? cc + digits : digits; // WhatsApp wants country code + number, no plus sign\nconst keyword = String(e.body || '').trim().split(/\\s+/)[0].toUpperCase();\nreturn [{ json: { to, phone: to, keyword } }];"
+      },
+      "id": "parse-inbound-message",
+      "name": "Parse Inbound Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.keyword }}",
+                    "rightValue": "QUEUE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.keyword }}",
+                    "rightValue": "TOKEN",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "QUEUE"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.keyword }}",
+                    "rightValue": "REPORT",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "REPORT"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.keyword }}",
+                    "rightValue": "MEDS",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.keyword }}",
+                    "rightValue": "RX",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "MEDS"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "route-keyword",
+      "name": "Route Keyword",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        760,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ ($env.CAREWEAVE_API_URL || 'http://localhost:4000') + '/api/whatsapp/queue-status' }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{ $json.phone }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.WHATSAPP_API_KEY || '' }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "get-queue-status",
+      "name": "Get Queue Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1000,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ ($env.CAREWEAVE_API_URL || 'http://localhost:4000') + '/api/whatsapp/latest-report' }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{ $json.phone }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.WHATSAPP_API_KEY || '' }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "get-latest-report",
+      "name": "Get Latest Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1000,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ ($env.CAREWEAVE_API_URL || 'http://localhost:4000') + '/api/whatsapp/active-prescriptions' }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{ $json.phone }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.WHATSAPP_API_KEY || '' }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "get-active-prescriptions",
+      "name": "Get Active Prescriptions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1000,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const to = $('Parse Inbound Message').first().json.to;\nconst r = $json;\nlet text;\nif (!r.found) text = 'We could not find a CareWeave record for this number. Please check with the front desk.';\nelse if (!r.active) text = `Hello ${r.patient.name}, you are not in today's queue.`;\nelse if (r.status === 'In Consultation') text = `Hello ${r.patient.name}, ${r.doctor} is seeing you now (${r.room}).`;\nelse text = `Hello ${r.patient.name}, your token is *${r.token}* with ${r.doctor} (${r.room}).\\n${r.aheadCount} patient(s) ahead. Estimated wait: about ${r.estimatedWaitMinutes} min.`;\nreturn [{ json: { to, text } }];"
+      },
+      "id": "format-queue-reply",
+      "name": "Format Queue Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const to = $('Parse Inbound Message').first().json.to;\nconst r = $json;\nlet text;\nif (!r.found) text = 'We could not find a CareWeave record for this number. Please check with the front desk.';\nelse if (!r.available) text = `Hello ${r.patient.name}, you have no verified lab report yet.`;\nelse {\n  const rep = r.report;\n  const rows = rep.results.slice(0, 12).map(x => `${x.flag === 'critical' ? '🔴' : x.flag === 'abnormal' ? '🟠' : '▫️'} ${x.parameter}: ${x.value} ${x.unit}${x.flag !== 'normal' ? ' (' + x.flag.toUpperCase() + ')' : ''}`);\n  text = `🧪 ${rep.testName} - verified by ${rep.verifiedBy || 'the laboratory'}\\n${rows.join('\\n')}\\nCritical flags: ${rep.criticalCount}. Please discuss these results with your doctor.`;\n}\nreturn [{ json: { to, text } }];"
+      },
+      "id": "format-report-reply",
+      "name": "Format Report Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const to = $('Parse Inbound Message').first().json.to;\nconst r = $json;\nlet text;\nif (!r.found) text = 'We could not find a CareWeave record for this number. Please check with the front desk.';\nelse if (!r.medications.length) text = `Hello ${r.patient.name}, you have no active prescriptions.`;\nelse {\n  const part = (label, slot) => {\n    const rows = r.medications.filter(m => m.schedule && m.schedule[slot]).map(m => `  • ${m.medicine} - ${m.schedule[slot]}${m.food ? ' (' + m.food + ')' : ''}`);\n    return rows.length ? `*${label}*\\n${rows.join('\\n')}` : '';\n  };\n  const other = r.medications.filter(m => !m.schedule).map(m => `  • ${m.medicine} - ${m.dosage}, ${m.frequency}`);\n  text = ['💊 Medicines for ' + r.patient.name, part('Morning','morning'), part('Afternoon','afternoon'), part('Night','night'), other.length ? '*As directed*\\n' + other.join('\\n') : ''].filter(Boolean).join('\\n');\n}\nreturn [{ json: { to, text } }];"
+      },
+      "id": "format-meds-reply",
+      "name": "Format Meds Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const to = $json.to;\nconst text = 'CareWeave on WhatsApp. Reply with:\\n*QUEUE* - your token and wait time\\n*REPORT* - your latest verified lab report\\n*MEDS* - your medicine timings';\nreturn [{ json: { to, text } }];"
+      },
+      "id": "format-help-reply",
+      "name": "Format Help Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        860
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $env.META_WHATSAPP_TOKEN || '' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "use-meta",
+      "name": "Use Meta?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://graph.facebook.com/v20.0/' + $env.META_PHONE_NUMBER_ID + '/messages' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.META_WHATSAPP_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $json.to, type: 'text', text: { body: $json.text } }) }}",
+        "options": {
+          "timeout": 8000
+        }
+      },
+      "id": "send-via-meta-whatsapp",
+      "name": "Send via Meta WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.twilio.com/2010-04-01/Accounts/' + $env.TWILIO_ACCOUNT_SID + '/Messages.json' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Basic ' + ($env.TWILIO_ACCOUNT_SID + ':' + $env.TWILIO_AUTH_TOKEN).toBase64() }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "From",
+              "value": "={{ 'whatsapp:' + ($env.TWILIO_WHATSAPP_FROM || '+14155238886') }}"
+            },
+            {
+              "name": "To",
+              "value": "={{ 'whatsapp:+' + $json.to }}"
+            },
+            {
+              "name": "Body",
+              "value": "={{ $json.text }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 8000
+        }
+      },
+      "id": "send-via-twilio-whatsapp",
+      "name": "Send via Twilio WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "CareWeave Events Webhook": {
+      "main": [
+        [
+          {
+            "node": "Route Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Event": {
+      "main": [
+        [
+          {
+            "node": "Format Check-in",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Lab Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Prescription",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Parse Inbound Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Inbound Message": {
+      "main": [
+        [
+          {
+            "node": "Route Keyword",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Keyword": {
+      "main": [
+        [
+          {
+            "node": "Get Queue Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Latest Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Active Prescriptions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Help Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Queue Status": {
+      "main": [
+        [
+          {
+            "node": "Format Queue Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Latest Report": {
+      "main": [
+        [
+          {
+            "node": "Format Report Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Active Prescriptions": {
+      "main": [
+        [
+          {
+            "node": "Format Meds Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Meta?": {
+      "main": [
+        [
+          {
+            "node": "Send via Meta WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send via Twilio WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Check-in": {
+      "main": [
+        [
+          {
+            "node": "Use Meta?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Lab Report": {
+      "main": [
+        [
+          {
+            "node": "Use Meta?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Prescription": {
+      "main": [
+        [
+          {
+            "node": "Use Meta?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Queue Reply": {
+      "main": [
+        [
+          {
+            "node": "Use Meta?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Report Reply": {
+      "main": [
+        [
+          {
+            "node": "Use Meta?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Meds Reply": {
+      "main": [
+        [
+          {
+            "node": "Use Meta?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Help Reply": {
+      "main": [
+        [
+          {
+            "node": "Use Meta?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

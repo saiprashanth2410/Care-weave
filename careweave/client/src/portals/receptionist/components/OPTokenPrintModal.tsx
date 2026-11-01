@@ -1,4 +1,23 @@
+import qrcode from 'qrcode-generator'
 import type { Appointment } from '../types'
+
+// The number patients message. Set VITE_WHATSAPP_BOT_NUMBER (digits only, with country code) for the real bot;
+// the default is the public Twilio WhatsApp sandbox number.
+const BOT_NUMBER = (import.meta.env.VITE_WHATSAPP_BOT_NUMBER as string | undefined) || '14155238886'
+
+function QrSvg({ value }: { value: string }) {
+  const qr = qrcode(0, 'M')
+  qr.addData(value)
+  qr.make()
+  return (
+    <div
+      role="img"
+      aria-label="WhatsApp queue QR code"
+      className="mx-auto h-28 w-28 [&>svg]:h-full [&>svg]:w-full"
+      dangerouslySetInnerHTML={{ __html: qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true }) }}
+    />
+  )
+}
 
 interface OPTokenPrintModalProps {
   appointment: Appointment
@@ -13,7 +32,8 @@ export default function OPTokenPrintModal({
   roomNumber = 'Room 4',
   onClose,
 }: OPTokenPrintModalProps) {
-  const tokenNumber = `A-${String(tokenIndex).padStart(3, '0')}`
+  const tokenNumber = appointment.token || `A-${String(tokenIndex).padStart(3, '0')}`
+  const waLink = `https://wa.me/${BOT_NUMBER}?text=QUEUE%20${encodeURIComponent(tokenNumber)}`
   const now = new Date()
   const dateStr = now.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })
   const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -86,6 +106,12 @@ export default function OPTokenPrintModal({
               <span className="text-ink-3 uppercase">Triage Status:</span>
               <span className="font-bold text-accent-ink">Priority 2 · Normal OPD</span>
             </div>
+          </div>
+
+          {/* WhatsApp live queue */}
+          <div className="text-center border-b border-dotted border-rule pb-3 space-y-1">
+            <QrSvg value={waLink} />
+            <p className="text-[10px] font-bold">📱 Scan to track live queue on WhatsApp</p>
           </div>
 
           {/* Barcode & Tear-off Notice */}
