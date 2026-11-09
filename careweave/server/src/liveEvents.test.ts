@@ -73,3 +73,27 @@ test('if the shared store fails, publishing still reaches local screens and does
   assert.equal(got(a, 'change'), 1);
   a.close();
 });
+
+test('with a change stream an event reaches another instance without waiting for the poll', async (t) => {
+  const mongoose = (await import('mongoose')).default;
+  const { openMongoStore } = await import('./repo/index.js');
+  const { TEST_MONGODB_URI } = await import('./testing.js');
+  const probe = await mongoose.createConnection(TEST_MONGODB_URI, { serverSelectionTimeoutMS: 1500 }).asPromise().catch(() => null);
+  if (!probe) return t.skip('no MongoDB reachable');
+  await probe.close();
+  const store = await openMongoStore(TEST_MONGODB_URI, `careweave_live_${process.pid}`, () => {});
+  const onTwo = fakeRes();
+  try {
+    const repos = createRepos(store);
+    const one = new LiveHub(() => repos, 60_000), two = new LiveHub(() => repos, 60_000);
+    two.addClient(onTwo.res, 'doc-1', 'doctor');
+    await new Promise((r) => setTimeout(r, 1800));
+    try { await store.watchInserts!('liveEvents', () => {}, () => {}).then((stop) => stop()); } catch { return t.skip('MongoDB is not a replica set: no change streams'); }
+    await one.publish('critical', { orderId: 'ORD-9' }, ['doc-1']);
+    await until(() => got(onTwo, 'critical') >= 1, 3000); // far sooner than the 60 s poll
+    assert.equal(got(onTwo, 'critical'), 1);
+  } finally {
+    onTwo.close();
+    await store.close();
+  }
+});

@@ -64,3 +64,49 @@ test('MongoDB file store round-trips binary data exactly (runs when a local mong
     await store.close();
   }
 });
+
+test('a file the virus scan flags is refused and not stored; an unreachable scanner refuses uploads', async () => {
+  const store = await memoryStore();
+  const s = await startInstance(store);
+  const lab = await s.login('lab');
+  const order = (await s.call('POST', '/api/lab/orders', { token: lab, body: { testName: 'CBC', orderingDoctor: 'Dr Test', patientGender: 'F', external: true, patientName: 'Ext Patient', patientAge: 30 } })).json.data;
+  const upload = (body: Buffer) => s.call('POST', `/api/lab/orders/${order.id}/attachments`, { token: lab, body: { mimeType: 'application/pdf', name: 'r.pdf', data: body.toString('base64') } });
+  try {
+    const eicar = Buffer.from('%PDF-1.4\nX5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*\n%%EOF');
+    assert.equal((await upload(eicar)).status, 422);
+    process.env.CLAMAV_HOST = '127.0.0.1';
+    process.env.CLAMAV_PORT = '1'; // nothing listens here
+    assert.equal((await upload(PDF)).status, 503);
+    delete process.env.CLAMAV_HOST; delete process.env.CLAMAV_PORT;
+    assert.equal((await upload(PDF)).status, 201);
+  } finally {
+    delete process.env.CLAMAV_HOST; delete process.env.CLAMAV_PORT;
+    await s.close();
+  }
+});
+
+test('with ATTACHMENT_KEY the stored bytes are encrypted, the download is the original, and a wrong key cannot read them', async () => {
+  const { seal, open } = await import('./attachmentSecurity.js');
+  const key = Buffer.alloc(32, 7);
+  const sealed = seal(PDF, key);
+  assert.notDeepEqual(sealed, PDF);
+  assert.ok(!sealed.includes('fake report body'));
+  assert.deepEqual(open(sealed, key), PDF);
+  assert.throws(() => open(sealed, Buffer.alloc(32, 9)));
+  assert.deepEqual(open(PDF, key), PDF, 'a file saved before encryption was switched on still opens');
+
+  process.env.ATTACHMENT_KEY = key.toString('hex');
+  const store = await memoryStore();
+  const s = await startInstance(store);
+  try {
+    const lab = await s.login('lab');
+    const order = (await s.call('POST', '/api/lab/orders', { token: lab, body: { testName: 'CBC', orderingDoctor: 'Dr Test', patientGender: 'F', external: true, patientName: 'Ext Patient', patientAge: 30 } })).json.data;
+    const att = (await s.call('POST', `/api/lab/orders/${order.id}/attachments`, { token: lab, body: { mimeType: 'application/pdf', name: 'r.pdf', data: PDF.toString('base64') } })).json.data.attachments[0];
+    assert.ok(!(await store.files.get(att.id))!.includes('fake report body'), 'the store holds ciphertext');
+    const res = await fetch(`${s.url}/api/lab/orders/${order.id}/attachments/${att.id}`, { headers: { authorization: `Bearer ${lab}` } });
+    assert.deepEqual(Buffer.from(await res.arrayBuffer()), PDF);
+  } finally {
+    delete process.env.ATTACHMENT_KEY;
+    await s.close();
+  }
+});

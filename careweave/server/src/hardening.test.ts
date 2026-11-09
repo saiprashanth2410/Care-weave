@@ -103,3 +103,20 @@ test('every response carries a Content-Security-Policy, also when running on Ver
     if (was === undefined) delete process.env.VERCEL; else process.env.VERCEL = was;
   }
 });
+
+test('LANG RESET forgets the saved language', async () => {
+  const store = await memoryStore();
+  const a = await startInstance(store);
+  const rec = await a.login();
+  const say = (message: string) => a.call('POST', '/api/whatsapp/simulate', { token: rec, body: { phone: '+91 98765 43210', message } });
+  try {
+    const english = (await say('hello')).json.reply;
+    await say('LANG TA');
+    assert.notEqual((await say('hello')).json.reply, english);
+    assert.equal((await say('LANG RESET')).json.command, 'LANG');
+    assert.equal((await say('hello')).json.reply, english);
+    assert.equal(await createRepos(store).whatsappPrefs.findOne({ id: '9876543210' }), null);
+  } finally {
+    await a.close();
+  }
+});

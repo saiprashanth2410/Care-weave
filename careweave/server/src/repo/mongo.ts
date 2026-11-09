@@ -1,5 +1,5 @@
 import type mongoose from 'mongoose';
-import { ConflictError, DuplicateError, VERSIONED, splitChanges, stampChange, stampNew, type Collection, type FileStore, type Filter, type FindOpts, type IndexSpec, type Store } from './store.js';
+import { CHANGE_LOG_KEEP, canMerge, changedFields, ConflictError, DuplicateError, VERSIONED, splitChanges, stampChange, stampNew, type Collection, type FileStore, type Filter, type FindOpts, type IndexSpec, type Store } from './store.js';
 
 type Db = NonNullable<typeof mongoose.connection.db>;
 type MongoColl<T = any> = ReturnType<Db['collection']> & { __t?: T };
@@ -59,9 +59,15 @@ class MongoCollection implements Collection {
     const ops: Filter = {};
     if (Object.keys(set).length) ops.$set = set;
     if (Object.keys(unset).length) ops.$unset = unset;
-    const want = expected ?? current.version;
-    if (this.versioned) ops.$inc = { version: 1 };
-    else if (!ops.$set && !ops.$unset) return current;
+    const sent = expected ?? current.version;
+    // A stale version is accepted when the writes since then touched other fields (see canMerge); the write applies on top of the stored copy.
+    const merging = this.versioned && sent < current.version;
+    if (merging && !canMerge(current, changes, sent)) throw new ConflictError();
+    const want = merging ? current.version : sent;
+    if (this.versioned) {
+      ops.$inc = { version: 1 };
+      ops.$push = { _log: { $each: [{ v: want + 1, f: changedFields(changes) }], $slice: -CHANGE_LOG_KEEP } };
+    } else if (!ops.$set && !ops.$unset) return current;
     let res;
     try {
       res = await this.c.updateOne(this.versioned ? { id: current.id, version: want } : { id: current.id }, ops, this.o);
@@ -114,6 +120,21 @@ export class MongoStore implements Store {
     },
     delete: async (id) => { await this.db.collection('files').deleteOne({ id }); },
   };
+
+  async watchInserts(collection: string, onInsert: (doc: any) => void, onLost: (err: Error) => void) {
+    const hello: any = await this.db.admin().command({ hello: 1 });
+    if (!hello.setName && hello.msg !== 'isdbgrid') throw new Error('change streams need a replica set or a sharded cluster');
+    const stream = this.db.collection(collection).watch([{ $match: { operationType: 'insert' } }]);
+    // A change stream on a server that cannot do it (no replica set) fails on the first read, so wait for that before saying it works.
+    await new Promise<void>((resolve, reject) => {
+      stream.once('init', () => resolve());
+      stream.once('error', reject);
+      setTimeout(resolve, 1500).unref?.();
+    });
+    stream.on('change', (c: any) => { if (c.fullDocument) onInsert(c.fullDocument); });
+    stream.on('error', (err: Error) => onLost(err));
+    return () => { void stream.close().catch(() => {}); };
+  }
 
   private transactionsSupported = true;
   constructor(

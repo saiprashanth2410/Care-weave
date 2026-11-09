@@ -96,13 +96,6 @@ export interface DepartmentPredictionMetric {
   riskLevel: 'Low' | 'Moderate' | 'High Capacity Surge';
 }
 
-export interface BenchmarkSpeedMetric {
-  mongoReadMs: number;
-  exasolInMemoryMs: number;
-  speedupRatio: number;
-  recordsEvaluated: number;
-}
-
 export interface ExecutedQuery {
   id: string;
   title: string;
@@ -138,7 +131,6 @@ export interface AnalyticsOverviewResponse {
   pharmacyConsumption: PharmacyConsumptionMetric[];
   safety: ClinicalSafetyMetric;
   predictions: DepartmentPredictionMetric[];
-  benchmark: BenchmarkSpeedMetric;
   dataQuality: DataQuality;
   queries: ExecutedQuery[];
   generatedAt: string;
