@@ -42,7 +42,10 @@ export function verifiedPatients(db: any, q: { phone?: string; uhid?: string }) 
 
 /** The next OP token for a day: A-001, A-002 ... counted over appointments that already hold one. */
 export function nextToken(db: any, date: string) {
-  const n = db.appointments.filter((a: any) => a.token && (a.date === date || (isToday(a.date) && isToday(date)))).length + 1;
+  // One more than the highest number already issued that day (not a count), so a token that left the day never lets a number be issued twice.
+  const n = db.appointments
+    .filter((a: any) => a.token && (a.date === date || (isToday(a.date) && isToday(date))))
+    .reduce((max: number, a: any) => Math.max(max, Number(String(a.token).replace(/\D/g, '')) || 0), 0) + 1;
   return `A-${String(n).padStart(3, '0')}`;
 }
 
@@ -156,6 +159,7 @@ export const HELP_TEXT = `🏥 CareWeave on WhatsApp. Reply with:
 *MEDS <your UHID>* - your daily medicine timings
 *LANG TA* - தமிழுக்கு மாற்ற (Switch to Tamil)
 *LANG EN* - Switch to English
+*LANG RESET* - forget my language choice
 *HELP* - this menu
 
 Your UHID is on your token slip and patient card.`;
@@ -230,7 +234,7 @@ export function medsText(r: ReturnType<typeof activePrescriptions>, lang: 'en' |
 }
 
 /** One keyword in, one reply out. Unknown text gets the help list. */
-export function replyTo(db: any, phone: string, body: string): { command: string; reply: string; language?: 'en' | 'ta' } {
+export function replyTo(db: any, phone: string, body: string): { command: string; reply: string; language?: 'en' | 'ta'; resetLanguage?: boolean } {
   const [first, second] = String(body || '').trim().split(/\s+/);
   const word = first?.toUpperCase() || '';
   const uhid = second || '';
@@ -240,6 +244,9 @@ export function replyTo(db: any, phone: string, body: string): { command: string
     const sub = second?.toUpperCase() || '';
     if (sub === 'TA' || sub === 'TAMIL') {
       return { command: 'LANG', language: 'ta' as const, reply: '✅ மொழி தமிழுக்கு மாற்றப்பட்டது!\nஇனி உங்கள் டோக்கன் மற்றும் மருத்துவ தகவல்கள் தமிழில் வரும்.\nதகவல்களை அறிய *QUEUE*, *MEDS*, அல்லது *REPORT* என அனுப்பவும்.' };
+    }
+    if (sub === 'RESET' || sub === 'CLEAR') {
+      return { command: 'LANG', resetLanguage: true, reply: '✅ Your language choice has been cleared. Replies are in English until you choose again with *LANG TA*.' };
     }
     if (sub === 'EN' || sub === 'ENGLISH') {
       return { command: 'LANG', language: 'en' as const, reply: '✅ Language switched to English!\nReply with QUEUE, MEDS, or REPORT at any time.' };

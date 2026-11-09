@@ -11,6 +11,7 @@ import { ageFromDob, diff, id, now, text } from '../util.js';
 import { linkedPatientIds } from '../services/access.js';
 import { FILE_TYPES, LAB_EDITABLE, LAB_NEXT, LAB_STATUSES, OPEN_VISIT, can, cleanResults, resultsSignature } from '../services/labOrders.js';
 import { emitEvent } from '../whatsapp/emitter.js';
+import { ScannerUnavailable, open, scanFile, seal } from '../attachmentSecurity.js';
 
 /** Requests that carry a base64 file. They are the only ones allowed a large JSON body; see index.ts. */
 export const UPLOAD_ROUTES = [/^\/api\/lab\/extract$/, /^\/api\/lab\/orders\/[^/]+\/attachments$/];
@@ -243,9 +244,19 @@ export function labRoutes(ctx: AppCtx) {
     const buf = Buffer.from(String(req.body?.data || '').replace(/^data:[^;]+;base64,/, ''), 'base64');
     if (!buf.length || buf.length > 10 * 1024 * 1024) return res.status(400).json({ error: 'The file must be smaller than 10 MB' });
     if (!type.magic.every((byte, i) => buf[i] === byte)) return res.status(400).json({ error: 'The file content does not match its type' });
+    try {
+      const scan = await scanFile(buf);
+      if (!scan.clean) {
+        await audit(req, 'reject', 'labOrder', o.id, `Upload refused: malware signature ${scan.signature}`);
+        return res.status(422).json({ error: 'The file was rejected by the virus scan' });
+      }
+    } catch (err) {
+      if (err instanceof ScannerUnavailable) return res.status(503).json({ error: 'Files cannot be accepted right now: the virus scanner is not available' });
+      throw err;
+    }
     const attId = id('att');
-    // The file goes to the shared store (MongoDB), not to this server's disk, so every instance can serve it.
-    await ctx.repos.store.files.put(attId, buf);
+    // The file goes to the shared store (MongoDB), not to this server's disk, so every instance can serve it. Encrypted when ATTACHMENT_KEY is set.
+    await ctx.repos.store.files.put(attId, seal(buf));
     const meta = {
       id: attId,
       name: text(req.body?.name, 120).replace(/[^\w.\- ()]/g, '_') || `report.${type.ext}`,
@@ -277,7 +288,8 @@ export function labRoutes(ctx: AppCtx) {
     const ext = FILE_TYPES[meta.mimeType].ext;
     try {
       // Files saved before the shared store existed are still on that server's disk.
-      const buf = (await ctx.repos.store.files.get(meta.id)) ?? await fs.readFile(path.join(ctx.config.uploadsDir, `${meta.id}.${ext}`));
+      const stored = (await ctx.repos.store.files.get(meta.id)) ?? await fs.readFile(path.join(ctx.config.uploadsDir, `${meta.id}.${ext}`));
+      const buf = open(stored);
       await audit(req, 'download', 'labOrder', o.id, meta.name);
       res.setHeader('Content-Type', meta.mimeType);
       res.setHeader('X-Content-Type-Options', 'nosniff');

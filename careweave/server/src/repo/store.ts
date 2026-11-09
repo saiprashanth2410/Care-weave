@@ -84,6 +84,12 @@ export interface Store {
    */
   transaction<T>(fn: (tx: Store) => Promise<T>): Promise<T>;
   ensureIndexes(specs: Record<string, IndexSpec[]>): Promise<void>;
+  /**
+   * Calls `onInsert` for each document added to `collection` from now on, pushed by the database (MongoDB change streams, which need a
+   * replica set). Resolves to a function that stops watching, and rejects when the database cannot do it; callers then poll instead.
+   * Not offered by the local file store.
+   */
+  watchInserts?(collection: string, onInsert: (doc: any) => void, onLost: (err: Error) => void): Promise<() => void>;
   close(): Promise<void>;
 }
 
@@ -92,9 +98,27 @@ export function splitChanges(changes: Filter) {
   const set: Filter = {};
   const unset: Filter = {};
   for (const [k, v] of Object.entries(changes)) {
-    if (k === 'id' || k === '_id' || k === 'version') continue;
+    if (k === 'id' || k === '_id' || k === 'version' || k === '_log') continue;
     if (v === undefined) unset[k] = '';
     else set[k] = v;
   }
   return { set, unset };
+}
+
+/**
+ * Each versioned write appends `{ v: newVersion, f: [fields it changed] }` to the document's `_log` (the last CHANGE_LOG_KEEP kept).
+ * A write made from an older version is merged instead of refused when every write since then touched different fields; if the log
+ * no longer reaches back that far, or a field overlaps, it is refused as before. Nothing is merged field by field inside a value.
+ */
+export const CHANGE_LOG_KEEP = 20;
+const LOG_IGNORED = new Set(['id', '_id', 'version', '_log', 'updatedAt']);
+export const changedFields = (changes: Filter) => Object.keys(changes).filter((k) => !LOG_IGNORED.has(k));
+export function canMerge(stored: any, changes: Filter, from: number): boolean {
+  const log: Array<{ v: number; f: string[] }> = Array.isArray(stored._log) ? stored._log : [];
+  const mine = new Set(changedFields(changes));
+  for (let v = from + 1; v <= stored.version; v++) {
+    const entry = log.find((e) => e.v === v);
+    if (!entry || entry.f.some((f) => mine.has(f))) return false;
+  }
+  return true;
 }

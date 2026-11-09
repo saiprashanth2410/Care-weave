@@ -71,3 +71,5 @@ wheels/
 package-lock.json
 
 
+.vercel
+.env*

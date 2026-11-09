@@ -1,7 +1,5 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
-import { getApps, initializeApp } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
 import type { AppCtx } from '../context.js';
 import { ConflictError } from '../repo/index.js';
 import { catchAsyncRoutes } from '../asyncRoutes.js';
@@ -17,7 +15,14 @@ export function authRoutes(ctx: AppCtx) {
 
   const FIREBASE_PROJECT_ID = String(process.env.FIREBASE_PROJECT_ID || '').trim();
   const firebaseOn = !!FIREBASE_PROJECT_ID;
-  const firebaseAuth = firebaseOn ? getAuth(getApps()[0] ?? initializeApp({ projectId: FIREBASE_PROJECT_ID })) : null;
+  // firebase-admin is loaded on first use, not at start-up: where it cannot load (it pulls in an ES-only package some serverless
+  // runtimes cannot require) the rest of the API still starts, and only Firebase sign-in is affected.
+  const firebaseAuth = firebaseOn ? {
+    verifyIdToken: async (idToken: string) => {
+      const [{ getApps, initializeApp }, { getAuth }] = await Promise.all([import('firebase-admin/app'), import('firebase-admin/auth')]);
+      return getAuth(getApps()[0] ?? initializeApp({ projectId: FIREBASE_PROJECT_ID })).verifyIdToken(idToken);
+    },
+  } : null;
   // Email and password sign-in with a local password is for development. It is off once Firebase is configured.
   // In production it is also off unless ALLOW_LOCAL_LOGIN=true is set on purpose.
   const localLoginAllowed = process.env.ALLOW_LOCAL_LOGIN === 'true' || (!firebaseOn && !ctx.config.isProd);

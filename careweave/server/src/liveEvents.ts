@@ -7,12 +7,15 @@ import type { Repos } from './repo/index.js';
 //
 // Screens are connected to one server process, so an event is also written to the shared `liveEvents` collection. Every
 // instance that has screens connected reads that collection every POLL_MS and forwards what other instances wrote. The
-// delay between instances is therefore up to about POLL_MS. Without a database to share (no bus) it stays in-process.
+// delay between instances is therefore up to about POLL_MS. Where the database can push (a MongoDB change stream, which needs a
+// replica set) the events arrive as they are written and the read every POLL_MS only runs at SAFETY_POLL_MS as a safety net; if
+// the stream cannot start or drops, polling goes back to POLL_MS. Without a database to share (no bus) it stays in-process.
 
 type Client = { res: Response; userId: string; role: string };
 type LiveEvent = { id: string; at: string; origin: string; type: string; data: unknown; to?: string[] };
 
 export const POLL_MS = 1500;
+export const SAFETY_POLL_MS = 15_000;
 const KEEP_MS = 2 * 60 * 1000;
 
 export class LiveHub {
@@ -22,6 +25,7 @@ export class LiveHub {
   private tail: NodeJS.Timeout | null = null;
   private cursor = '';
   private seen = new Set<string>();
+  private stopWatch: (() => void) | null = null;
 
   /** `bus` returns the repos to share events through, or null while the database is not ready. */
   constructor(private bus: () => Repos | null = () => null, private pollMs = POLL_MS) {}
@@ -73,18 +77,52 @@ export class LiveHub {
 
   private async startTail() {
     if (this.tail) return;
-    this.tail = setInterval(() => void this.poll(), this.pollMs);
-    this.tail.unref?.();
+    this.setPolling(this.pollMs);
     const repos = this.bus();
     // Start from the newest event already stored, not from this instance's clock, so clock differences cannot hide an event.
     const newest = await repos?.liveEvents.newest().catch(() => null);
     if (newest) this.seen.add(newest.id); // the query is inclusive of the cursor, so the event it came from must not be replayed
     this.cursor = newest?.at ?? new Date(Date.now() - 5000).toISOString();
+    await this.startWatch(repos);
+  }
+
+  private setPolling(ms: number) {
+    if (this.tail) clearInterval(this.tail);
+    this.tail = setInterval(() => void this.poll(), ms);
+    this.tail.unref?.();
+  }
+
+  /** Uses the database's own push when it has one; otherwise (or if it drops) the fast poll carries on. */
+  private async startWatch(repos: Repos | null) {
+    const store = repos?.store;
+    if (!store?.watchInserts || this.stopWatch || !this.clients.size) return;
+    try {
+      const stop = await store.watchInserts('liveEvents', (doc) => this.deliver(doc as LiveEvent), (err) => {
+        console.warn('Live event stream lost, polling instead:', err.message);
+        this.stopWatch = null;
+        if (this.tail) this.setPolling(this.pollMs);
+      });
+      if (!this.clients.size) return stop(); // everyone left while it was starting
+      this.stopWatch = stop;
+      this.setPolling(Math.max(this.pollMs, SAFETY_POLL_MS));
+    } catch {
+      /* no change stream here (standalone MongoDB, or the local store): keep polling */
+    }
   }
 
   private stopTail() {
     if (this.tail) clearInterval(this.tail);
     this.tail = null;
+    this.stopWatch?.();
+    this.stopWatch = null;
+  }
+
+  private deliver(e: LiveEvent) {
+    if (this.seen.has(e.id)) return;
+    this.seen.add(e.id);
+    if (e.at > this.cursor) this.cursor = e.at;
+    if (e.origin !== this.origin) this.broadcast(e.type, e.data, e.to && ((id) => e.to!.includes(id)));
+    if (this.seen.size > 1000) this.seen = new Set([...this.seen].slice(-500));
   }
 
   /** One read of the shared collection; exposed for tests. */
@@ -93,12 +131,6 @@ export class LiveHub {
     if (!repos || !this.cursor || !this.clients.size) return;
     let events: LiveEvent[];
     try { events = await repos.liveEvents.since(this.cursor); } catch (err: any) { console.warn('Could not read live events:', err?.message); return; }
-    for (const e of events) {
-      if (this.seen.has(e.id)) continue;
-      this.seen.add(e.id);
-      if (e.at > this.cursor) this.cursor = e.at;
-      if (e.origin !== this.origin) this.broadcast(e.type, e.data, e.to && ((id) => e.to!.includes(id)));
-    }
-    if (this.seen.size > 1000) this.seen = new Set([...this.seen].slice(-500));
+    for (const e of events) this.deliver(e);
   }
 }

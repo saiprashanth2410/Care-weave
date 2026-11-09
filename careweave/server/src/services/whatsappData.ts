@@ -41,6 +41,7 @@ export async function replyFor(repos: Repos, phone: string, body: string) {
     key ? repos.whatsappPrefs.languageOf(key) : 'en' as const,
   ]);
   const out = replyTo({ ...view, language }, phone, body);
-  if (out.language && key) await repos.whatsappPrefs.setLanguage(key, out.language);
+  if (out.resetLanguage && key) await repos.whatsappPrefs.clearLanguage(key);
+  else if (out.language && key) await repos.whatsappPrefs.setLanguage(key, out.language);
   return out;
 }

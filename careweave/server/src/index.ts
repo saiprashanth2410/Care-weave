@@ -6,6 +6,7 @@ import { buildSeed } from './seed.js';
 import { INDEXES, LocalStore, QUIET, createRepos, openMongoStore, type Repos, type Store } from './repo/index.js';
 import { createApp } from './app.js';
 import { ensureStaff } from './services/staff.js';
+import { backfillAppointmentKeys } from './services/backfill.js';
 import { runAnalyticsSync } from './services/analytics.js';
 import { isExasolConfigured } from './exasol/client.js';
 
@@ -54,6 +55,7 @@ export function ensureInitialized() {
     current = createRepos(store);
     if (store.mode === 'mongo') importMedicines().catch((err) => console.warn('Medicine import failed:', err?.message));
     await ensureStaff(current);
+    await backfillAppointmentKeys(current).catch((err) => console.warn('Appointment key backfill failed:', err?.message));
   })().catch((err) => { initPromise = null; throw err; });
   return initPromise;
 }

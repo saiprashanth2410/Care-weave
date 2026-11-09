@@ -1,6 +1,5 @@
 # Exasol Personal Integration Guide & Architecture
 
-> **ExaThon India 2026 Submission Document**  
 > **Platform:** CareWeave Unified Hospital Health Records & Intelligence Engine  
 > **Author:** Saiprashanth T (`saiprashanth1510@gmail.com`)
 

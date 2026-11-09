@@ -47,5 +47,8 @@
     "@rolldown/binding-linux-x64-gnu": "1.2.15",
     "@rolldown/binding-linux-x64-musl": "1.2.15",
     "@rolldown/binding-win32-x64-msvc": "1.2.15"
+  },
+  "engines": {
+    "node": "22.x"
   }
 }

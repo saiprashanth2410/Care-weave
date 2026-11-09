@@ -1,10 +1,11 @@
 # CareWeave — Monorepo Architecture & Service Guide
 
-> **Core Engine of CareWeave — ExaThon India 2026 Submission**  
+> **Core engine of CareWeave**  
 > Main Presentation & Documentation: [Root README.md](../README.md)  
 > Exasol Analytics Setup & Architecture: [EXASOL_SETUP.md](../EXASOL_SETUP.md)  
-> 3-Minute Video Walkthrough: [`demo_video.mp4`](../demo_video.mp4)  
-> Official Presentation Deck: [`CareWeave.pptx`](../CareWeave.pptx)  
+> 5-Minute Video Walkthrough: [`CareWeave_Demo_5min.mp4`](../CareWeave_Demo_5min.mp4)  
+> Presentation Deck: [`CareWeave.pptx`](../CareWeave.pptx)  
+> Live demo: https://careweave-ten.vercel.app  
 
 ---
 
