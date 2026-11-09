@@ -68,12 +68,6 @@ interface AnalyticsData {
     predictedVisitsTomorrow: number; recommendedStaffingDoctors: number; expectedWaitMinutes: number;
     riskLevel: 'Low' | 'Moderate' | 'High Capacity Surge';
   }>;
-  benchmark?: {
-    mongoReadMs: number;
-    exasolInMemoryMs: number;
-    speedupRatio: number;
-    recordsEvaluated: number;
-  };
   dataQuality: { visitsWithoutWaitTime: number; labOrdersPending: number; prescriptionsWithoutQuantity: number };
   queries: Array<{ id: string; title: string; sql: string; engine: 'exasol' | 'application-store'; rows: number; ms: number; note?: string }>;
   generatedAt: string;
@@ -281,32 +275,6 @@ export default function AnalyticsApp() {
           </div>
         ) : data ? (
           <div className="space-y-8">
-            {/* Performance Benchmark Banner */}
-            {data.benchmark && (
-              <div className="flex flex-wrap items-center justify-between gap-4 rounded-sm border border-emerald-500/30 bg-emerald-500/5 px-5 py-3 text-xs">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
-                  <div className="font-semibold text-ink">
-                    <span className="text-emerald-700 dark:text-emerald-400 font-bold">HTAP In-Memory Performance Benchmark: </span>
-                    <span>Evaluated {data.benchmark.recordsEvaluated} records across analytical fact tables.</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-1.5 rounded bg-surface px-2.5 py-1 border border-rule font-mono text-[11px]">
-                    <span className="text-ink-3">Standard OLTP Read:</span>
-                    <span className="text-alert font-bold">~{data.benchmark.mongoReadMs}ms</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 rounded bg-surface px-2.5 py-1 border border-emerald-500/40 font-mono text-[11px]">
-                    <span className="text-ink-3">Exasol Columnar:</span>
-                    <span className="text-emerald-600 font-bold">{data.benchmark.exasolInMemoryMs}ms</span>
-                  </div>
-                  <span className="rounded-full bg-emerald-600 px-2.5 py-0.5 text-[10px] font-black uppercase text-white tracking-wide shadow-sm">
-                    {data.benchmark.speedupRatio}x Faster
-                  </span>
-                </div>
-              </div>
-            )}
-
             {/* Row 1: Executive KPI Summary Cards */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-sm border border-rule bg-surface p-5">

@@ -187,19 +187,6 @@ export async function getAnalyticsOverview(db: any): Promise<AnalyticsOverviewRe
     };
   });
 
-  // Calculate live benchmark comparisons: MongoDB Document scan vs Exasol In-Memory Columnar
-  const c = db?.counts;
-  const totalRecords = c ? c.patients + c.appointments + c.labOrders + c.prescriptions + (analyticsInput(db).syntheticRecords || 0)
-    : (db?.patients?.length || 0) + (db?.appointments?.length || 0) + (db?.labOrders?.length || 0) + (db?.prescriptions?.length || 0) + (analyticsInput(db).syntheticRecords || 900);
-  const mongoSimulatedMs = Math.round(85 + (totalRecords * 0.045));
-  const exasolActualMs = queries.filter(q => q.engine === 'exasol').reduce((a, b) => a + b.ms, 0) || 1.4;
-  const benchmark = {
-    mongoReadMs: mongoSimulatedMs,
-    exasolInMemoryMs: exasolActualMs < 1 ? 1.2 : Math.round(exasolActualMs * 10) / 10,
-    speedupRatio: Math.round(mongoSimulatedMs / (exasolActualMs < 1 ? 1.2 : exasolActualMs)),
-    recordsEvaluated: totalRecords
-  };
-
   return {
     status, source: { ...source, syntheticRecords: analyticsInput(db).syntheticRecords },
     summary: {
@@ -209,6 +196,6 @@ export async function getAnalyticsOverview(db: any): Promise<AnalyticsOverviewRe
       criticalAlertsCount: safety.criticalLabResults + safety.allergyBlocks + safety.duplicateTherapyBlocks,
       topPrescribedMedicine: metrics.pharmacyConsumption[0]?.medicineName ?? null,
     },
-    ...metrics, safety, predictions, benchmark, queries, generatedAt: new Date().toISOString(),
+    ...metrics, safety, predictions, queries, generatedAt: new Date().toISOString(),
   };
 }

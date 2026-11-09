@@ -1,0 +1,6 @@
+*.mp4
+*.pptx
+*.env
+.env*
+careweave/server/data
+careweave/server/uploads
