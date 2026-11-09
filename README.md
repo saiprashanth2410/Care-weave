@@ -1,12 +1,10 @@
 # CareWeave 🏥
 ### Unified Clinical Records & Hospital Operations Analytics
 
-> **Official Submission for ExaThon India 2026**  
-> **Track / Challenge:** HealthTech — *From Siloed Hospital Desks to Unified Patient Health Records & Real-Time Operational Intelligence*  
-> **Team:** Saiprashanth T, Suriya Sudhakar, Dhivya Dharshini C S  
+> **Team:** Goofy Coders — Saiprashanth T, Saveetha G  
 > **Repository:** [https://github.com/saiprashanth2410/Care-weave](https://github.com/saiprashanth2410/Care-weave)  
 
-> ⚠️ **Clinical safety checks are decision support for a hackathon prototype, not validated medical software.** All data in this repository is synthetic.
+> ⚠️ **Clinical safety checks are decision support for a prototype, not validated medical software.** All data in this repository is synthetic.
 
 ---
 
@@ -19,7 +17,7 @@
 
 ---
 
-## ⚡ Executive Summary for Hackathon Judges
+## ⚡ Overview
 
 In typical community hospitals and diagnostic centers, **Front Desk (OPD)**, **Diagnostic Labs**, and **Doctor Consultation Rooms** operate in completely disconnected silos. Patients carry crumpled paper slips, lab values are manually re-typed (risking fatal decimal shift errors), doctors prescribe without allergy awareness, and administrators have zero real-time visibility into operational bottlenecks.
 
@@ -32,17 +30,17 @@ In typical community hospitals and diagnostic centers, **Front Desk (OPD)**, **D
 
 ---
 
-## 🧭 Fast Navigation for Judges & Evaluators
+## 🧭 Quick Navigation
 
 | Resource | Description | Direct Link |
 | :--- | :--- | :--- |
 | 🎬 **Demo Video** | 3-Minute end-to-end video walkthrough of CareWeave | [`demo_video.mp4`](demo_video.mp4) |
-| 📊 **Pitch Deck** | Official 10-slide presentation deck (ExaThon India 2026) | [`CareWeave.pptx`](CareWeave.pptx) |
-| 📝 **Evaluation Guide & Script** | Slide-by-slide pitch narrative and judge evaluation checklist | [`DEMO.md`](DEMO.md) |
+| 📊 **Pitch Deck** | 10-slide presentation deck | [`CareWeave.pptx`](CareWeave.pptx) |
+| 📝 **Demo Guide & Script** | Slide-by-slide pitch narrative and demo script | [`DEMO.md`](DEMO.md) |
 | 🏛️ **Exasol Integration Guide** | Comprehensive schema design, SQL queries, and scale benchmarks | [`EXASOL_SETUP.md`](EXASOL_SETUP.md) |
 | 🤖 **WhatsApp & n8n Specs** | Event-driven notification workflow and two-way bot documentation | [`careweave/n8n/README.md`](careweave/n8n/README.md) |
 
-> 💡 **Quick Evaluation Tip:** Log into the app, switch to **Doctor** or **Front Desk**, and click **"Load sample scenario (synthetic)"** in the top navigation bar. It creates synthetic patient *Priya Raman* with an encounter, penicillin allergy, lab orders, and conflicted external hospital imports ready for instant testing.
+> 💡 **Quick Start Tip:** Log into the app, switch to **Doctor** or **Front Desk**, and click **"Load sample scenario (synthetic)"** in the top navigation bar. It creates synthetic patient *Priya Raman* with an encounter, penicillin allergy, lab orders, and conflicted external hospital imports ready for instant testing.
 
 ---
 
@@ -136,7 +134,7 @@ Separately, every analytics widget has a **SQL Inspector** that shows the exact 
 
 ## 🛡️ Clinical Safety Checks & Core Platform Features
 
-> These checks are decision support for a hackathon prototype, not validated medical software. Their rules are small and hand-written (see [Known limitations](#-known-limitations)).
+> These checks are decision support for a prototype, not validated medical software. Their rules are small and hand-written (see [Known limitations](#-known-limitations)).
 
 ### 1. Multimodal Diagnostic Scanner (Google Gemma 4)
 - Uploads crumpled paper lab slips, invoices, or outside diagnostic PDFs.
@@ -160,7 +158,7 @@ Separately, every analytics widget has a **SQL Inspector** that shows the exact 
   - `MEDS <UHID>` / `RX <UHID>` — Active medication schedule segmented by Morning, Afternoon, and Night.
   - `REPORT <UHID>` — Latest verified laboratory test parameters and critical flags.
   - Reports and medicines are private: they are shown only when the sender's phone number and the UHID belong to the same patient.
-- Built-in **WhatsApp Simulator Widget** allows evaluators to simulate the entire WhatsApp experience directly inside the browser without needing third-party hardware.
+- Built-in **WhatsApp Simulator Widget** lets you simulate the entire WhatsApp experience directly inside the browser without needing third-party hardware.
 
 ### 5. Live Operations
 - **Live sync:** a server-sent-events stream (`/api/events`) refreshes the front desk and doctor screens when anything changes, including changes made on another server instance (instances pass events through the `liveEvents` collection and read it every 1.5 s while a screen is connected). Where the host cannot hold a connection open (serverless), screens fall back to polling every 5 seconds.
@@ -284,7 +282,7 @@ Still true after the changes above:
 ---
 
 ## 📜 Ethical Disclosures & Synthetic Data Notice
-CareWeave is a demonstration prototype engineered for **ExaThon India 2026**. All clinical scenarios, patient identifiers (*Priya Raman*, *Asha Rao*), appointments, and laboratory observations are **100% synthetic**. **Clinical safety checks are decision support for a hackathon prototype, not validated medical software.** The system does not replace professional diagnostic judgment.
+CareWeave is a demonstration prototype. All clinical scenarios, patient identifiers (*Priya Raman*, *Asha Rao*), appointments, and laboratory observations are **100% synthetic**. **Clinical safety checks are decision support for a prototype, not validated medical software.** The system does not replace professional diagnostic judgment.
 
 ---
 
