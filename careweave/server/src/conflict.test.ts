@@ -138,9 +138,10 @@ test('HTTP: an appointment edit and a lab order edit also answer 409 when the ve
     const order = (await s.call('POST', '/api/lab/orders', { token: lab, body: { testName: 'CBC', orderingDoctor: 'Dr X', patientGender: 'F', external: true, patientName: 'Ext', patientAge: 30 } })).json.data;
     assert.equal(order.version, 1);
     assert.equal((await s.call('PATCH', `/api/lab/orders/${order.id}`, { token: lab, body: { status: 'collected', version: 1 } })).status, 200);
-    const staleOrder = await s.call('PATCH', `/api/lab/orders/${order.id}`, { token: lab, body: { technicianNotes: 'x', version: 1 } });
-    assert.equal(staleOrder.status, 409);
-    assert.deepEqual(staleOrder.json, CONFLICT);
+    // A stale edit of a field nobody else changed is merged onto the newer copy (overlapping fields are covered by the appointment case above).
+    const merged = await s.call('PATCH', `/api/lab/orders/${order.id}`, { token: lab, body: { technicianNotes: 'x', version: 1 } });
+    assert.equal(merged.status, 200);
+    assert.equal(merged.json.data?.status ?? merged.json.status, 'collected');
   } finally {
     await s.close();
   }
@@ -154,6 +155,25 @@ test('HTTP: two bookings for one doctor slot at once: exactly one wins', async (
     const people = await Promise.all([0, 1].map(async (i) => (await s.call('POST', '/api/patients', { token: rec, body: { ...patient, name: `P${i}`, phone: `+91 9000${i}` } })).json));
     const out = await Promise.all(people.map((p) => s.call('POST', '/api/appointments', { token: rec, body: { patientId: p.id, doctorId: doc.id, date: '2030-02-02', time: '11:00', reason: 'Visit' } })));
     assert.deepEqual(out.map((r) => r.status).sort(), [201, 409]);
+  } finally {
+    await s.close();
+  }
+});
+
+test('HTTP: a stale edit of a different field is merged, not refused', async () => {
+  const s = await startInstance(await memoryStore());
+  try {
+    const rec = await s.login('reception');
+    const p = (await s.call('POST', '/api/patients', { token: rec, body: patient })).json;
+    assert.equal((await s.call('PATCH', `/api/patients/${p.id}`, { token: rec, body: { phone: '+91 90000 11111', version: 1 } })).status, 200);
+    const other = await s.call('PATCH', `/api/patients/${p.id}`, { token: rec, body: { email: 'asha@example.com', version: 1 } });
+    assert.equal(other.status, 200);
+    const now = other.json;
+    assert.equal(now.email, 'asha@example.com');
+    assert.match(now.phone, /11111/);
+    assert.equal(now.version, 3);
+    const same = await s.call('PATCH', `/api/patients/${p.id}`, { token: rec, body: { phone: '+91 90000 22222', version: 1 } });
+    assert.equal(same.status, 409);
   } finally {
     await s.close();
   }

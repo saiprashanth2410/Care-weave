@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { ConflictError, DuplicateError, UNIQUE_FIELDS, VERSIONED, splitChanges, stampChange, stampNew, type Collection, type FileStore, type Filter, type FindOpts, type IndexSpec, type Store } from './store.js';
+import { CHANGE_LOG_KEEP, canMerge, changedFields, ConflictError, DuplicateError, UNIQUE_FIELDS, VERSIONED, splitChanges, stampChange, stampNew, type Collection, type FileStore, type Filter, type FindOpts, type IndexSpec, type Store } from './store.js';
 
 // Development fallback used only when MONGODB_URI is not set. Documents live in process memory and are saved to one JSON
 // file after every write. It is single-process: two server instances would overwrite each other's file, which is exactly
@@ -86,15 +86,20 @@ class LocalCollection implements Collection {
   }
   async update(current: any, changes: Filter, expected?: number) {
     const stored = this.docs.find((d) => d.id === current.id);
-    const want = expected ?? current.version;
-    if (!stored || (this.versioned && stored.version !== want)) throw new ConflictError();
+    const sent = expected ?? current.version;
+    // A stale version is accepted when the writes since then touched other fields (see canMerge); the write applies on top of the stored copy.
+    if (!stored || (this.versioned && stored.version !== sent && !(sent < stored.version && canMerge(stored, changes, sent)))) throw new ConflictError();
+    const want = stored.version;
     const { set, unset } = splitChanges(stampChange(this.name, changes));
     const next = { ...stored, ...structuredClone(set) };
     for (const k of Object.keys(unset)) delete next[k];
     { const f = this.clash(next, stored.id); if (f) throw new DuplicateError(f); }
     Object.assign(stored, structuredClone(set));
     for (const k of Object.keys(unset)) delete stored[k];
-    if (this.versioned) stored.version = want + 1;
+    if (this.versioned) {
+      stored.version = want + 1;
+      stored._log = [...(stored._log ?? []), { v: stored.version, f: changedFields(changes) }].slice(-CHANGE_LOG_KEEP);
+    }
     await this.save();
     this.changed(this.name);
     return structuredClone(stored);

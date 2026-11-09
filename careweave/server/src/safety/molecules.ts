@@ -1,4 +1,5 @@
 import { parseMedicine } from '../medicines.js';
+import { INTERACTION_LIST, type Interaction } from './interactions.js';
 
 // Duplicate-therapy engine: reduces any medicine (catalogue name, brand or free text) to its canonical active
 // molecules, so the same ingredient is caught when it is sold under different brand names.
@@ -71,25 +72,8 @@ const CLASS_RISK: Record<string, string> = {
   'opioid analgesic': 'Two opioids together raise the risk of respiratory depression and sedation.',
 };
 
-// Major Cross-Class Drug-Drug Interactions (DDI) Matrix
-export const DRUG_INTERACTIONS: Array<{
-  drugA: string; // molecule or class
-  drugB: string;
-  riskDescription: string;
-}> = [
-  { drugA: 'warfarin', drugB: 'aspirin', riskDescription: 'Co-administration of Warfarin and Aspirin dramatically elevates major gastrointestinal bleeding and intracranial haemorrhage risks.' },
-  { drugA: 'warfarin', drugB: 'ibuprofen', riskDescription: 'Concurrent NSAID and Anticoagulant therapy causes severe GI mucosal ulceration and platelet inhibition, multiplying bleeding risk 3-5x.' },
-  { drugA: 'warfarin', drugB: 'diclofenac', riskDescription: 'Concurrent NSAID and Anticoagulant therapy causes severe GI mucosal ulceration and platelet inhibition, multiplying bleeding risk 3-5x.' },
-  { drugA: 'clopidogrel', drugB: 'omeprazole', riskDescription: 'Omeprazole significantly reduces the antiplatelet bioactivation of Clopidogrel via CYP2C19 inhibition, increasing ischemic event/thrombosis risk.' },
-  { drugA: 'tramadol', drugB: 'fluoxetine', riskDescription: 'Potent serotonergic synergy between Tramadol and SSRIs precipitates life-threatening Serotonin Syndrome and lowers seizure threshold.' },
-  { drugA: 'tramadol', drugB: 'sertraline', riskDescription: 'Potent serotonergic synergy between Tramadol and SSRIs precipitates life-threatening Serotonin Syndrome and lowers seizure threshold.' },
-  { drugA: 'sildenafil', drugB: 'nitroglycerin', riskDescription: 'Fatal synergistic vasodilation and severe refractory hypotension (systolic drop >50 mmHg).' },
-  { drugA: 'methotrexate', drugB: 'ibuprofen', riskDescription: 'NSAIDs diminish renal clearance of Methotrexate, inducing severe myelosuppression, pancytopenia, and acute nephrotoxicity.' },
-  { drugA: 'methotrexate', drugB: 'aspirin', riskDescription: 'Salicylates displace Methotrexate from protein binding sites and impair excretion, risking bone marrow suppression.' },
-  { drugA: 'digoxin', drugB: 'amiodarone', riskDescription: 'Amiodarone doubles serum Digoxin concentration by inhibiting P-glycoprotein, causing lethal digitalis arrhythmias.' },
-  { drugA: 'ciprofloxacin', drugB: 'theophylline', riskDescription: 'Ciprofloxacin inhibits CYP1A2 clearance of Theophylline, triggering toxic seizures, tachycardia, and arrhythmias.' },
-  { drugA: 'potassium', drugB: 'spironolactone', riskDescription: 'Concomitant potassium supplementation and potassium-sparing diuretics cause fatal hyperkalaemia and cardiac arrest.' }
-];
+// Drug-drug interaction pairs, generated from the rules in interactions.ts.
+export const DRUG_INTERACTIONS: Interaction[] = INTERACTION_LIST;
 
 const clean = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
 

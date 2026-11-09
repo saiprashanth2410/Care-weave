@@ -34,14 +34,15 @@ export function roles(...allowed: string[]) {
 export const CONFLICT_MESSAGE = 'Record was changed by someone else, reload and retry';
 
 /**
- * The version a write expects. A client that sent the version it last read gets a conflict at once when the record has moved on;
- * otherwise the version just read is used, which still catches another instance writing between this read and this write.
+ * The version a write expects. A client that sent the version it last read is passed through even when the record has moved on: the
+ * repo then merges the write if the changes since touched other fields, and refuses it (409) if they overlap. A client that sent no
+ * version uses the version just read, which still catches another instance writing between this read and this write.
  */
 export function expectedVersion(req: any, current: any): number {
   const sent = req.body?.version;
   if (sent === undefined || sent === null) return current.version;
-  if (!Number.isInteger(Number(sent)) || Number(sent) !== current.version) throw new ConflictError(CONFLICT_MESSAGE);
-  return current.version;
+  if (!Number.isInteger(Number(sent)) || Number(sent) > current.version || Number(sent) < 1) throw new ConflictError(CONFLICT_MESSAGE);
+  return Number(sent);
 }
 
 export function errorHandler(err: any, _req: any, res: any, _next: any) {

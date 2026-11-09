@@ -66,9 +66,13 @@ export const syncStatus = async (repos: Repos) => {
  * prescriptions, the synthetic sample history, and the blocked-prescription audit entries. Totals come from counts, not from loading
  * the collections. Exasol itself holds all history.
  */
-export const windowDays = () => Number(process.env.ANALYTICS_WINDOW_DAYS) || 90;
-export async function overviewSnapshot(repos: Repos, days = windowDays()) {
-  const cutoffAt = new Date(Date.now() - days * 86_400_000).toISOString();
+export const windowDays = (): number | null => {
+  const v = String(process.env.ANALYTICS_WINDOW_DAYS ?? '').trim().toLowerCase();
+  if (v === 'all' || v === '0') return null; // the whole history, at the cost of loading every visit, order and prescription
+  return Number(v) > 0 ? Number(v) : 90;
+};
+export async function overviewSnapshot(repos: Repos, days: number | null = windowDays()) {
+  const cutoffAt = days === null ? '' : new Date(Date.now() - days * 86_400_000).toISOString();
   const cutoffDay = cutoffAt.slice(0, 10);
   const [appointments, labOrders, prescriptions, syntheticHistory, auditLogs, patients, nApps, nOrders, nRx] = await Promise.all([
     repos.appointments.find({ date: { $gte: cutoffDay } }),
