@@ -188,7 +188,9 @@ export async function getAnalyticsOverview(db: any): Promise<AnalyticsOverviewRe
   });
 
   // Calculate live benchmark comparisons: MongoDB Document scan vs Exasol In-Memory Columnar
-  const totalRecords = (db?.patients?.length || 0) + (db?.appointments?.length || 0) + (db?.labOrders?.length || 0) + (db?.prescriptions?.length || 0) + (analyticsInput(db).syntheticRecords || 900);
+  const c = db?.counts;
+  const totalRecords = c ? c.patients + c.appointments + c.labOrders + c.prescriptions + (analyticsInput(db).syntheticRecords || 0)
+    : (db?.patients?.length || 0) + (db?.appointments?.length || 0) + (db?.labOrders?.length || 0) + (db?.prescriptions?.length || 0) + (analyticsInput(db).syntheticRecords || 900);
   const mongoSimulatedMs = Math.round(85 + (totalRecords * 0.045));
   const exasolActualMs = queries.filter(q => q.engine === 'exasol').reduce((a, b) => a + b.ms, 0) || 1.4;
   const benchmark = {
@@ -201,7 +203,7 @@ export async function getAnalyticsOverview(db: any): Promise<AnalyticsOverviewRe
   return {
     status, source: { ...source, syntheticRecords: analyticsInput(db).syntheticRecords },
     summary: {
-      totalPatients: db?.patients?.length ?? 0,
+      totalPatients: db?.counts?.patients ?? db?.patients?.length ?? 0,
       totalVisits: metrics.visitsTrend.reduce((a, v) => a + v.totalVisits, 0),
       avgLabTatMinutes: doneOrders ? Math.round((done.reduce((a, l) => a + l.avgTatMinutes! * l.completedOrders, 0) / doneOrders) * 10) / 10 : null,
       criticalAlertsCount: safety.criticalLabResults + safety.allergyBlocks + safety.duplicateTherapyBlocks,

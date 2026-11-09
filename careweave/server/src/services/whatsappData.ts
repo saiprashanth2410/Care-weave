@@ -1,6 +1,7 @@
 import type { Repos } from '../repo/index.js';
 import { exactCI } from '../repo/base.js';
 import { isoToday } from '../util.js';
+import { replyTo } from '../whatsapp/messages.js';
 
 const digitsOf = (v: any) => String(v ?? '').replace(/\D/g, '');
 
@@ -31,3 +32,15 @@ export async function whatsappView(repos: Repos, q: { phone?: string; uhid?: str
 
 /** The UHID a reply will look for: the second word of the message, as `replyTo` reads it. */
 export const uhidFromBody = (body: string) => String(body || '').trim().split(/\s+/)[1] || '';
+
+/** One WhatsApp message in, one reply out, with the sender's saved language applied and a language change saved. */
+export async function replyFor(repos: Repos, phone: string, body: string) {
+  const key = digitsOf(phone).slice(-10);
+  const [view, language] = await Promise.all([
+    whatsappView(repos, { phone, uhid: uhidFromBody(body) }),
+    key ? repos.whatsappPrefs.languageOf(key) : 'en' as const,
+  ]);
+  const out = replyTo({ ...view, language }, phone, body);
+  if (out.language && key) await repos.whatsappPrefs.setLanguage(key, out.language);
+  return out;
+}

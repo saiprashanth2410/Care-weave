@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { idIndex } from './base.js';
 import { usersRepo, usersIndexes } from './users.js';
 import { patientsRepo, patientsIndexes } from './patients.js';
 import { appointmentsRepo, appointmentsIndexes } from './appointments.js';
@@ -14,14 +15,17 @@ import { carePlansRepo, carePlansIndexes } from './carePlans.js';
 import { externalRecordsRepo, externalRecordsIndexes } from './externalRecords.js';
 import { casesRepo, casesIndexes } from './cases.js';
 import { syntheticHistoryRepo, syntheticHistoryIndexes } from './syntheticHistory.js';
+import { whatsappPrefsRepo, whatsappPrefsIndexes } from './whatsappPrefs.js';
+import { liveEventsRepo, liveEventsIndexes } from './liveEvents.js';
+import { metaRepo, metaIndexes } from './meta.js';
 import { MongoStore } from './mongo.js';
 import { LocalStore } from './local.js';
 import type { Store } from './store.js';
 
-export { ConflictError, DuplicateError, type Store } from './store.js';
+export { ConflictError, DuplicateError, type Store, type FileStore } from './store.js';
 export { LocalStore } from './local.js';
 
-export function createRepos(store: Store) {
+function collections(store: Store) {
   const c = (name: string) => store.collection(name);
   return {
     mode: store.mode,
@@ -41,23 +45,33 @@ export function createRepos(store: Store) {
     externalRecords: externalRecordsRepo(c('externalRecords')),
     cases: casesRepo(c('cases')),
     syntheticHistory: syntheticHistoryRepo(c('syntheticHistory')),
+    whatsappPrefs: whatsappPrefsRepo(c('whatsappPrefs')),
+    liveEvents: liveEventsRepo(c('liveEvents')),
+    meta: metaRepo(c('meta')),
   };
 }
-export type Repos = ReturnType<typeof createRepos>;
+export type Repos = ReturnType<typeof collections> & {
+  /** Everything written through the `Repos` given to `fn` is kept together or not at all (see `Store.transaction`). */
+  transaction<T>(fn: (tx: Repos) => Promise<T>): Promise<T>;
+};
+
+export function createRepos(store: Store): Repos {
+  return { ...collections(store), transaction: (fn) => store.transaction((tx) => fn(createRepos(tx))) };
+}
 
 export const INDEXES = {
   users: usersIndexes, patients: patientsIndexes, appointments: appointmentsIndexes, labOrders: ordersIndexes,
   encounters: encountersIndexes, prescriptions: prescriptionsIndexes, auditLogs: auditIndexes, sessions: sessionsIndexes, rateLimits: rateLimitsIndexes,
   vitals: vitalsIndexes, referrals: referralsIndexes, carePlans: carePlansIndexes, externalRecords: externalRecordsIndexes,
-  cases: casesIndexes, syntheticHistory: syntheticHistoryIndexes,
+  cases: casesIndexes, syntheticHistory: syntheticHistoryIndexes, whatsappPrefs: whatsappPrefsIndexes, liveEvents: liveEventsIndexes, meta: metaIndexes, files: [idIndex],
 };
 
 /** Quiet collections change on every sign-in or page view; they are not worth waking other screens for. */
-export const QUIET = new Set(['auditLogs', 'sessions', 'rateLimits']);
+export const QUIET = new Set(['auditLogs', 'sessions', 'rateLimits', 'liveEvents']);
 
 /** Connects to MongoDB. A failed connection is an error: it never quietly turns into per-instance local data. */
 export async function openMongoStore(uri: string, dbName: string, onChange: (name: string) => void) {
   await mongoose.connect(uri, { dbName, serverSelectionTimeoutMS: 8000, ignoreUndefined: true });
   const db = mongoose.connection.db!;
-  return new MongoStore(db, () => mongoose.disconnect(), onChange);
+  return new MongoStore(db, () => mongoose.disconnect(), onChange, mongoose.connection.getClient());
 }

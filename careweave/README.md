@@ -15,7 +15,7 @@
 | **Front Desk Portal** | Built & Server-backed | Patient registration, live OP waitlist queue, token printer |
 | **Laboratory Portal** | Built & Server-backed | Specimen collection, Gemma 4 AI scanner, maker-checker verification |
 | **Doctor Portal** | Built & Server-backed | SOAP encounters, 94k formulary prescribing, allergy & duplicate blocks |
-| **Exasol Analytics** | Built & Integrated | TAT audit, percentiles (`PERCENTILE_CONT`), moving averages. On-demand `MERGE` sync; no timing claimed |
+| **Exasol Analytics** | Built & Integrated | TAT audit, percentiles (`PERCENTILE_CONT`), moving averages. `MERGE` sync (button, or scheduled when configured), incremental after the first run; no timing claimed |
 | **WhatsApp Patient Bot & n8n** | Built & Integrated | Event-driven token push, live queue status, prescription schedules |
 | **Record Reconciliation** | Built & Server-backed | Deterministic 70-point heuristic scoring, conflict side-by-side view |
 

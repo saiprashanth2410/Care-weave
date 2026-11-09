@@ -24,7 +24,7 @@ export function DoctorReferrals({
 
   const updateStatus = async (r: Referral, status: string) => {
     try {
-      await api.updateReferral(r.id, status);
+      await api.updateReferral(r.id, status, r.version);
       notify(`Referral marked ${status}`);
       load();
     } catch (e) {

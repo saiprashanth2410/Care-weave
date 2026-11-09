@@ -11,13 +11,15 @@ import { makeAudit } from './services/audit.js';
 import { BROWSER_HEADER, credentialOf, userForToken } from './services/sessions.js';
 import { authRoutes, sessionRoutes } from './routes/auth.js';
 import { adminRoutes, healthRoutes } from './routes/admin.js';
+import { cronRoutes } from './routes/cron.js';
 import { patientRoutes } from './routes/patients.js';
 import { appointmentRoutes } from './routes/appointments.js';
 import { labRoutes, UPLOAD_ROUTES } from './routes/lab.js';
 import { doctorRoutes } from './routes/doctor.js';
+import { LiveHub } from './liveEvents.js';
 import { whatsappPublicRoutes, whatsappSimulatorRoutes } from './whatsapp/routes.js';
 
-export type CreateAppOptions = { repos: Repos | (() => Repos); config?: Partial<AppConfig> };
+export type CreateAppOptions = { repos: Repos | (() => Repos); config?: Partial<AppConfig>; live?: LiveHub };
 
 /** Wires middleware and routers. All data access goes through `repos`; this file holds no state of its own. */
 export function createApp(opts: CreateAppOptions) {
@@ -38,6 +40,7 @@ export function createApp(opts: CreateAppOptions) {
   const ctx: AppCtx = {
     get repos() { return getRepos(); },
     audit, auditOnce, roles, config,
+    live: opts.live ?? new LiveHub(getRepos),
     async auth(req: any, res: any, next: any) {
       const { token, via } = credentialOf(req);
       const u = await userForToken(getRepos(), token);
@@ -56,7 +59,8 @@ export function createApp(opts: CreateAppOptions) {
     },
   };
 
-  if (!config.isVercel) app.use(helmet());
+  // The API only returns JSON, so the strictest policy is safe: no scripts, frames or subresources may load from an API response.
+  app.use(helmet({ contentSecurityPolicy: { directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } } }));
   // Browsers on these origins may call the API. CLIENT_ORIGIN is a comma-separated list. Requests with no Origin
   // header (same-origin, curl, server to server) are not a CORS concern and pass. Outside production, localhost is open.
   const allowedOrigins = String(process.env.CLIENT_ORIGIN || '').split(',').map((o) => o.trim().replace(/\/$/, '')).filter(Boolean);
@@ -78,6 +82,7 @@ export function createApp(opts: CreateAppOptions) {
   app.use((req, res, next) => (req.method === 'POST' && UPLOAD_ROUTES.some((r) => r.test(req.path)) ? large : small)(req, res, next));
 
   app.use('/api', healthRoutes(ctx));
+  app.use('/api', cronRoutes(ctx));
   app.use('/api', authRoutes(ctx));
   app.use('/api', ctx.auth);
   app.use('/api', sessionRoutes(ctx));

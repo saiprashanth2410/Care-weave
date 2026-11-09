@@ -112,19 +112,20 @@ export default function AnalyticsApp() {
     }
   };
 
-  const handleSync = async () => {
+  const handleSync = async (full = false) => {
     try {
       setSyncing(true);
       setNotification(null);
       const res = await fetch('/api/analytics/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ full }),
       });
       const result = await res.json().catch(() => ({}));
       if (!res.ok || !result.success) throw new Error(result.error || 'Sync failed');
       setNotification({
         ok: true,
-        text: `Loaded into Exasol and counted back: ${result.verified.visits} visits, ${result.verified.labOrders} lab orders, ${result.verified.prescriptions} prescriptions (${result.durationMs} ms).`,
+        text: `${result.mode === 'full' ? 'Full sync' : 'Changes only'}: loaded ${result.syncedVisits} visits, ${result.syncedLabOrders} lab orders, ${result.syncedPrescriptions} prescriptions and found them in Exasol, which now holds ${result.verified.visits} / ${result.verified.labOrders} / ${result.verified.prescriptions} (${result.durationMs} ms).`,
       });
       fetchAnalytics();
       setTimeout(() => setNotification(null), 8000);
@@ -207,12 +208,20 @@ export default function AnalyticsApp() {
 
             {/* Sync Pipeline Button */}
             <button
-              onClick={handleSync}
+              onClick={() => handleSync(false)}
               disabled={syncing}
               className="flex h-9 items-center gap-2 rounded-sm bg-accent px-3.5 text-xs font-semibold text-surface transition hover:bg-accent-ink disabled:opacity-50"
            >
               <RefreshCw size={13} className={syncing ? 'animate-spin' : ''} />
               <span>{syncing ? 'Synchronizing...' : 'Sync to Exasol'}</span>
+            </button>
+            <button
+              onClick={() => handleSync(true)}
+              disabled={syncing}
+              title="Reads every record again and removes Exasol rows whose source is gone. Use it after resetting Exasol."
+              className="flex h-9 items-center gap-2 rounded-sm border border-line px-3 text-xs font-semibold transition disabled:opacity-50"
+            >
+              Full resync
             </button>
           </div>
         </div>

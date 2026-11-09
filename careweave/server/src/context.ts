@@ -1,4 +1,5 @@
 import type { Repos } from './repo/index.js';
+import type { LiveHub } from './liveEvents.js';
 import type { AuditFn } from './services/audit.js';
 
 export type AppConfig = {
@@ -18,4 +19,5 @@ export type AppCtx = {
   roles: (...allowed: string[]) => (req: any, res: any, next: any) => any;
   limits: { login: any; upload: any };
   config: AppConfig;
+  live: LiveHub;
 };

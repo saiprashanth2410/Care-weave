@@ -100,15 +100,15 @@ export const api={
   // Referrals
   referrals:()=>request<Referral[]>('/api/referrals'),
   createReferral:(body:Partial<Referral>)=>request<Referral>('/api/referrals',{method:'POST',body:JSON.stringify(body)}),
-  updateReferral:(id:string,status:string)=>request<Referral>(`/api/referrals/${id}`,{method:'PATCH',body:JSON.stringify({status})}),
+  updateReferral:(id:string,status:string,version?:number)=>request<Referral>(`/api/referrals/${id}`,{method:'PATCH',body:JSON.stringify({status,version})}),
 
   // Care Plans
   carePlans:()=>request<CarePlan[]>('/api/care-plans'),
   createCarePlan:(body:Partial<CarePlan>)=>request<CarePlan>('/api/care-plans',{method:'POST',body:JSON.stringify(body)}),
-  updateCarePlan:(id:string,body:any)=>request<CarePlan>(`/api/care-plans/${id}`,{method:'PATCH',body:JSON.stringify(body)}),
+  updateCarePlan:(id:string,body:{status?:string;targets?:any[];version?:number})=>request<CarePlan>(`/api/care-plans/${id}`,{method:'PATCH',body:JSON.stringify(body)}),
 
   // Reconciliation
   cases:()=>request<any[]>('/api/reconciliation/cases'),
-  resolveCase:(id:string,decision:string,linkPatientId?:string)=>request<any>(`/api/reconciliation/cases/${id}`,{method:'PATCH',body:JSON.stringify({decision,linkPatientId})}),
+  resolveCase:(id:string,decision:string,linkPatientId?:string,version?:number)=>request<any>(`/api/reconciliation/cases/${id}`,{method:'PATCH',body:JSON.stringify({decision,linkPatientId,version})}),
   importRecord:(body:any)=>request<any>('/api/external-records/import',{method:'POST',body:JSON.stringify(body)})
 };

@@ -10,7 +10,7 @@
 
 Front-desk and consultation screens need fast single-record reads and writes, while operational reporting needs aggregation across many visits, lab orders and prescriptions. CareWeave keeps those two jobs in two databases.
 
-CareWeave uses **OLTP (MongoDB) + OLAP (Exasol) with an on-demand `MERGE` sync** (it is not an HTAP engine: the two stores are separate and Exasol only sees data after a sync):
+CareWeave uses **OLTP (MongoDB) + OLAP (Exasol) with a `MERGE` sync (button or schedule)** (it is not an HTAP engine: the two stores are separate and Exasol only sees data after a sync):
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -43,7 +43,7 @@ CareWeave uses **OLTP (MongoDB) + OLAP (Exasol) with an on-demand `MERGE` sync**
 
 1. **MongoDB Atlas (OLTP)**: Manages atomic clinical records, active patient tokens, encrypted credentials, and lab results.
 2. **Exasol Personal (OLAP)**: Columnar analytics database executing group-by and window functions over diagnostic turnaround times, departmental patient wait funnels, and pharmacy consumption velocity.
-3. **Idempotent Data Pipeline (`sync.ts`)**: Runs when someone presses **Sync to Exasol** (nothing schedules it). It reads the visits, lab orders and prescriptions from MongoDB and executes SQL `MERGE` commands to synchronize records into Exasol analytics fact tables without duplicate risk.
+3. **Idempotent Data Pipeline (`sync.ts`)**: Runs when someone presses **Sync to Exasol**, or on a schedule when `ANALYTICS_SYNC_MINUTES` (a running server) or `CRON_SECRET` plus a cron call to `GET /api/analytics/cron` (serverless) is set. It reads the visits, lab orders and prescriptions from MongoDB a page at a time (only records changed since the last successful sync, after the first run; **Full resync** reads everything and removes rows whose source is gone) and executes SQL `MERGE` commands to synchronize records into Exasol analytics fact tables without duplicate risk.
 
 ---
 

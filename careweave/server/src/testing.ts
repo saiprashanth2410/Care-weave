@@ -1,5 +1,6 @@
 import type { AddressInfo } from 'node:net';
 import { createApp } from './app.js';
+import { LiveHub } from './liveEvents.js';
 import { LocalStore, createRepos, type Store } from './repo/index.js';
 import { buildSeed } from './seed.js';
 
@@ -22,7 +23,8 @@ export async function memoryStore() {
 
 export async function startInstance(store: Store) {
   const repos = createRepos(store);
-  const server = createApp({ repos }).listen(0);
+  const live = new LiveHub(() => repos, 40); // polls fast so tests do not wait
+  const server = createApp({ repos, live }).listen(0);
   await new Promise<void>((resolve) => server.once('listening', () => resolve()));
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   const call = async (method: string, path: string, opts: { token?: string; body?: unknown; headers?: Record<string, string>; raw?: string } = {}) => {
@@ -38,5 +40,5 @@ export async function startInstance(store: Store) {
   };
   const login = async (who = 'reception') =>
     (await call('POST', '/api/auth/login', { body: { email: `${who}@careweave.test`, password: 'demo123' } })).json.token as string;
-  return { url, repos, call, login, close: () => new Promise<void>((resolve) => { server.close(() => resolve()); server.closeAllConnections?.(); }) };
+  return { url, repos, live, call, login, close: () => new Promise<void>((resolve) => { server.close(() => resolve()); server.closeAllConnections?.(); }) };
 }

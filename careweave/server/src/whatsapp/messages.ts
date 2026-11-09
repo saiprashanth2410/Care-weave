@@ -146,16 +146,8 @@ export function activePrescriptions(db: any, q: { phone?: string; uhid?: string 
   return { found: true as const, patient: { name: patients[0].name, uhid: patients[0].patientId }, medications: meds };
 }
 
-// In-memory language preference store (phone -> 'en' | 'ta')
-const patientLang = new Map<string, 'en' | 'ta'>();
-
-export function setPatientLanguage(phone: string, lang: 'en' | 'ta') {
-  patientLang.set(digits(phone).slice(-10), lang);
-}
-
-export function getPatientLanguage(phone: string): 'en' | 'ta' {
-  return patientLang.get(digits(phone).slice(-10)) || 'en';
-}
+/** The language a sender chose is stored in the database (see repo/whatsappPrefs.ts); `replyTo` reads it from `db.language` and reports a change in `language`. */
+const languageOf = (db: any): 'en' | 'ta' => (db?.language === 'ta' ? 'ta' : 'en');
 
 // ── wording ────────────────────────────────────────────────────────────────
 export const HELP_TEXT = `🏥 CareWeave on WhatsApp. Reply with:
@@ -238,7 +230,7 @@ export function medsText(r: ReturnType<typeof activePrescriptions>, lang: 'en' |
 }
 
 /** One keyword in, one reply out. Unknown text gets the help list. */
-export function replyTo(db: any, phone: string, body: string) {
+export function replyTo(db: any, phone: string, body: string): { command: string; reply: string; language?: 'en' | 'ta' } {
   const [first, second] = String(body || '').trim().split(/\s+/);
   const word = first?.toUpperCase() || '';
   const uhid = second || '';
@@ -247,16 +239,14 @@ export function replyTo(db: any, phone: string, body: string) {
   if (word === 'LANG' || word === 'LANGUAGE') {
     const sub = second?.toUpperCase() || '';
     if (sub === 'TA' || sub === 'TAMIL') {
-      setPatientLanguage(phone, 'ta');
-      return { command: 'LANG', reply: '✅ மொழி தமிழுக்கு மாற்றப்பட்டது!\nஇனி உங்கள் டோக்கன் மற்றும் மருத்துவ தகவல்கள் தமிழில் வரும்.\nதகவல்களை அறிய *QUEUE*, *MEDS*, அல்லது *REPORT* என அனுப்பவும்.' };
+      return { command: 'LANG', language: 'ta' as const, reply: '✅ மொழி தமிழுக்கு மாற்றப்பட்டது!\nஇனி உங்கள் டோக்கன் மற்றும் மருத்துவ தகவல்கள் தமிழில் வரும்.\nதகவல்களை அறிய *QUEUE*, *MEDS*, அல்லது *REPORT* என அனுப்பவும்.' };
     }
     if (sub === 'EN' || sub === 'ENGLISH') {
-      setPatientLanguage(phone, 'en');
-      return { command: 'LANG', reply: '✅ Language switched to English!\nReply with QUEUE, MEDS, or REPORT at any time.' };
+      return { command: 'LANG', language: 'en' as const, reply: '✅ Language switched to English!\nReply with QUEUE, MEDS, or REPORT at any time.' };
     }
   }
 
-  const lang = getPatientLanguage(phone);
+  const lang = languageOf(db);
 
   if (word === 'QUEUE' || word === 'TOKEN') return { command: 'QUEUE', reply: queueText(queueStatus(db, { phone }), lang) };
   if (word === 'REPORT') return { command: 'REPORT', reply: reportText(latestReport(db, { phone, uhid }), lang) };
