@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import type { AppCtx } from '../context.js';
 import { catchAsyncRoutes } from '../asyncRoutes.js';
-import { addClient } from '../liveEvents.js';
-import { isToday } from '../util.js';
+import { removeUnfinishedSample } from '../services/sampleCleanup.js';
+import { isoToday } from '../util.js';
 import { doctorDashboard } from '../services/chart.js';
 import { startSession } from '../services/sessions.js';
 import { runScenario } from '../scenario.js';
@@ -31,22 +31,23 @@ export function adminRoutes(ctx: AppCtx) {
   // Live updates. A serverless host cannot hold the connection open, so there the screens fall back to polling.
   router.get('/events', (req: any, res) => {
     if (ctx.config.isVercel) return res.status(204).end();
-    addClient(res, req.user.id, req.user.role);
+    ctx.live.addClient(res, req.user.id, req.user.role);
   });
 
   router.get('/dashboard', async (req: any, res) => {
     if (req.user.role === 'doctor') return res.json(await doctorDashboard(ctx.repos, req.user));
-    const [appointments, patients, recent] = await Promise.all([ctx.repos.appointments.find(), ctx.repos.patients.count(), ctx.repos.audit.recent(15)]);
-    const todayAppts = appointments.filter((a: any) => isToday(a.date));
+    // Today's list is one day's rows; the all-time figures are counts in the database, not a scan of every appointment.
+    const A = ctx.repos.appointments;
+    const [todayAppts, patients, recent, waiting, checkedIn, inConsultation, completed, cancelled] = await Promise.all([
+      A.onDay(isoToday()), ctx.repos.patients.count(), ctx.repos.audit.recent(15),
+      A.count({ status: { $in: ['Waiting', 'Checked in', 'Checked In'] } }), A.count({ status: { $in: ['Checked in', 'Checked In'] } }),
+      A.count({ status: 'In Consultation' }), A.count({ status: 'Completed' }), A.count({ status: 'Cancelled' }),
+    ]);
     const n = (list: any[], ...statuses: string[]) => list.filter((a: any) => statuses.includes(a.status)).length;
     const stats = {
       patients,
       appointments: todayAppts.length,
-      waiting: n(appointments, 'Waiting', 'Checked in', 'Checked In'),
-      checkedIn: n(appointments, 'Checked in', 'Checked In'),
-      inConsultation: n(appointments, 'In Consultation'),
-      completed: n(appointments, 'Completed'),
-      cancelled: n(appointments, 'Cancelled'),
+      waiting, checkedIn, inConsultation, completed, cancelled,
       todayCompleted: n(todayAppts, 'Completed'),
       todayScheduled: n(todayAppts, 'Scheduled'),
     };
@@ -74,7 +75,8 @@ export function adminRoutes(ctx: AppCtx) {
       }
       res.status(out.loaded ? 201 : 200).json(out);
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || 'Could not load the sample scenario' });
+      const removed = await removeUnfinishedSample(ctx.repos).catch((e: any) => { console.error('Could not clean up the half-loaded sample scenario:', e?.message); return 0; });
+      res.status(500).json({ error: `${err?.message || 'Could not load the sample scenario'}${removed ? ' (the partly loaded sample was removed; try again)' : ''}` });
     } finally {
       scenarioRunning = false;
     }

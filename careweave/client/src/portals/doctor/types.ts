@@ -34,6 +34,7 @@ export type VitalSign={
 };
 
 export type Referral={
+  version?:number;
   id:string;
   patientId:string;
   patientName:string;
@@ -55,6 +56,7 @@ export type CarePlanTarget={
 };
 
 export type CarePlan={
+  version?:number;
   id:string;
   patientId:string;
   patientName:string;

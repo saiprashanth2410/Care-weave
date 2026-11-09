@@ -3,8 +3,8 @@ import express, { Router } from 'express';
 import type { Repos } from '../repo/index.js';
 import { catchAsyncRoutes } from '../asyncRoutes.js';
 import { recentEvents } from './emitter.js';
-import { activePrescriptions, eventText, latestReport, queueStatus, replyTo } from './messages.js';
-import { uhidFromBody, whatsappView } from '../services/whatsappData.js';
+import { activePrescriptions, eventText, latestReport, queueStatus } from './messages.js';
+import { replyFor, whatsappView } from '../services/whatsappData.js';
 
 type Ctx = { repos: () => Repos };
 
@@ -93,7 +93,7 @@ export function whatsappPublicRoutes({ repos }: Ctx) {
       return keyGuard(req, res, async () => {
         const from = String(b.From || b.from || '').replace(/^whatsapp:/, '');
         const body = String(b.Body ?? b.body ?? b.message ?? '');
-        const out = replyTo(await whatsappView(repos(), { phone: from, uhid: uhidFromBody(body) }), from, body);
+        const out = await replyFor(repos(), from, body);
         if (b.From) return res.type('text/xml').send(`<?xml version="1.0" encoding="UTF-8"?><Response><Message>${esc(out.reply)}</Message></Response>`);
         res.json(out);
       });
@@ -113,7 +113,7 @@ export function whatsappPublicRoutes({ repos }: Ctx) {
     const meta = b.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
     if (meta) {
       const body = meta.text?.body || '';
-      const out = replyTo(await whatsappView(repos(), { phone: meta.from, uhid: uhidFromBody(body) }), meta.from, body);
+      const out = await replyFor(repos(), meta.from, body);
       await sendViaMeta(meta.from, out.reply);
     }
     res.sendStatus(200); // delivery receipts and other notifications carry no message and need no reply
@@ -134,7 +134,7 @@ export function whatsappSimulatorRoutes({ repos }: Ctx) {
     const phone = String(req.body?.phone || '');
     if (!phone) return res.status(400).json({ error: 'phone is required' });
     const message = String(req.body?.message || '');
-    res.json(replyTo(await whatsappView(repos(), { phone, uhid: uhidFromBody(message) }), phone, message));
+    res.json(await replyFor(repos(), phone, message));
   });
 
   router.get('/whatsapp/simulator/events', (req, res) =>

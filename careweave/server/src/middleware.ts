@@ -2,8 +2,7 @@ import { ConflictError, type Repos } from './repo/index.js';
 
 /**
  * Fixed-window limiter. The count is kept in the database (one atomic upsert per request), so every server instance shares it
- * and a restart does not reset it. If the database cannot be reached the request is let through and the failure is logged:
- * the sign-in and upload routes need the same database and would fail anyway.
+ * and a restart does not reset it. If the database cannot be reached the request is refused with 503 (fail closed).
  */
 export function rateLimit(repos: () => Repos, name: string, windowMs: number, max: number, keyOf: (req: any) => string) {
   return async (req: any, res: any, next: any) => {
@@ -11,8 +10,9 @@ export function rateLimit(repos: () => Repos, name: string, windowMs: number, ma
     try {
       hit = await repos().rateLimits.hit(`${name}:${keyOf(req)}`, windowMs);
     } catch (err: any) {
+      // Fail closed: without counters the limit cannot be enforced, and these routes need the same database anyway.
       console.error(`Rate limiter could not reach the database (${name}):`, err?.message);
-      return next();
+      return res.status(503).json({ error: 'Service temporarily unavailable. Try again shortly.' });
     }
     if (hit.count > max) {
       res.setHeader('Retry-After', String(Math.max(1, Math.ceil((hit.resetAt.getTime() - Date.now()) / 1000))));

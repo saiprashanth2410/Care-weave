@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { ConflictError, DuplicateError, UNIQUE_FIELDS, VERSIONED, splitChanges, type Collection, type Filter, type FindOpts, type IndexSpec, type Store } from './store.js';
+import { ConflictError, DuplicateError, UNIQUE_FIELDS, VERSIONED, splitChanges, stampChange, stampNew, type Collection, type FileStore, type Filter, type FindOpts, type IndexSpec, type Store } from './store.js';
 
 // Development fallback used only when MONGODB_URI is not set. Documents live in process memory and are saved to one JSON
 // file after every write. It is single-process: two server instances would overwrite each other's file, which is exactly
@@ -19,6 +19,7 @@ export function matches(doc: any, filter: Filter = {}): boolean {
           case '$in': return arg.includes(v);
           case '$nin': return !arg.includes(v);
           case '$ne': return v !== arg;
+          case '$gt': return v !== undefined && v > arg;
           case '$gte': return v !== undefined && v >= arg;
           case '$lte': return v !== undefined && v <= arg;
           case '$regex': return new RegExp(arg, cond.$options).test(String(v ?? ''));
@@ -40,7 +41,7 @@ class LocalCollection implements Collection {
 
   private clash(doc: any, exceptId?: string) {
     const fields = UNIQUE_FIELDS[this.name] ?? ['id'];
-    return fields.some((f) => doc[f] !== undefined && this.docs.some((d) => d !== doc && d.id !== exceptId && d[f] === doc[f]));
+    return fields.find((f) => doc[f] !== undefined && this.docs.some((d) => d !== doc && d.id !== exceptId && d[f] === doc[f]));
   }
 
   async find(filter?: Filter, opts: FindOpts = {}) {
@@ -67,8 +68,8 @@ class LocalCollection implements Collection {
     return this.docs.filter((d) => matches(d, filter)).length;
   }
   async insert(doc: any) {
-    const row = structuredClone(this.versioned ? { ...doc, version: doc.version ?? 1 } : doc);
-    if (this.clash(row)) throw new DuplicateError();
+    const row = structuredClone(stampNew(this.name, this.versioned ? { ...doc, version: doc.version ?? 1 } : doc));
+    { const f = this.clash(row); if (f) throw new DuplicateError(f); }
     this.docs.push(row);
     await this.save();
     this.changed(this.name);
@@ -76,8 +77,8 @@ class LocalCollection implements Collection {
   }
   async insertMany(docs: any[]) {
     for (const d of docs) {
-      const row = structuredClone(this.versioned ? { ...d, version: d.version ?? 1 } : d);
-      if (this.clash(row)) throw new DuplicateError();
+      const row = structuredClone(stampNew(this.name, this.versioned ? { ...d, version: d.version ?? 1 } : d));
+      { const f = this.clash(row); if (f) throw new DuplicateError(f); }
       this.docs.push(row);
     }
     await this.save();
@@ -87,10 +88,10 @@ class LocalCollection implements Collection {
     const stored = this.docs.find((d) => d.id === current.id);
     const want = expected ?? current.version;
     if (!stored || (this.versioned && stored.version !== want)) throw new ConflictError();
-    const { set, unset } = splitChanges(changes);
+    const { set, unset } = splitChanges(stampChange(this.name, changes));
     const next = { ...stored, ...structuredClone(set) };
     for (const k of Object.keys(unset)) delete next[k];
-    if (this.clash(next, stored.id)) throw new DuplicateError();
+    { const f = this.clash(next, stored.id); if (f) throw new DuplicateError(f); }
     Object.assign(stored, structuredClone(set));
     for (const k of Object.keys(unset)) delete stored[k];
     if (this.versioned) stored.version = want + 1;
@@ -122,8 +123,25 @@ export class LocalStore implements Store {
   private colls = new Map<string, LocalCollection>();
   private writing: Promise<void> = Promise.resolve();
 
-  /** `file` is where data is saved; null keeps everything in memory (tests). `onChange` fires after each write. */
-  constructor(private file: string | null, private onChange: (name: string) => void = () => {}) {}
+  /** `file` is where data is saved; null keeps everything in memory (tests). `onChange` fires after each write. Files go to `filesDir` (memory when null). */
+  constructor(private file: string | null, private onChange: (name: string) => void = () => {}, private filesDir: string | null = null) {}
+
+  private memFiles = new Map<string, Buffer>();
+  readonly files: FileStore = {
+    put: async (id, data) => {
+      if (!this.filesDir) return void this.memFiles.set(id, data);
+      await fs.mkdir(this.filesDir, { recursive: true });
+      await fs.writeFile(path.join(this.filesDir, `${id}.bin`), data);
+    },
+    get: async (id) => {
+      if (!this.filesDir) return this.memFiles.get(id) ?? null;
+      return fs.readFile(path.join(this.filesDir, `${id}.bin`)).catch(() => null);
+    },
+    delete: async (id) => {
+      if (!this.filesDir) return void this.memFiles.delete(id);
+      await fs.rm(path.join(this.filesDir, `${id}.bin`), { force: true });
+    },
+  };
 
   /** Loads the JSON file if there is one and gives every versioned document a version (documents older than the field get 1). */
   async load(seed: () => Promise<Record<string, any[]>>) {
@@ -144,6 +162,29 @@ export class LocalStore implements Store {
     let c = this.colls.get(name);
     if (!c) { c = new LocalCollection(name, () => this.persist(), this.onChange); this.colls.set(name, c); }
     return c;
+  }
+
+  private txQueue: Promise<unknown> = Promise.resolve();
+
+  /**
+   * All-or-nothing for development: a snapshot of every collection is restored if `fn` throws. Transactions run one at a time.
+   * A write from an unrelated request that lands while a transaction is open is also undone by a rollback; the local file mode
+   * is single-user development storage, which is why production uses MongoDB.
+   */
+  transaction<T>(fn: (tx: Store) => Promise<T>): Promise<T> {
+    const run = async () => {
+      const snapshot = new Map([...this.colls].map(([n, c]) => [n, structuredClone(c.docs)]));
+      try {
+        return await fn(this);
+      } catch (err) {
+        for (const [n, c] of this.colls) c.docs = snapshot.get(n) ?? [];
+        await this.persist();
+        throw err;
+      }
+    };
+    const next = this.txQueue.then(run, run);
+    this.txQueue = next.catch(() => {});
+    return next;
   }
 
   private persist() {

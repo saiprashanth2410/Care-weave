@@ -83,7 +83,7 @@ export function DoctorReconciliation({ notify }: { notify: (s: string) => void }
               <div>
                 <button
                   className="secondary small-btn"
-                  onClick={() => api.resolveCase(c.id, 'keep-separate').then(() => { notify(c.type === 'duplicate' ? 'Kept as a separate record' : 'Record kept separate, nothing linked'); load(); }).catch(e => notify(e.message))}
+                  onClick={() => api.resolveCase(c.id, 'keep-separate', undefined, c.version).then(() => { notify(c.type === 'duplicate' ? 'Kept as a separate record' : 'Record kept separate, nothing linked'); load(); }).catch(e => notify(e.message))}
                 >
                   {c.type === 'duplicate' ? 'Not a duplicate' : 'Keep separate'}
                 </button>
@@ -95,7 +95,7 @@ export function DoctorReconciliation({ notify }: { notify: (s: string) => void }
                       linkPatientId = window.prompt('CareWeave patient ID to link this record to (for example CW-12345)') || undefined;
                       if (!linkPatientId) return;
                     }
-                    api.resolveCase(c.id, 'link', linkPatientId).then(() => { notify(c.type === 'duplicate' ? 'Marked as a duplicate of the original' : 'Record linked to the chart'); load(); }).catch(e => notify(e.message));
+                    api.resolveCase(c.id, 'link', linkPatientId, c.version).then(() => { notify(c.type === 'duplicate' ? 'Marked as a duplicate of the original' : 'Record linked to the chart'); load(); }).catch(e => notify(e.message));
                   }}
                 >
                   {c.type === 'duplicate' ? 'Confirm duplicate' : c.type === 'conflict' ? 'Accept as history' : 'Review and link'}

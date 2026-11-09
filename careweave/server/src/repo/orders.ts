@@ -8,6 +8,7 @@ export const ordersIndexes: IndexSpec[] = [
   { keys: { registeredPatientRef: 1 } },
   { keys: { patientId: 1 } },
   { keys: { orderedAt: -1 } },
+  { keys: { updatedAt: 1 } },
 ];
 
 export const ordersRepo = (c: Collection) => ({

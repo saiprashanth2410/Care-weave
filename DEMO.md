@@ -53,7 +53,7 @@
 ### Slide 8: Impact & Future Roadmap
 * **What we can show today:** two safety gates (allergy and same-molecule duplicate prescriptions), maker-checker lab verification, and analytics whose every number can be traced to a query.
 * **What we have not measured:** we make no claim about reduced turnaround or fewer incidents; this is a demo build on synthetic data.
-* **Next Milestones:** stock and dispensing data so demand can become a real stock forecast, FHIR R4 interoperability for ABDM, scheduled ETL instead of a manual sync button.
+* **Next Milestones:** stock and dispensing data so demand can become a real stock forecast, FHIR R4 interoperability for ABDM, a larger-scale test of the scheduled incremental sync.
 
 ---
 

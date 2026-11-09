@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import type { AppCtx } from '../context.js';
+import { ConflictError } from '../repo/index.js';
 import { catchAsyncRoutes } from '../asyncRoutes.js';
 import { BROWSER_HEADER, clearedCookie, endSession, sessionCookie, startSession } from '../services/sessions.js';
 
@@ -72,7 +73,14 @@ export function authRoutes(ctx: AppCtx) {
         if (requireVerifiedEmail && decoded.email_verified !== true) {
           return res.status(403).json({ error: 'Verify your email address first, then sign in again.' });
         }
-        u = await ctx.repos.users.update(u, { firebaseUid: uid });
+        try {
+          u = await ctx.repos.users.update(u, { firebaseUid: uid });
+        } catch (err) {
+          if (!(err instanceof ConflictError)) throw err;
+          // The account changed between reading and writing (a concurrent first sign-in): look again and apply the same rule.
+          u = await ctx.repos.users.byEmail(email);
+          if (!u || (u.firebaseUid && u.firebaseUid !== uid)) return res.status(403).json({ error: 'This email is linked to a different sign-in account.' });
+        }
       }
       await signIn(u, 'firebase_auth', req, res);
     });

@@ -118,9 +118,12 @@ export function doctorRoutes(ctx: AppCtx) {
     const v = b.vitals && typeof b.vitals === 'object' ? cleanVitals(b.vitals) : {};
     if (v.error) return res.status(400).json({ error: v.error });
     if (v.ok) e.vitals = v.ok;
-    // Two documents, written one after the other: the encounter, then its vitals row. There is no multi-document transaction.
-    const saved = await R().encounters.insert(e);
-    if (v.ok) await R().vitals.insert({ id: id('vt'), patientId: p.id, date: now(), ...v.ok, recordedBy: req.user.name });
+    // Two documents, kept together: the encounter and its vitals row are both saved or neither is.
+    const saved = await R().transaction(async (tx) => {
+      const enc = await tx.encounters.insert(e);
+      if (v.ok) await tx.vitals.insert({ id: id('vt'), patientId: p.id, date: now(), ...v.ok, recordedBy: req.user.name });
+      return enc;
+    });
     await audit(req, 'create', 'encounter', e.id, 'SOAP documentation');
     res.status(201).json(saved);
   });
@@ -195,7 +198,7 @@ export function doctorRoutes(ctx: AppCtx) {
     const rf = await R().referrals.byId(req.params.id);
     if (!rf || !(await mine(req)).includes(rf.patientId)) return res.status(404).json({ error: 'Referral not found' });
     if (!['Drafted', 'Sent', 'Scheduled', 'Completed'].includes(req.body?.status)) return res.status(400).json({ error: 'Unknown referral status' });
-    const saved = await R().referrals.update(rf, { status: req.body.status });
+    const saved = await R().referrals.update(rf, { status: req.body.status }, expectedVersion(req, rf));
     await audit(req, 'update', 'referral', rf.id, `Status: ${saved.status}`);
     res.json(saved);
   });
@@ -224,7 +227,7 @@ export function doctorRoutes(ctx: AppCtx) {
     const changes: Record<string, any> = {};
     if (req.body?.status && ['Active', 'Completed', 'Under Review'].includes(req.body.status)) changes.status = req.body.status;
     if (Array.isArray(req.body?.targets)) changes.targets = req.body.targets.slice(0, 20);
-    const saved = await R().carePlans.update(cp, changes);
+    const saved = await R().carePlans.update(cp, changes, expectedVersion(req, cp));
     await audit(req, 'update', 'care-plan', cp.id);
     res.json(saved);
   });
@@ -414,8 +417,11 @@ export function doctorRoutes(ctx: AppCtx) {
         rec.status = 'Unmatched';
         cases.push(caseFrom(rec, null, { type: 'unmatched', title: 'No matching patient', detail: `${rec.facility} · ${rec.sourceRecordId || rec.id} stays separate until a reviewer links it to a patient.`, evidence: ['No patient scored high enough on the identity fields supplied'] }, req.user.id));
       }
-      await R().externalRecords.insert(rec);
-      for (const k of cases) await R().cases.insert(k);
+      // The record and its review cases are saved together: a record without the cases that flag it for review would look clean.
+      await R().transaction(async (tx) => {
+        await tx.externalRecords.insert(rec);
+        for (const k of cases) await tx.cases.insert(k);
+      });
       await audit(req, 'import', 'external-record', rec.id, `Source: ${rec.facility} · ${rec.status}`);
       out.push({ record: rec, outcome: rec.status, cases });
     }
@@ -456,9 +462,14 @@ export function doctorRoutes(ctx: AppCtx) {
     } else {
       recChanges.status = 'Linked (reviewed)';
     }
-    await R().externalRecords.update(rec, recChanges);
-    for (const c of newCases) await R().cases.insert(c);
-    const saved = await R().cases.update(k, { status: 'reviewed', decision, reviewedBy: req.user.name, reviewedAt: now() });
+    const expected = expectedVersion(req, k);
+    // Linking the record, opening any new cases and closing this one happen together. A second reviewer who decided the same
+    // case a moment earlier makes the case update fail with a conflict, which also undoes the record change.
+    const saved = await R().transaction(async (tx) => {
+      await tx.externalRecords.update(rec, recChanges);
+      for (const c of newCases) await tx.cases.insert(c);
+      return tx.cases.update(k, { status: 'reviewed', decision, reviewedBy: req.user.name, reviewedAt: now() }, expected);
+    });
     await audit(req, 'resolve', 'reconciliation-case', k.id, `Decision: ${decision}`);
     res.json(saved);
   });
