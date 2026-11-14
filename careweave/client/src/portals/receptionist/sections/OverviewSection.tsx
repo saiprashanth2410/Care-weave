@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { ArrowRight, CalendarDays, CheckCircle2, Clock3, ClockIcon, RefreshCw, Stethoscope, UserCheck, UserPlus, Users } from '../icons';
 import { api } from '../api';
 import type { Appointment, Dashboard, User } from '../types';
-import { fmtTime, initials, greeting, waitDuration, waitUrgency } from '../helpers';
+import { initials, greeting, waitDuration, waitUrgency } from '../helpers';
 
 // ─── RECEPTIONIST: OVERVIEW COMMAND CENTER ──────────────────────────────────
 export default function OverviewSection({
@@ -263,33 +263,6 @@ export default function OverviewSection({
                 ))}
               </div>
             )}
-          </div>
-
-          {/* Front Desk Activity Log */}
-          <div className="card">
-            <div className="card-head" style={{ marginBottom: 12 }}>
-              <div>
-                <h3>Front Desk Activity Log</h3>
-                <p className="muted">Recent administrative actions & check-ins</p>
-              </div>
-            </div>
-
-            <div className="recent-activity">
-              {(data?.recent || []).slice(0, 5).map(r => (
-                <div className="activity-row" key={r.id}>
-                  <div className={`activity-dot ${r.action}`} />
-                  <div>
-                    <b>{r.action.toUpperCase()} · {r.entity}</b>
-                    <small>{r.detail || 'Reception event'} · {fmtTime(r.timestamp)}</small>
-                  </div>
-                </div>
-              ))}
-              {(!data?.recent || data.recent.length === 0) && (
-                <p className="muted" style={{ fontSize: 12, padding: '12px 0', textAlign: 'center' }}>
-                  No recent front desk actions logged.
-                </p>
-              )}
-            </div>
           </div>
         </div>
       </div>
