@@ -67,8 +67,9 @@ wheels/
 *.log
 *.sqlite3
 
-# Lockfiles (avoid cross-platform optional dependency bugs on Linux/Mac)
-package-lock.json
+# Lockfiles: the root lockfile is committed so every install resolves the same versions (a floating jwks-rsa broke
+# Firebase sign-in on Vercel). Nested ones are not used; the Vercel build adds the Linux native binaries itself.
+careweave/*/package-lock.json
 
 
 .vercel

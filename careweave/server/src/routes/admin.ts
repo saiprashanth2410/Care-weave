@@ -6,6 +6,7 @@ import { isoToday } from '../util.js';
 import { doctorDashboard } from '../services/chart.js';
 import { startSession } from '../services/sessions.js';
 import { runScenario } from '../scenario.js';
+import { readDataVersion } from '../services/dataVersion.js';
 import { registerExasolAnalyticsRoutes } from '../exasol/routes.js';
 
 /** Open before sign-in. */
@@ -52,6 +53,12 @@ export function adminRoutes(ctx: AppCtx) {
     const rows = await ctx.repos.audit.search({ entity: 'patient', entityId: p.id, before: iso(req.query.before) }, pageSize(req.query.limit));
     await ctx.auditOnce(req, 'read', 'access-log', p.id, `Viewed who accessed ${p.name}'s chart`);
     res.json({ patient: { id: p.id, patientId: p.patientId, name: p.name }, rows, nextBefore: rows.length ? rows[rows.length - 1].timestamp : null });
+  });
+
+  // The token screens poll instead of reloading their lists: it changes when data is saved, and answering it is one small read.
+  router.get('/changes', async (_req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json({ version: await readDataVersion(ctx.repos) });
   });
 
   // Live updates. A serverless host cannot hold the connection open, so there the screens fall back to polling.

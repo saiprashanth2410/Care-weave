@@ -12,6 +12,7 @@ import { BROWSER_HEADER, credentialOf, userForToken } from './services/sessions.
 import { authRoutes, sessionRoutes } from './routes/auth.js';
 import { adminRoutes, healthRoutes } from './routes/admin.js';
 import { staffRoutes } from './routes/staff.js';
+import { markDataChanges } from './services/dataVersion.js';
 import { cronRoutes } from './routes/cron.js';
 import { patientRoutes } from './routes/patients.js';
 import { appointmentRoutes } from './routes/appointments.js';
@@ -84,6 +85,7 @@ export function createApp(opts: CreateAppOptions) {
   const large = express.json({ limit: '14mb' });
   app.use((req, res, next) => (req.method === 'POST' && UPLOAD_ROUTES.some((r) => r.test(req.path)) ? large : small)(req, res, next));
 
+  app.use('/api', markDataChanges(getRepos));
   app.use('/api', healthRoutes(ctx));
   app.use('/api', cronRoutes(ctx));
   app.use('/api', authRoutes(ctx));
