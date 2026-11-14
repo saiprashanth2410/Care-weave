@@ -83,7 +83,7 @@ export interface Store {
    * `fn` may run more than once (MongoDB retries a transaction after a transient error), so keep it free of side effects other than store writes.
    */
   transaction<T>(fn: (tx: Store) => Promise<T>): Promise<T>;
-  ensureIndexes(specs: Record<string, IndexSpec[]>): Promise<void>;
+  ensureIndexes(specs: Record<string, IndexSpec[]>): Promise<number | void>;
   /**
    * Calls `onInsert` for each document added to `collection` from now on, pushed by the database (MongoDB change streams, which need a
    * replica set). Resolves to a function that stops watching, and rejects when the database cannot do it; callers then poll instead.

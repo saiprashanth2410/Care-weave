@@ -173,7 +173,9 @@ export class MongoStore implements Store {
     }
   }
 
-  async ensureIndexes(specs: Record<string, IndexSpec[]>) {
+  /** Returns how many indexes could not be created (0 when all is well). */
+  async ensureIndexes(specs: Record<string, IndexSpec[]>): Promise<number> {
+    let failed = 0;
     // Documents written before the version field existed start at 1; the old `rev` counter is dropped.
     for (const name of VERSIONED) {
       const c = this.db.collection(name);
@@ -197,10 +199,12 @@ export class MongoStore implements Store {
           await this.db.collection(name).createIndex(s.keys, { unique: s.unique, expireAfterSeconds: s.expireAfterSeconds, partialFilterExpression: s.partial });
         } catch (err: any) {
           // A unique index fails when old data already has duplicates. The server still works, only without that guarantee.
+          failed++;
           console.warn(`Could not create index ${name}.${Object.keys(s.keys).join('+')}:`, err?.message);
         }
       }
     }
+    return failed;
   }
 
   close() {

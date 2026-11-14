@@ -6,6 +6,7 @@ import { buildSeed } from './seed.js';
 import { INDEXES, LocalStore, QUIET, createRepos, openMongoStore, type Repos, type Store } from './repo/index.js';
 import { createApp } from './app.js';
 import { ensureStaff } from './services/staff.js';
+import { readStartupStamp, startupStamp, writeStartupStamp } from './services/startup.js';
 import { backfillAppointmentKeys } from './services/backfill.js';
 import { runAnalyticsSync } from './services/analytics.js';
 import { isExasolConfigured } from './exasol/client.js';
@@ -22,7 +23,6 @@ async function openStore(): Promise<Store> {
   if (uri) {
     try {
       const store = await openMongoStore(uri, process.env.MONGODB_DB || 'careweave', onChange);
-      await store.ensureIndexes(INDEXES);
       console.log('[storage] MongoDB: every read and write goes to the database. No data is cached in this process.');
       return store;
     } catch (err: any) {
@@ -51,11 +51,25 @@ export const app = createApp({ repos, live });
 let initPromise: Promise<void> | null = null;
 export function ensureInitialized() {
   initPromise ??= (async () => {
+    const t0 = Date.now();
     const store = await openStore();
+    const connected = Date.now();
     current = createRepos(store);
-    if (store.mode === 'mongo') importMedicines().catch((err) => console.warn('Medicine import failed:', err?.message));
-    await ensureStaff(current);
-    await backfillAppointmentKeys(current).catch((err) => console.warn('Appointment key backfill failed:', err?.message));
+    const stamp = await startupStamp();
+    // The local JSON store has nothing to remember between runs, so it always sets up; MongoDB skips the work when the stamp matches.
+    const done = store.mode === 'mongo' ? await readStartupStamp(current).catch(() => undefined) : undefined;
+    const checked = Date.now();
+    let ran = false;
+    if (done !== stamp) {
+      ran = true;
+      const failedIndexes = (await store.ensureIndexes(INDEXES)) || 0;
+      if (store.mode === 'mongo') importMedicines().catch((err) => console.warn('Medicine import failed:', err?.message));
+      await ensureStaff(current);
+      await backfillAppointmentKeys(current).catch((err) => console.warn('Appointment key backfill failed:', err?.message));
+      // Not stamped while an index is missing, so the next start tries again.
+      if (store.mode === 'mongo' && !failedIndexes) await writeStartupStamp(current, stamp).catch((err) => console.warn('Could not save the start-up stamp:', err?.message));
+    }
+    console.log(`[startup] connect ${connected - t0} ms, check ${checked - connected} ms, set-up ${ran ? `ran ${Date.now() - checked} ms` : 'skipped (already done)'}`);
   })().catch((err) => { initPromise = null; throw err; });
   return initPromise;
 }
