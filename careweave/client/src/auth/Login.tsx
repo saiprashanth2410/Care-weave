@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AlertTriangle, CalendarCheck, Eye, EyeOff, FlaskConical, Scan, ShieldCheck, Sparkles, Users, Zap } from 'lucide-react'
-import { firebaseConfigured, firebaseResetPassword, firebaseSignIn } from './firebase'
+import { firebaseConfigured } from './firebaseConfig'
 import { authConfig, HOME, signIn, signInWithFirebaseToken } from './session'
 
 const BARS = [42, 30, 55, 38, 68, 50, 82, 62, 90, 74, 96, 88]
@@ -71,6 +71,7 @@ function LoginInner() {
       let user
       if (mode === 'firebase') {
         try {
+          const { firebaseSignIn } = await import('./firebase') // the SDK loads now, not with the page
           const idToken = await firebaseSignIn(email.trim(), password)
           user = await signInWithFirebaseToken(idToken)
         } catch (fbErr: any) {
@@ -108,6 +109,7 @@ function LoginInner() {
       return
     }
     try {
+      const { firebaseResetPassword } = await import('./firebase')
       await firebaseResetPassword(email.trim())
       setNotice('If that email belongs to a staff account, a reset link is on its way.')
     } catch (err) {

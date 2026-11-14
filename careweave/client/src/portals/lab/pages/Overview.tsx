@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { getLabOrders } from '../api'
 import StatusBadge from '../components/StatusBadge'
 import { PIPELINE, STATUS_META } from '../status'
 import type { LabOrder, LabOrderStatus } from '../types'
+
+const OrderPipelineChart = lazy(() => import('../components/OrderPipelineChart'))
 
 export default function Overview() {
   const [orders, setOrders] = useState<LabOrder[] | null>(null)
@@ -60,14 +61,9 @@ export default function Overview() {
             <Empty text="Order data is unavailable." />
           ) : (
             <div className="h-72" role="img" aria-label="Bar chart of orders per workflow stage">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chart} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
-                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} stroke="#56655f" />
-                  <YAxis type="category" dataKey="name" width={138} tick={{ fontSize: 12 }} stroke="#56655f" tickLine={false} />
-                  <Tooltip cursor={{ fill: '#e9ece7' }} wrapperStyle={{ boxShadow: 'none' }} contentStyle={{ fontSize: 12, borderRadius: 0, border: '1px solid #c3cac2', background: '#f6f7f3', boxShadow: 'none' }} />
-                  <Bar dataKey="value" name="Orders" fill="#0c6b6d" isAnimationActive={false} />
-                </BarChart>
-              </ResponsiveContainer>
+              <Suspense fallback={<Skeleton className="h-72" />}>
+                <OrderPipelineChart data={chart} />
+              </Suspense>
             </div>
           )}
         </Section>

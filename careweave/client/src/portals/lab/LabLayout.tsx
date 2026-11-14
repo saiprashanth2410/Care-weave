@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import SampleScenario from '@/components/SampleScenario'
 import { clearSession, HOME, type SessionUser } from '@/auth/session'
@@ -97,7 +97,9 @@ export default function LabLayout({ user }: { user: SessionUser }) {
               <button onClick={() => setNotice(null)} className="min-h-6 text-xs font-semibold underline underline-offset-2">Dismiss</button>
             </div>
           )}
-          <Outlet context={{ user }} />
+          <Suspense fallback={<p role="status" className="py-10 text-center text-sm text-ink-3">Loading…</p>}>
+            <Outlet context={{ user }} />
+          </Suspense>
         </main>
         <footer className="border-t border-rule px-4 py-4 text-xs text-ink-3 sm:px-6 lg:px-8">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2">

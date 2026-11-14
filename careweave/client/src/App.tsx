@@ -1,20 +1,35 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import Login from '@/auth/Login'
 import RequireRole from '@/auth/RequireRole'
-import DoctorApp from '@/portals/doctor/DoctorApp'
-import ReceptionistApp from '@/portals/receptionist/ReceptionistApp'
-import LabLayout from '@/portals/lab/LabLayout'
-import { Privacy, Terms } from '@/portals/lab/pages/Legal'
-import Orders from '@/portals/lab/pages/Orders'
-import Overview from '@/portals/lab/pages/Overview'
-import Results from '@/portals/lab/pages/Results'
-import Samples from '@/portals/lab/pages/Samples'
-import Verification from '@/portals/lab/pages/Verification'
-import AdminApp from '@/portals/admin/AdminApp'
-import AnalyticsApp from '@/portals/analytics/AnalyticsApp'
+
+// Only the sign-in page is loaded up front. Each portal (and each lab page) is fetched when someone opens it, so a
+// receptionist never downloads the doctor, lab, admin or analytics code.
+const DoctorApp = lazy(() => import('@/portals/doctor/DoctorApp'))
+const ReceptionistApp = lazy(() => import('@/portals/receptionist/ReceptionistApp'))
+const AdminApp = lazy(() => import('@/portals/admin/AdminApp'))
+const AnalyticsApp = lazy(() => import('@/portals/analytics/AnalyticsApp'))
+const LabLayout = lazy(() => import('@/portals/lab/LabLayout'))
+const Orders = lazy(() => import('@/portals/lab/pages/Orders'))
+const Overview = lazy(() => import('@/portals/lab/pages/Overview'))
+const Results = lazy(() => import('@/portals/lab/pages/Results'))
+const Samples = lazy(() => import('@/portals/lab/pages/Samples'))
+const Verification = lazy(() => import('@/portals/lab/pages/Verification'))
+const Terms = lazy(() => import('@/portals/lab/pages/Legal').then((m) => ({ default: m.Terms })))
+const Privacy = lazy(() => import('@/portals/lab/pages/Legal').then((m) => ({ default: m.Privacy })))
+
+function PageLoading() {
+  return (
+    <div role="status" aria-live="polite" className="flex min-h-[50vh] flex-col items-center justify-center gap-3 text-sm text-ink-3">
+      <span className="h-7 w-7 animate-spin rounded-full border-[3px] border-rule border-t-accent" aria-hidden="true" />
+      Loading…
+    </div>
+  )
+}
 
 export default function App() {
   return (
+    <Suspense fallback={<PageLoading />}>
     <Routes>
       <Route path="/login" element={<Login />} />
 
@@ -53,5 +68,6 @@ export default function App() {
 
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
+    </Suspense>
   )
 }
