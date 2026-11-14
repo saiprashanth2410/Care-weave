@@ -5,7 +5,8 @@ export const UserModel = model('User', new Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true, index: true },
   passwordHash: { type: String, required: true },
-  role: { type: String, enum: ['receptionist', 'lab', 'doctor'], required: true },
+  role: { type: String, enum: ['receptionist', 'lab', 'doctor', 'admin'], required: true },
+  active: { type: Boolean, default: true },
   facility: String
 }, { timestamps: true }));
 
@@ -35,6 +36,7 @@ export const AppointmentModel = model('Appointment', new Schema({
 
 export const AuditLogModel = model('AuditLog', new Schema({
   actorId: { type: String, index: true },
+  actorName: String,
   actorRole: String,
   action: { type: String, index: true },
   entity: { type: String, index: true },

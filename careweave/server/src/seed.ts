@@ -28,11 +28,21 @@ export async function buildSeed() {
       permissions: ['consult', 'prescribe', 'diagnose']
     },
 
+    {
+      id: 'u-admin-com',
+      name: 'Ravi Menon (System Administrator)',
+      email: 'admin@careweave.com',
+      role: 'admin',
+      facility: 'CareWeave Administration',
+      permissions: ['audit', 'staff']
+    },
+
     // Acceptance testing & local development aliases
     { id: 'u-reception', name: 'Maya Patel', email: 'reception@careweave.test', passwordHash: await bcrypt.hash('demo123', 10), role: 'receptionist', facility: 'CareWeave Front Desk' },
     { id: 'u-lab', name: 'Lena Okafor', email: 'lab@careweave.test', passwordHash: await bcrypt.hash('demo123', 10), role: 'lab', facility: 'CareWeave Central Laboratory' },
     { id: 'u-pathologist', name: 'Dr. KALA.K MD., DNB', email: 'pathologist@careweave.test', passwordHash: await bcrypt.hash('demo123', 10), role: 'lab', permissions: ['verify'], facility: 'CareWeave Laboratory' },
-    { id: 'u-doctor', name: 'Dr. ANIRBAN LAHA', email: 'doctor@careweave.test', passwordHash: await bcrypt.hash('demo123', 10), role: 'doctor', facility: 'CareWeave General Medicine' }
+    { id: 'u-doctor', name: 'Dr. ANIRBAN LAHA', email: 'doctor@careweave.test', passwordHash: await bcrypt.hash('demo123', 10), role: 'doctor', facility: 'CareWeave General Medicine' },
+    { id: 'u-admin', name: 'Ravi Menon', email: 'admin@careweave.test', passwordHash: await bcrypt.hash('demo123', 10), role: 'admin', permissions: ['audit', 'staff'], facility: 'CareWeave Administration' }
   ];
 
   // Only login accounts are seeded. Patients, appointments and lab orders start empty, so there is nothing to give a version to:

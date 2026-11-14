@@ -3,12 +3,13 @@ import { createApp } from './app.js';
 import { LiveHub } from './liveEvents.js';
 import { LocalStore, createRepos, type Store } from './repo/index.js';
 import { buildSeed } from './seed.js';
+import { notConfigured, type FirebaseUsers } from './services/firebaseUsers.js';
 
 // Helpers for tests: a server instance on a random port over a given store. Two instances over one store behave like two
 // serverless instances over one database: each has its own process memory, and only the store is shared.
 
 // server/.env is loaded by the app, and it can hold real credentials. Tests must never reach a real database or send a real message.
-for (const k of ['MONGODB_URI', 'MONGO_URI', 'TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'META_WHATSAPP_TOKEN', 'GEMINI_API_KEY', 'N8N_WEBHOOK_URL', 'WHATSAPP_API_KEY']) process.env[k] = '';
+for (const k of ['FIREBASE_SERVICE_ACCOUNT', 'MONGODB_URI', 'MONGO_URI', 'TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'META_WHATSAPP_TOKEN', 'GEMINI_API_KEY', 'N8N_WEBHOOK_URL', 'WHATSAPP_API_KEY']) process.env[k] = '';
 process.env.FIREBASE_PROJECT_ID = '';
 process.env.ALLOW_LOCAL_LOGIN = 'true';
 
@@ -21,10 +22,10 @@ export async function memoryStore() {
   return store;
 }
 
-export async function startInstance(store: Store) {
+export async function startInstance(store: Store, extra: { firebaseUsers?: FirebaseUsers } = {}) {
   const repos = createRepos(store);
   const live = new LiveHub(() => repos, 40); // polls fast so tests do not wait
-  const server = createApp({ repos, live }).listen(0);
+  const server = createApp({ repos, live, firebaseUsers: notConfigured, ...extra }).listen(0);
   await new Promise<void>((resolve) => server.once('listening', () => resolve()));
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   const call = async (method: string, path: string, opts: { token?: string; body?: unknown; headers?: Record<string, string>; raw?: string } = {}) => {

@@ -6,7 +6,7 @@ export type AuditFn = (req: any, action: string, entity: string, entityId: strin
 export function makeAudit(repos: () => Repos) {
   const audit: AuditFn = async (req, action, entity, entityId, detail = '') => {
     await repos().audit.insert({
-      id: id('audit'), actorId: req.user.id, actorRole: req.user.role, action, entity, entityId, detail, timestamp: now()
+      id: id('audit'), actorId: req.user.id, actorName: req.user.name, actorRole: req.user.role, action, entity, entityId, detail, timestamp: now()
     });
   };
 

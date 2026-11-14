@@ -42,7 +42,8 @@ export const clearedCookie = (secure: boolean) => sessionCookie('', secure, 0);
 export async function userForToken(repos: Repos, raw: string) {
   if (!raw) return null;
   const s = await repos.sessions.find(hashToken(raw));
-  return s ? repos.users.byId(s.userId) : null;
+  const u = s ? await repos.users.byId(s.userId) : null;
+  return u && u.active !== false ? u : null;
 }
 
 export const endSession = (repos: Repos, req: any) => repos.sessions.remove(hashToken(tokenOf(req)));

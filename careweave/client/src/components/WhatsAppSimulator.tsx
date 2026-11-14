@@ -22,7 +22,7 @@ const digits = (v: string) => v.replace(/\D/g, '').slice(-10)
 
 /** Floating phone that talks to the same WhatsApp logic the real bot uses, for demos with no Twilio or Meta number. */
 export default function WhatsAppSimulator() {
-  useLocation() // re-render on navigation, so the widget appears right after sign-in and goes away on sign-out
+  const { pathname } = useLocation() // re-render on navigation, so the widget appears right after sign-in and goes away on sign-out
   const [open, setOpen] = useState(false)
   const [patients, setPatients] = useState<Pt[]>([])
   const [phone, setPhone] = useState('')
@@ -32,7 +32,7 @@ export default function WhatsAppSimulator() {
   const seen = useRef<number | null>(null)
   const phoneRef = useRef('')
   const end = useRef<HTMLDivElement>(null)
-  phoneRef.current = phone
+  useEffect(() => { phoneRef.current = phone }, [phone])
 
   useEffect(() => {
     if (!open || patients.length || !authed()) return
@@ -60,7 +60,6 @@ export default function WhatsAppSimulator() {
     return () => clearInterval(t)
   }, [])
 
-  useEffect(() => { if (open) setUnread(0) }, [open, chat.length])
   useEffect(() => { end.current?.scrollIntoView({ block: 'end' }) }, [chat, open])
 
   const send = useCallback(async (text: string) => {
@@ -76,7 +75,7 @@ export default function WhatsAppSimulator() {
     }
   }, [phone])
 
-  if (!authed()) return null
+  if (!authed() || pathname.startsWith('/admin')) return null
 
   return (
     <div className="fixed bottom-4 right-4 z-40 print:hidden">
@@ -87,7 +86,7 @@ export default function WhatsAppSimulator() {
               <p className="text-sm font-semibold">CareWeave Bot</p>
               <p className="text-[10px] opacity-80">WhatsApp Patient Simulator</p>
             </div>
-            <button type="button" aria-label="Close simulator" onClick={() => setOpen(false)}><X size={16} /></button>
+            <button type="button" aria-label="Close simulator" onClick={() => { setOpen(false); setUnread(0) }}><X size={16} /></button>
           </div>
           <select
             aria-label="Simulated patient phone"
@@ -125,7 +124,7 @@ export default function WhatsAppSimulator() {
       ) : (
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={() => { setOpen(true); setUnread(0) }}
           aria-label="Open WhatsApp Patient Simulator"
           className="relative flex h-12 w-12 items-center justify-center rounded-full bg-[#25d366] text-white shadow-lg"
         >

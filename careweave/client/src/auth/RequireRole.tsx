@@ -26,6 +26,8 @@ export default function RequireRole({
   if (state.status === 'checking') return <p className="p-8 text-sm text-ink-3">Checking your session...</p>
   if (state.status === 'out') return <Navigate to="/login" replace />
   const allowed = Array.isArray(role) ? role : [role]
+  // The admin portal is not part of the clinical cross-navigation: only administrators belong there.
+  if (allowed.includes('admin') && state.user.role !== 'admin') return <Navigate to={HOME[state.user.role] || '/login'} replace />
   // Allow seamless cross-navigation for clinical operations between receptionist and lab
   if (!allowed.includes(state.user.role) && !['receptionist', 'lab'].includes(state.user.role)) {
     return <Navigate to={HOME[state.user.role] || '/login'} replace />

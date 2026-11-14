@@ -7,7 +7,7 @@ export async function ensureStaff(repos: Repos) {
     const existing = await repos.users.byEmail(seed.email);
     try {
       if (!existing) await repos.users.insert(seed);
-      else if (JSON.stringify(existing.permissions || []) !== JSON.stringify((seed as any).permissions || [])) {
+      else if (!existing.managed && JSON.stringify(existing.permissions || []) !== JSON.stringify((seed as any).permissions || [])) {
         await repos.users.update(existing, { permissions: (seed as any).permissions || [] });
       }
     } catch (err) {

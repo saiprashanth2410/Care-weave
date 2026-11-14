@@ -8,7 +8,7 @@ import { CHANGE_LOG_KEEP, canMerge, changedFields, ConflictError, DuplicateError
 
 const NOT_PERSISTED = new Set(['sessions', 'rateLimits']);
 
-/** The subset of MongoDB query operators the repos use: equality, $in, $nin, $ne, $gte, $lte, $regex and $or. */
+/** The subset of MongoDB query operators the repos use: equality, $in, $nin, $ne, $gte, $lt, $lte, $regex and $or. */
 export function matches(doc: any, filter: Filter = {}): boolean {
   return Object.entries(filter).every(([k, cond]) => {
     if (k === '$or') return (cond as Filter[]).some((f) => matches(doc, f));
@@ -22,6 +22,7 @@ export function matches(doc: any, filter: Filter = {}): boolean {
           case '$gt': return v !== undefined && v > arg;
           case '$gte': return v !== undefined && v >= arg;
           case '$lte': return v !== undefined && v <= arg;
+          case '$lt': return v !== undefined && v < arg;
           case '$regex': return new RegExp(arg, cond.$options).test(String(v ?? ''));
           case '$options': return true;
           default: throw new Error(`Unsupported filter operator ${op}`);

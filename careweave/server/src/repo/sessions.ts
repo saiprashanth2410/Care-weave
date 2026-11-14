@@ -12,4 +12,5 @@ export const sessionsRepo = (c: Collection) => ({
     return s && new Date(s.expiresAt).getTime() > Date.now() ? s : null;
   },
   remove: (tokenHash: string) => c.remove({ tokenHash }),
+  removeForUser: (userId: string) => c.remove({ userId }),
 });
