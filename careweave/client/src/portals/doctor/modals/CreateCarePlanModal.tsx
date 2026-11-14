@@ -6,35 +6,33 @@ import { Modal } from '../components';
 export function CreateCarePlanModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [patientId, setPatientId] = useState('');
-  const [title, setTitle] = useState('Type 2 Diabetes Glycemic Control Pathway');
-  const [category, setCategory] = useState('Endocrine Management');
-  const [goalText, setGoalText] = useState('Maintain HbA1c < 7.0%\nDaily fasting blood glucose monitoring\nNutritional consultation');
+  const [title, setTitle] = useState('');
+  const [category, setCategory] = useState('');
+  const [goalText, setGoalText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    api.patients().then(res => {
-      setPatients(res);
-      if (res.length > 0) setPatientId(res[0].id);
-    }).catch(() => {});
+    api.patients().then(setPatients).catch(() => {});
   }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!patientId) return setError('Choose the patient this plan is for');
     setBusy(true);
+    setError('');
     try {
       await api.createCarePlan({
         patientId,
         title,
         category,
         goals: goalText.split('\n').filter(Boolean),
-        targets: [
-          { metric: 'HbA1c', target: '< 7.0%', current: '7.8%', status: 'needs-attention' },
-          { metric: 'Blood Pressure', target: '< 130/80', current: '136/84', status: 'needs-attention' }
-        ]
+        // No targets are invented: measured values belong to the patient's record, not to a template.
+        targets: []
       });
       onSaved();
-    } catch {
-      //
+    } catch (err) {
+      setError((err as Error).message);
     } finally {
       setBusy(false);
     }
@@ -45,7 +43,8 @@ export function CreateCarePlanModal({ onClose, onSaved }: { onClose: () => void;
       <form className="form-grid" onSubmit={submit}>
         <label className="span-2">
           Patient
-          <select value={patientId} onChange={e => setPatientId(e.target.value)}>
+          <select required value={patientId} onChange={e => setPatientId(e.target.value)}>
+            <option value="">Choose patient…</option>
             {patients.map(p => (
               <option key={p.id} value={p.id}>{p.name} ({p.patientId})</option>
             ))}
@@ -53,19 +52,20 @@ export function CreateCarePlanModal({ onClose, onSaved }: { onClose: () => void;
         </label>
         <label className="span-2">
           Care Protocol Title
-          <input required value={title} onChange={e => setTitle(e.target.value)} />
+          <input required value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Hypertension control pathway" />
         </label>
         <label className="span-2">
           Category
-          <input required value={category} onChange={e => setCategory(e.target.value)} />
+          <input required value={category} onChange={e => setCategory(e.target.value)} placeholder="e.g. Cardiovascular" />
         </label>
         <label className="span-2">
           Protocol Goals (one per line)
-          <textarea required rows={3} value={goalText} onChange={e => setGoalText(e.target.value)} />
+          <textarea required rows={3} value={goalText} onChange={e => setGoalText(e.target.value)} placeholder={'One goal per line, e.g.\nBlood pressure below 130/80\nDaily home readings'} />
         </label>
+        {error && <div className="alert danger span-2">{error}</div>}
         <div className="modal-actions span-2">
           <button type="button" className="secondary" onClick={onClose}>Cancel</button>
-          <button className="primary" disabled={busy}>Enroll Patient</button>
+          <button className="primary" disabled={busy}>{busy ? 'Enrolling…' : 'Enroll Patient'}</button>
         </div>
       </form>
     </Modal>

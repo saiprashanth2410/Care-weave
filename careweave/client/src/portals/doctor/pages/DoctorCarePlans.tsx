@@ -49,7 +49,7 @@ export function DoctorCarePlans({
               <StatusBadge status={cp.status} />
             </div>
 
-            <div>
+            {cp.targets.length > 0 && <div>
               <b style={{ fontSize: 11, color: '#56655f', textTransform: 'uppercase', letterSpacing: '.05em' }}>
                 Key Clinical Targets:
               </b>
@@ -61,7 +61,7 @@ export function DoctorCarePlans({
                   </div>
                 ))}
               </div>
-            </div>
+            </div>}
 
             <div>
               <b style={{ fontSize: 11, color: '#56655f', textTransform: 'uppercase', letterSpacing: '.05em' }}>

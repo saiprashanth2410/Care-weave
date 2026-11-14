@@ -7,8 +7,9 @@ import { Modal } from '../components';
 export function SpecialistReferralModal({ patient: initPatient, onClose, onSaved }: { patient?: Patient; onClose: () => void; onSaved: () => void }) {
   const [patients, setPatients] = useState<Patient[]>(initPatient ? [initPatient] : []);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(initPatient || null);
-  const [specialty, setSpecialty] = useState('Cardiology');
-  const [providerName, setProviderName] = useState('Pacific Heart & Vascular Institute');
+  // Nothing is pre-chosen: a referral goes where the doctor says, never to a default specialty.
+  const [specialty, setSpecialty] = useState('');
+  const [providerName, setProviderName] = useState('');
   const [priority, setPriority] = useState<'Routine' | 'Semi-urgent' | 'Urgent'>('Routine');
   const [reason, setReason] = useState('');
   const [clinicalSummary, setClinicalSummary] = useState('');
@@ -76,13 +77,16 @@ export function SpecialistReferralModal({ patient: initPatient, onClose, onSaved
         <label>
           Medical Specialty
           <select
+            required
             value={specialty}
             onChange={e => {
               setSpecialty(e.target.value);
               const found = specialties.find(s => s.name === e.target.value);
-              if (found) setProviderName(found.provider);
+              // A suggestion only; the doctor can change or clear it.
+              setProviderName(found ? found.provider : '');
             }}
           >
+            <option value="">Choose specialty…</option>
             {specialties.map(s => (
               <option key={s.name} value={s.name}>{s.name}</option>
             ))}
@@ -91,16 +95,16 @@ export function SpecialistReferralModal({ patient: initPatient, onClose, onSaved
 
         <label>
           Referral Priority
-          <select value={priority} onChange={e => setPriority(e.target.value as any)}>
-            <option>Routine (Within 4-6 weeks)</option>
-            <option>Semi-urgent (Within 1-2 weeks)</option>
-            <option>Urgent (Within 48 hours)</option>
+          <select value={priority} onChange={e => setPriority(e.target.value as 'Routine' | 'Semi-urgent' | 'Urgent')}>
+            <option value="Routine">Routine (Within 4-6 weeks)</option>
+            <option value="Semi-urgent">Semi-urgent (Within 1-2 weeks)</option>
+            <option value="Urgent">Urgent (Within 48 hours)</option>
           </select>
         </label>
 
         <label className="span-2">
           Provider / Clinic Facility
-          <input required value={providerName} onChange={e => setProviderName(e.target.value)} />
+          <input required value={providerName} onChange={e => setProviderName(e.target.value)} placeholder="Choose a specialty for a suggestion, or type the clinic" />
         </label>
 
         <label className="span-2">
