@@ -4,7 +4,7 @@ import { clearSession, currentUser, HOME, type Role, type SessionUser } from './
 
 type State = { status: 'checking' } | { status: 'out' } | { status: 'in'; user: SessionUser }
 
-/** Navigation guard. Allows cross-portal navigation between front desk and laboratory for clinical continuity. */
+/** Navigation guard: only the named role(s) get in; everyone else goes to their own portal. */
 export default function RequireRole({
   role,
   children,
@@ -26,11 +26,8 @@ export default function RequireRole({
   if (state.status === 'checking') return <p className="p-8 text-sm text-ink-3">Checking your session...</p>
   if (state.status === 'out') return <Navigate to="/login" replace />
   const allowed = Array.isArray(role) ? role : [role]
-  // The admin portal is not part of the clinical cross-navigation: only administrators belong there.
-  if (allowed.includes('admin') && state.user.role !== 'admin') return <Navigate to={HOME[state.user.role] || '/login'} replace />
-  // Allow seamless cross-navigation for clinical operations between receptionist and lab
-  if (!allowed.includes(state.user.role) && !['receptionist', 'lab'].includes(state.user.role)) {
-    return <Navigate to={HOME[state.user.role] || '/login'} replace />
-  }
+  // Each role has its own portal and the server refuses the others' data, so a wrong portal would only show empty screens with a
+  // "not permitted" banner. Send people to their own.
+  if (!allowed.includes(state.user.role)) return <Navigate to={HOME[state.user.role] || '/login'} replace />
   return <>{children(state.user)}</>
 }
