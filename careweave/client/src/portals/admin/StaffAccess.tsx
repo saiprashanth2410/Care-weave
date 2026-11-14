@@ -95,6 +95,7 @@ export function StaffAccess({ selfId, notify }: { selfId: string; notify: (s: st
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [editing, setEditing] = useState<Staff | 'new' | null>(null);
+  const [showDisabled, setShowDisabled] = useState(false); // switched-off accounts are kept for the record but stay out of the way
   const [shown, setShown] = useState<{ title: string; lines: [string, string][]; note: string } | null>(null);
 
   const load = useCallback(() => {
@@ -134,11 +135,18 @@ export function StaffAccess({ selfId, notify }: { selfId: string; notify: (s: st
         sub="Create accounts, set roles and permissions, and switch access off. Administrators never see patient records."
         action={<button className="primary" onClick={() => setEditing('new')}>+ Add staff member</button>}
       />
+      {staff.some(u => !u.active) && (
+        <p style={{ margin: '0 0 8px' }}>
+          <button type="button" className="secondary small-btn" onClick={() => setShowDisabled(v => !v)}>
+            {showDisabled ? 'Hide' : 'Show'} disabled accounts ({staff.filter(u => !u.active).length})
+          </button>
+        </p>
+      )}
       <div className="table-card card">
         <table>
           <thead><tr><th>Name</th><th>Role</th><th>Permissions</th><th>Sign-in</th><th>Status</th><th /></tr></thead>
           <tbody>
-            {staff.map(u => (
+            {staff.filter(u => u.active || showDisabled).map(u => (
               <tr key={u.id} style={u.active ? undefined : { opacity: 0.55 }}>
                 <td><b>{u.name}</b><small>{u.email}</small></td>
                 <td>{u.role}</td>

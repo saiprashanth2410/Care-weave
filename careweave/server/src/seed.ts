@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 
 /** Demo accounts with a published password exist only on a developer machine or in tests, never in production or on Vercel. */
-const DEMO_ACCOUNTS = process.env.NODE_ENV !== 'production' && !process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME;
+export const DEMO_ACCOUNTS = process.env.NODE_ENV !== 'production' && !process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME;
 
 export async function buildSeed() {
   const users = [
