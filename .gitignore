@@ -67,9 +67,10 @@ wheels/
 *.log
 *.sqlite3
 
-# Lockfiles: the root lockfile is committed so every install resolves the same versions (a floating jwks-rsa broke
-# Firebase sign-in on Vercel). Nested ones are not used; the Vercel build adds the Linux native binaries itself.
-careweave/*/package-lock.json
+# Lockfiles stay out of git: one made on a Mac pins nested native packages (lightningcss, rolldown, tailwind oxide) at versions
+# that do not match the Linux binaries the Vercel build installs, and the build then fails with MODULE_NOT_FOUND. Versions that
+# must not float are pinned in package.json instead (see jwks-rsa).
+package-lock.json
 
 
 .vercel

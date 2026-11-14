@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryStore, startInstance } from './testing.js';
+import { ensureStaff } from './services/staff.js';
 
 async function setup() {
   const srv = await startInstance(await memoryStore());
@@ -210,5 +211,29 @@ test('the front desk dashboard carries no audit rows, so other staff\'s actions 
     assert.equal(dash.status, 200);
     assert.equal(dash.json.recent, undefined);
     assert.ok(!dash.text.includes('private.hire@careweave.test'));
+  } finally { await srv.close(); }
+});
+
+test('on a deployed system, leftover demo accounts are switched off (not deleted) and their published password stops working', async () => {
+  const srv = await startInstance(await memoryStore());
+  try {
+    // A development directory has the demo accounts; with demo allowed, nothing is touched
+    await ensureStaff(srv.repos, { demo: true });
+    assert.equal((await srv.call('POST', '/api/auth/login', { body: { email: 'doctor@careweave.test', password: 'demo123' } })).status, 200);
+
+    const session = await srv.login('reception');
+    await ensureStaff(srv.repos, { demo: false });
+    const all = await srv.repos.users.find({});
+    const demo = all.filter((u: any) => /@careweave\.test$/.test(u.email));
+    const real = all.filter((u: any) => /@careweave\.com$/.test(u.email));
+    assert.ok(demo.length >= 5 && demo.every((u: any) => u.active === false), 'every demo account is switched off');
+    assert.ok(real.length >= 4 && real.every((u: any) => u.active !== false), 'real accounts are untouched');
+    assert.equal((await srv.call('POST', '/api/auth/login', { body: { email: 'doctor@careweave.test', password: 'demo123' } })).status, 403);
+    assert.equal((await srv.call('GET', '/api/me', { token: session })).status, 401, 'a demo session ends too');
+
+    // Running it again changes nothing and does not fail
+    const before = JSON.stringify((await srv.repos.users.find({})).map((u: any) => [u.id, u.version]).sort());
+    await ensureStaff(srv.repos, { demo: false });
+    assert.equal(JSON.stringify((await srv.repos.users.find({})).map((u: any) => [u.id, u.version]).sort()), before);
   } finally { await srv.close(); }
 });
