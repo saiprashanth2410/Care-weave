@@ -127,20 +127,21 @@ export default function AnalyticsApp() {
     }
   };
 
-  const handleSampleHistory = async (remove: boolean) => {
+  // Sample history can no longer be loaded from here. If synthetic records were loaded earlier they can still be taken out.
+  const removeSampleHistory = async () => {
     try {
       setSyncing(true);
       const res = await fetch('/api/analytics/sample-history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ remove }),
+        body: JSON.stringify({ remove: true }),
       });
       const result = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(result.error || 'Request failed');
-      setNotification({ ok: true, text: remove ? `Removed ${result.removed} synthetic records. Press Sync to Exasol to update it.` : `Loaded ${result.total} synthetic records (30 days). Press Sync to Exasol to analyse them.` });
+      setNotification({ ok: true, text: `Removed ${result.removed} synthetic records. Press Sync to Exasol to update it.` });
       fetchAnalytics();
     } catch (err: any) {
-      setNotification({ ok: false, text: err?.message || 'Could not change the sample history' });
+      setNotification({ ok: false, text: err?.message || 'Could not remove the sample history' });
     } finally {
       setSyncing(false);
     }
@@ -188,14 +189,16 @@ export default function AnalyticsApp() {
               </span>
             </div>
 
-            <button
-              onClick={() => handleSampleHistory(Boolean(data?.source.syntheticRecords))}
-              disabled={syncing}
-              className="flex h-9 items-center gap-2 rounded-sm border border-rule bg-surface px-3.5 text-xs font-semibold text-ink-2 transition hover:bg-paper disabled:opacity-50"
-              title="Adds a reproducible, clearly synthetic 30-day history to the analytics only"
-            >
-              {data?.source.syntheticRecords ? 'Remove sample history' : 'Load 30-day sample history'}
-            </button>
+            {Boolean(data?.source.syntheticRecords) && (
+              <button
+                onClick={removeSampleHistory}
+                disabled={syncing}
+                className="flex h-9 items-center gap-2 rounded-sm border border-rule bg-surface px-3.5 text-xs font-semibold text-ink-2 transition hover:bg-paper disabled:opacity-50"
+                title="Removes the synthetic sample-history records from the analytics"
+              >
+                Remove sample history
+              </button>
+            )}
 
             {/* Sync Pipeline Button */}
             <button
