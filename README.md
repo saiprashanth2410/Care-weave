@@ -152,14 +152,13 @@ Separately, every analytics widget has a **SQL Inspector** that shows the exact 
 - Outside medical records (JSON) are scored: UHID 50, date of birth 25, phone 20, name 20 (exact) or 10 (similar), minus 20 for a conflicting date of birth. A record is linked automatically only when the UHID matches, one other field confirms it, nothing contradicts it and the score is at least 70. Everything else goes to a human reviewer.
 - Conflicting reports and duplicate records are displayed in a side-by-side reconciliation workspace without destructive overwrites.
 
-### 4. Omnichannel WhatsApp Bot & Simulator
+### 4. Omnichannel WhatsApp Bot
 - Automated event pushes: `PATIENT_CHECKED_IN`, `LAB_REPORT_RELEASED`, `PRESCRIPTION_PRESCRIBED`.
 - Interactive two-way keywords:
   - `QUEUE` / `TOKEN` — Live queue position, assigned doctor, consultation room, and estimated wait.
   - `MEDS <UHID>` / `RX <UHID>` — Active medication schedule segmented by Morning, Afternoon, and Night.
   - `REPORT <UHID>` — Latest verified laboratory test parameters and critical flags.
   - Reports and medicines are private: they are shown only when the sender's phone number and the UHID belong to the same patient.
-- Built-in **WhatsApp Simulator Widget** lets you simulate the entire WhatsApp experience directly inside the browser without needing third-party hardware.
 
 ### 5. Live Operations
 - **Live sync:** a server-sent-events stream (`/api/events`) refreshes the front desk and doctor screens when anything changes, including changes made on another server instance (instances pass events through the `liveEvents` collection and read it every 1.5 s while a screen is connected). Where the host cannot hold a connection open (serverless), screens fall back to polling every 5 seconds.
