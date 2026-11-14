@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryStore, startInstance } from './testing.js';
 import { ensureStaff } from './services/staff.js';
+import { ownResetLink } from './routes/staff.js';
 
 async function setup() {
   const srv = await startInstance(await memoryStore());
@@ -236,4 +237,23 @@ test('on a deployed system, leftover demo accounts are switched off (not deleted
     await ensureStaff(srv.repos, { demo: false });
     assert.equal(JSON.stringify((await srv.repos.users.find({})).map((u: any) => [u.id, u.version]).sort()), before);
   } finally { await srv.close(); }
+});
+
+test('reset links: the administrator gets a link to this app\'s own reset page, carrying Firebase\'s one-time code', async () => {
+  const fb = fakeFirebase();
+  fb.resetLink = async (email: string) => `https://project.firebaseapp.com/__/auth/action?mode=resetPassword&oobCode=CODE%2B123&apiKey=k&lang=en&e=${encodeURIComponent(email)}`;
+  const { srv, admin } = await withFirebase(fb);
+  try {
+    const u = (await srv.call('POST', '/api/staff', { token: admin, body: { name: 'Link Person', email: 'link@hospital.test', role: 'receptionist' } })).json;
+    const { link } = (await srv.call('POST', `/api/staff/${u.id}/reset-link`, { token: admin })).json;
+    assert.ok(link.startsWith(srv.url + '/reset-password?mode=resetPassword&oobCode='), link);
+    assert.equal(new URL(link).searchParams.get('oobCode'), 'CODE+123'); // the code survives encoding
+    assert.ok(!link.includes('firebaseapp.com'), 'it no longer points to the Firebase page');
+  } finally { await srv.close(); }
+});
+
+test('reset links: a link without a code is passed on unchanged, and PUBLIC_URL is only a base', () => {
+  assert.equal(ownResetLink('https://x.test/reset?e=a', 'https://app.test'), 'https://x.test/reset?e=a');
+  assert.equal(ownResetLink('not a url', 'https://app.test'), 'not a url');
+  assert.equal(ownResetLink('https://f.test/a?oobCode=Z9', 'https://app.test'), 'https://app.test/reset-password?mode=resetPassword&oobCode=Z9');
 });

@@ -15,6 +15,7 @@ const Overview = lazy(() => import('@/portals/lab/pages/Overview'))
 const Results = lazy(() => import('@/portals/lab/pages/Results'))
 const Samples = lazy(() => import('@/portals/lab/pages/Samples'))
 const Verification = lazy(() => import('@/portals/lab/pages/Verification'))
+const ResetPassword = lazy(() => import('@/auth/ResetPassword'))
 const Terms = lazy(() => import('@/portals/lab/pages/Legal').then((m) => ({ default: m.Terms })))
 const Privacy = lazy(() => import('@/portals/lab/pages/Legal').then((m) => ({ default: m.Privacy })))
 
@@ -32,6 +33,7 @@ export default function App() {
     <Suspense fallback={<PageLoading />}>
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
 
       {/* Front desk portal */}
       <Route

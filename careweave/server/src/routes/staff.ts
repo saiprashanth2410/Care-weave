@@ -38,6 +38,20 @@ function cleanDesk(b: any, current?: { shiftStart?: string; shiftEnd?: string })
 const cleanPermissions = (role: StaffRole, value: unknown) =>
   Array.isArray(value) && value.every((p) => typeof p === 'string') ? [...new Set(value as string[])].filter((p) => PERMISSIONS[role].includes(p)) : null;
 
+/**
+ * Firebase's reset link opens Firebase's own page. The one-time code in it works just as well on this app's own page, which has
+ * a working show/hide button and a confirmation field, so the administrator is given a link to that instead. If the code cannot
+ * be found, Firebase's link is returned as it is.
+ */
+export function ownResetLink(firebaseLink: string, base: string): string {
+  try {
+    const code = new URL(firebaseLink).searchParams.get('oobCode');
+    return code ? `${base}/reset-password?mode=resetPassword&oobCode=${encodeURIComponent(code)}` : firebaseLink;
+  } catch {
+    return firebaseLink;
+  }
+}
+
 /** Staff accounts, roles and permissions. Administrators only; an administrator never reads patient records. */
 export function staffRoutes(ctx: AppCtx) {
   const router = Router();
@@ -168,7 +182,9 @@ export function staffRoutes(ctx: AppCtx) {
       return res.status(502).json({ error: 'Could not create a reset link for this account in Firebase' });
     }
     await audit(req, 'update', 'staff', u.id, `${u.email}: password reset link generated`);
-    res.json({ link });
+    const first = (v: unknown) => String(v ?? '').split(',')[0].trim();
+    const base = process.env.PUBLIC_URL?.replace(/\/$/, '') || `${first(req.get('x-forwarded-proto')) || req.protocol}://${first(req.get('x-forwarded-host')) || req.get('host')}`;
+    res.json({ link: ownResetLink(link, base) });
   });
 
   return router;
