@@ -6,8 +6,10 @@ type Msg = { from: 'me' | 'bot'; text: string }
 type Pt = { name: string; uhid: string; phone: string }
 type Push = { seq: number; phone: string; text: string }
 
-// Only shown inside signed-in pages; the server still checks the session cookie on every call.
+// Only shown inside the staff portals; the server still checks the session cookie on every call.
 const authed = () => true
+// Public pages and the admin portal (which never sees patient data) get no simulator, and it makes no requests there.
+const noSimulator = (path: string) => ['/login', '/terms', '/privacy'].includes(path) || path.startsWith('/admin')
 const call = async <T,>(url: string, body?: unknown): Promise<T> => {
   const res = await fetch(url, {
     method: body ? 'POST' : 'GET',
@@ -28,21 +30,27 @@ export default function WhatsAppSimulator() {
   const [phone, setPhone] = useState('')
   const [chat, setChat] = useState<Msg[]>([])
   const [unread, setUnread] = useState(0)
+  const [loaded, setLoaded] = useState(false) // the patient list has been asked for
   const [input, setInput] = useState('')
   const seen = useRef<number | null>(null)
   const phoneRef = useRef('')
   const end = useRef<HTMLDivElement>(null)
   useEffect(() => { phoneRef.current = phone }, [phone])
+  const hiddenRef = useRef(false)
+  useEffect(() => { hiddenRef.current = noSimulator(pathname) }, [pathname])
 
   useEffect(() => {
-    if (!open || patients.length || !authed()) return
-    call<Pt[]>('/api/whatsapp/simulator/patients').then((p) => { setPatients(p); setPhone((cur) => cur || p[0]?.phone || '') }).catch(() => {})
-  }, [open, patients.length])
+    if (!open || patients.length || !authed() || noSimulator(pathname)) return
+    call<Pt[]>('/api/whatsapp/simulator/patients')
+      .then((p) => { setPatients(p); setPhone((cur) => cur || p[0]?.phone || '') })
+      .catch(() => {})
+      .finally(() => setLoaded(true))
+  }, [open, patients.length, pathname])
 
   // Push notifications: events the server emitted (token issued, lab verified, medicine prescribed) for the chosen number.
   useEffect(() => {
     const tick = async () => {
-      if (!authed()) return
+      if (!authed() || hiddenRef.current) return
       try {
         const events = await call<Push[]>(`/api/whatsapp/simulator/events?since=${seen.current ?? 0}`)
         if (seen.current === null) { seen.current = events.at(-1)?.seq ?? 0; return } // skip anything from before this page opened
@@ -75,7 +83,7 @@ export default function WhatsAppSimulator() {
     }
   }, [phone])
 
-  if (!authed() || pathname.startsWith('/admin')) return null
+  if (!authed() || noSimulator(pathname)) return null
 
   return (
     <div className="fixed bottom-4 right-4 z-40 print:hidden">
@@ -97,7 +105,8 @@ export default function WhatsAppSimulator() {
             {patients.map((p) => <option key={p.uhid} value={p.phone}>{p.name} · {p.phone}</option>)}
           </select>
           <div className="flex-1 space-y-2 overflow-y-auto bg-[#ece5dd] p-2 text-xs">
-            {!chat.length && <p className="rounded bg-white/70 p-2 text-neutral-600">Send QUEUE, REPORT or MEDS. Alerts for this patient appear here when a token is issued, a lab report is verified or a medicine is prescribed.</p>}
+            {loaded && !patients.length && <p className="rounded bg-amber-100 p-2 text-amber-900">There are no patients to simulate yet. Register a patient with a phone number at the front desk, then reopen this window.</p>}
+            {!chat.length && patients.length > 0 && <p className="rounded bg-white/70 p-2 text-neutral-600">Send QUEUE, REPORT or MEDS. Alerts for this patient appear here when a token is issued, a lab report is verified or a medicine is prescribed.</p>}
             {chat.map((m, i) => (
               <div key={i} className={`flex ${m.from === 'me' ? 'justify-end' : 'justify-start'}`}>
                 <p className={`max-w-[85%] whitespace-pre-wrap rounded-lg px-2 py-1.5 text-neutral-900 shadow-sm ${m.from === 'me' ? 'bg-[#dcf8c6]' : 'bg-white'}`}>{m.text}</p>
@@ -107,7 +116,7 @@ export default function WhatsAppSimulator() {
           </div>
           <div className="flex flex-wrap gap-1 border-t border-neutral-200 bg-neutral-50 px-2 pt-1">
             {['QUEUE', 'REPORT', 'MEDS', 'LANG TA', 'LANG EN'].map((k) => (
-              <button key={k} type="button" onClick={() => send(k)} className="rounded-full border border-neutral-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-neutral-700 hover:bg-neutral-100">{k}</button>
+              <button key={k} type="button" disabled={!phone} onClick={() => send(k)} className="rounded-full border border-neutral-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-neutral-700 hover:bg-neutral-100 disabled:opacity-40">{k}</button>
             ))}
           </div>
           <form onSubmit={(e) => { e.preventDefault(); send(input) }} className="flex gap-1 bg-neutral-50 p-2">
@@ -116,9 +125,10 @@ export default function WhatsAppSimulator() {
               onChange={(e) => setInput(e.target.value)}
               placeholder="Type a message"
               aria-label="Message"
+              disabled={!phone}
               className="min-w-0 flex-1 rounded-full border border-neutral-300 bg-white px-3 py-1 text-xs text-neutral-900"
             />
-            <button type="submit" className="rounded-full bg-[#075e54] px-3 text-xs font-semibold text-white">Send</button>
+            <button type="submit" disabled={!phone} className="rounded-full bg-[#075e54] px-3 text-xs font-semibold text-white disabled:opacity-40">Send</button>
           </form>
         </div>
       ) : (
