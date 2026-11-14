@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { AlertTriangle, CalendarDays, ChevronRight, Search, X } from '../icons';
 import { api } from '../api';
 import type { Doctor, Patient, SlotInfo } from '../types';
-import { cleanName, fmtDate, initials, todayISO } from '../helpers';
+import { cleanName, fmtDate, initials, todayISO, tomorrowISO } from '../helpers';
 
 // ─── APPOINTMENT BOOKING MODAL ──────────────────────────────────────────────
 const doctorLabel = (d: { name: string; facility?: string }) => (d.facility ? `${cleanName(d.name)} · ${d.facility}` : cleanName(d.name));
@@ -32,6 +32,7 @@ export default function AppointmentModal({
   // The chosen doctor's slots for the chosen date: free ones can be picked, booked and already-passed ones cannot.
   const [slots, setSlots] = useState<SlotInfo[] | null>(null);
   const [nextFree, setNextFree] = useState<string | null>(null);
+  const [movedOn, setMovedOn] = useState(false); // today had no free slot left, so the date moved to tomorrow
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -50,6 +51,12 @@ export default function AppointmentModal({
     api.doctorSlots(form.doctorId, form.date)
       .then(r => {
         if (!live) return;
+        // Late in the day nothing is left today: show tomorrow instead of an empty list.
+        if (!r.nextFree && form.date === todayISO()) {
+          setMovedOn(true);
+          setForm(f => ({ ...f, date: tomorrowISO() }));
+          return;
+        }
         setSlots(r.slots);
         setNextFree(r.nextFree);
         // Keep the time if it is still free, otherwise move to the first free one.
@@ -198,7 +205,7 @@ export default function AppointmentModal({
             <span className="muted" style={{ fontSize: 11, fontWeight: 500 }}>
               {slots !== null && !nextFree
                 ? 'No free slot on this date with this doctor. Try another date or doctor.'
-                : nextFree ? `Next free: ${nextFree}` : ''}
+                : nextFree ? `${movedOn ? 'No slots left today, so showing tomorrow. ' : ''}Next free: ${nextFree}` : ''}
             </span>
           </label>
 

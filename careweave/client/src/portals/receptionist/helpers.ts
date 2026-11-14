@@ -15,6 +15,8 @@ export const greeting = () => {
 
 export const todayISO = () => new Date().toISOString().slice(0, 10);
 
+export const tomorrowISO = () => new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+
 /** The desk's own clock as "HH:MM" (24-hour), so the server can tell which of today's slots have passed. */
 export const nowHHMM = () => {
   const d = new Date();
