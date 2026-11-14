@@ -97,6 +97,27 @@ export function StaffAccess({ selfId, notify }: { selfId: string; notify: (s: st
   const [editing, setEditing] = useState<Staff | 'new' | null>(null);
   const [showDisabled, setShowDisabled] = useState(false); // switched-off accounts are kept for the record but stay out of the way
   const [shown, setShown] = useState<{ title: string; lines: [string, string][]; note: string } | null>(null);
+  const [copied, setCopied] = useState<'idle' | 'ok' | 'fail'>('idle');
+  useEffect(() => {
+    if (copied === 'idle') return;
+    const t = setTimeout(() => setCopied('idle'), 2500);
+    return () => clearTimeout(t);
+  }, [copied]);
+
+  /** A single value (a reset link) is copied as it is, so it can be pasted straight into a message. */
+  const copyShown = async () => {
+    if (!shown) return;
+    const text = shown.lines.length === 1 ? shown.lines[0][1] : shown.lines.map(([k, v]) => `${k}: ${v}`).join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied('ok');
+      notify('Copied to clipboard');
+    } catch {
+      // The clipboard is blocked or unavailable: select the text so the person can press Cmd/Ctrl+C themselves.
+      document.querySelector<HTMLInputElement>('.modal input[readonly]')?.select();
+      setCopied('fail');
+    }
+  };
 
   const load = useCallback(() => {
     adminApi.staff().then(setStaff).catch(e => notify(e.message));
@@ -171,7 +192,9 @@ export function StaffAccess({ selfId, notify }: { selfId: string; notify: (s: st
             <label key={k} style={{ marginBottom: 12 }}>{k}<input readOnly value={v} onFocus={e => e.currentTarget.select()} /></label>
           ))}
           <div className="modal-actions">
-            <button className="secondary" onClick={() => navigator.clipboard?.writeText(shown.lines.map(([k, v]) => `${k}: ${v}`).join('\n')).catch(() => {})}>Copy</button>
+            <button className="secondary" onClick={copyShown} aria-live="polite">
+              {copied === 'ok' ? 'Copied ✓' : copied === 'fail' ? 'Press Cmd/Ctrl + C' : 'Copy'}
+            </button>
             <button className="primary" onClick={() => setShown(null)}>Done</button>
           </div>
         </Modal>
