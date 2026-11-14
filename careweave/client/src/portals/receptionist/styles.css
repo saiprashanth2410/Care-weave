@@ -82,6 +82,12 @@ input, select, textarea {
   padding: 10px 14px;
 }
 
+/* A native date input is taller than a native select in Safari; give single-line controls one height so a form row lines up. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select {
+  box-sizing: border-box;
+  min-height: 44px;
+}
+
 input:focus, select:focus, textarea:focus {
   border-color: var(--primary);
   box-shadow: none;

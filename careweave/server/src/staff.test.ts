@@ -190,3 +190,14 @@ test('firebase: without a service account the record is still saved and the resp
     assert.equal((await srv.call('POST', `/api/staff/${made.json.id}/reset-link`, { token: admin })).status, 400);
   } finally { await srv.close(); }
 });
+
+test('a disabled doctor no longer appears in the booking list', async () => {
+  const { srv, admin, reception } = await setup();
+  try {
+    const doctors = (await srv.call('GET', '/api/doctors', { token: reception })).json;
+    const d = (await srv.call('GET', '/api/staff', { token: admin })).json.find((u: any) => u.role === 'doctor');
+    assert.ok(doctors.some((x: any) => x.id === d.id));
+    await srv.call('PATCH', `/api/staff/${d.id}`, { token: admin, body: { active: false } });
+    assert.ok(!(await srv.call('GET', '/api/doctors', { token: reception })).json.some((x: any) => x.id === d.id));
+  } finally { await srv.close(); }
+});
