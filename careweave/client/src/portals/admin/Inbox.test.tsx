@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 vi.mock('./api', () => ({
-  adminApi: { inbox: vi.fn(), updateInbox: vi.fn(), resetLink: vi.fn() },
+  adminApi: { inbox: vi.fn(), updateInbox: vi.fn(), resetLink: vi.fn(), deleteInbox: vi.fn() },
 }))
 
 import { Inbox } from './Inbox'
@@ -25,7 +25,7 @@ const show = (items: object[], props: Partial<Parameters<typeof Inbox>[0]> = {})
   return { notify, onChanged }
 }
 
-beforeEach(() => { vi.mocked(adminApi.inbox).mockReset(); vi.mocked(adminApi.updateInbox).mockReset(); vi.mocked(adminApi.resetLink).mockReset() })
+beforeEach(() => { vi.mocked(adminApi.inbox).mockReset(); vi.mocked(adminApi.updateInbox).mockReset(); vi.mocked(adminApi.resetLink).mockReset(); vi.mocked(adminApi.deleteInbox).mockReset(); vi.unstubAllGlobals() })
 
 describe('Inbox', () => {
   it('lists messages like a mail client, unread ones marked, and shows an empty state', async () => {
@@ -109,5 +109,24 @@ describe('Inbox', () => {
     expect(screen.queryByRole('button', { name: 'Mark resolved' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Reopen' }))
     expect(adminApi.updateInbox).toHaveBeenCalledWith('m2', { status: 'new' })
+  })
+
+  it('Delete sits at the right-hand end next to Save note, asks first, and removes the message', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('confirm', vi.fn(() => false))
+    vi.mocked(adminApi.deleteInbox).mockResolvedValue({ ok: true })
+    const { onChanged, notify } = show([issue])
+    await user.click(await screen.findByRole('listitem'))
+    await screen.findByRole('article', { name: 'Message' })
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(adminApi.deleteInbox).not.toHaveBeenCalled() // saying no keeps it
+
+    vi.stubGlobal('confirm', vi.fn(() => true))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(adminApi.deleteInbox).toHaveBeenCalledWith('m2'))
+    expect(notify).toHaveBeenCalledWith('Message deleted')
+    expect(onChanged).toHaveBeenCalled()
+    expect(await screen.findByText('Choose a message on the left to read it.')).toBeInTheDocument() // the pane clears
   })
 })

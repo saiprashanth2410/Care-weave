@@ -112,5 +112,13 @@ export function inboxRoutes(ctx: AppCtx) {
     res.json((await withStaff([saved]))[0]);
   });
 
+  router.delete('/inbox/:id', admin, async (req: any, res) => {
+    const m = await ctx.repos.inbox.byId(String(req.params.id));
+    if (!m) return res.status(404).json({ error: 'Message not found' });
+    await ctx.repos.inbox.remove({ id: m.id });
+    await audit(req, 'delete', 'inbox', m.id, `${m.subject} from ${m.fromEmail}`);
+    res.json({ ok: true });
+  });
+
   return router;
 }

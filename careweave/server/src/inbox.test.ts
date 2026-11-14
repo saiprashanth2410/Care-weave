@@ -133,3 +133,18 @@ test('inbox: resolving is recorded in the audit log, plain reading is not', asyn
     assert.ok(!log.some((r) => /marked read/.test(r.detail)));
   } finally { await srv.close(); }
 });
+
+test('inbox: the administrator can delete a message; others cannot, and it is audited', async () => {
+  const { srv, admin, reception, doctor } = await setup();
+  try {
+    await srv.call('POST', '/api/support/issue', { token: doctor, body: { subject: 'Delete me', message: 'A message to remove' } });
+    const id = (await items(srv, admin)).items[0].id;
+    assert.equal((await srv.call('DELETE', `/api/inbox/${id}`, { token: reception })).status, 403);
+    assert.equal((await srv.call('DELETE', `/api/inbox/${id}`)).status, 401);
+    assert.equal((await srv.call('DELETE', `/api/inbox/${id}`, { token: admin })).status, 200);
+    assert.equal((await items(srv, admin)).items.length, 0);
+    assert.equal((await srv.call('GET', '/api/inbox/summary', { token: admin })).json.new, 0);
+    assert.equal((await srv.call('DELETE', `/api/inbox/${id}`, { token: admin })).status, 404);
+    assert.ok((await srv.call('GET', '/api/audit?entity=inbox&limit=50', { token: admin })).text.includes('Delete me'));
+  } finally { await srv.close(); }
+});

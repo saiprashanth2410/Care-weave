@@ -96,7 +96,8 @@ export function StaffAccess({ selfId, notify }: { selfId: string; notify: (s: st
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [editing, setEditing] = useState<Staff | 'new' | null>(null);
-  const [showDisabled, setShowDisabled] = useState(false); // switched-off accounts are kept for the record but stay out of the way
+  // Two views of the same list: the people who work here, and the accounts that have been switched off (which can be re-enabled or deleted).
+  const [view, setView] = useState<'active' | 'disabled'>('active');
   const [shown, setShown] = useState<{ title: string; lines: [string, string][]; note: string } | null>(null);
   const load = useCallback(() => {
     adminApi.staff().then(setStaff).catch(e => notify(e.message));
@@ -112,6 +113,24 @@ export function StaffAccess({ selfId, notify }: { selfId: string; notify: (s: st
     try {
       await adminApi.updateStaff(u.id, { active, version: u.version });
       notify(active ? `${u.name} enabled` : `${u.name} disabled`);
+      if (active && disabledCount <= 1) setView('active'); // that was the last disabled account
+      load();
+    } catch (e) {
+      notify((e as Error).message);
+    }
+  };
+
+  const disabledCount = staff.filter(u => !u.active).length;
+  // Deleting the last disabled account leaves nothing to show in that view, so the list goes back to the people by itself.
+  const mode: 'active' | 'disabled' = view === 'disabled' && (staff.length === 0 || disabledCount > 0) ? 'disabled' : 'active';
+  const shownStaff = staff.filter(u => (mode === 'disabled' ? !u.active : u.active));
+
+  const remove = async (u: Staff) => {
+    if (!window.confirm(`Delete ${u.name} (${u.email}) for good? Their sign-in is removed and this cannot be undone.`)) return;
+    try {
+      await adminApi.deleteStaff(u.id);
+      notify(`${u.name} deleted`);
+      if (disabledCount <= 1) setView('active'); // that was the last disabled account
       load();
     } catch (e) {
       notify((e as Error).message);
@@ -135,30 +154,36 @@ export function StaffAccess({ selfId, notify }: { selfId: string; notify: (s: st
         sub="Create accounts, set roles and permissions, and switch access off. Administrators never see patient records."
         action={<button className="primary" onClick={() => setEditing('new')}>+ Add staff member</button>}
       />
-      {staff.some(u => !u.active) && (
+      {(disabledCount > 0 || mode === 'disabled') && (
         <p style={{ margin: '0 0 8px' }}>
-          <button type="button" className="secondary small-btn" onClick={() => setShowDisabled(v => !v)}>
-            {showDisabled ? 'Hide' : 'Show'} disabled accounts ({staff.filter(u => !u.active).length})
+          <button type="button" className="secondary small-btn" onClick={() => setView(v => (v === 'active' ? 'disabled' : 'active'))}>
+            {mode === 'active' ? `Show disabled accounts (${disabledCount})` : '← Back to active accounts'}
           </button>
+          {mode === 'disabled' && <span className="muted" style={{ marginLeft: 10, fontSize: 12 }}>Disabled accounts cannot sign in. Enable one to restore it, or delete it for good.</span>}
         </p>
       )}
       <div className="table-card card">
         <table>
           <thead><tr><th>Name</th><th>Role</th><th>Permissions</th><th>Sign-in</th><th>Status</th><th /></tr></thead>
           <tbody>
-            {staff.filter(u => u.active || showDisabled).map(u => (
-              <tr key={u.id} style={u.active ? undefined : { opacity: 0.55 }}>
-                <td><b>{u.name}</b><small>{u.email}</small></td>
-                <td>{u.role}</td>
-                <td>{u.permissions.join(', ') || '—'}</td>
-                <td>{[u.localLogin && 'password', u.firebaseLinked && 'Firebase'].filter(Boolean).join(' + ') || 'not signed in yet'}</td>
-                <td>{u.active ? 'Active' : 'Disabled'}</td>
+            {shownStaff.length === 0 && <tr><td colSpan={6} className="muted" style={{ padding: 16 }}>{mode === 'disabled' ? 'No disabled accounts.' : 'No staff yet.'}</td></tr>}
+            {shownStaff.map(u => (
+              <tr key={u.id}>
+                {/* A disabled account's details are dimmed; its buttons are not. */}
+                <td style={u.active ? undefined : { opacity: 0.6 }}><b>{u.name}</b><small>{u.email}</small></td>
+                <td style={u.active ? undefined : { opacity: 0.6 }}>{u.role}</td>
+                <td style={u.active ? undefined : { opacity: 0.6 }}>{u.permissions.join(', ') || '—'}</td>
+                <td style={u.active ? undefined : { opacity: 0.6 }}>{[u.localLogin && 'password', u.firebaseLinked && 'Firebase'].filter(Boolean).join(' + ') || 'not signed in yet'}</td>
+                <td style={u.active ? undefined : { opacity: 0.6 }}>{u.active ? 'Active' : 'Disabled'}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>
                   <button className="secondary small-btn" onClick={() => setEditing(u)}>Edit</button>{' '}
                   {u.id !== selfId && (
                     <button className="secondary small-btn" onClick={() => setActive(u, !u.active)}>{u.active ? 'Disable' : 'Enable'}</button>
                   )}{' '}
-                  {catalog?.firebase && <button className="secondary small-btn" onClick={() => resetLink(u)}>Reset link</button>}
+                  {catalog?.firebase && u.active && <button className="secondary small-btn" onClick={() => resetLink(u)}>Reset link</button>}
+                  {!u.active && u.id !== selfId && (
+                    <button className="small-btn" style={{ background: '#a3341f', color: '#fff', border: 0, borderRadius: 3, padding: '7px 10px', fontWeight: 700, cursor: 'pointer' }} onClick={() => remove(u)}>Delete</button>
+                  )}
                 </td>
               </tr>
             ))}

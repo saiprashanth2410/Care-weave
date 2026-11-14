@@ -31,6 +31,8 @@ export const adminApi = {
   resetLink: (id: string) => request<{ link: string }>(`/api/staff/${id}/reset-link`, { method: 'POST' }),
   inbox: (status: 'open' | 'resolved' | 'all') =>
     request<{ items: InboxItem[]; counts: { new: number; read: number; resolved: number } }>(`/api/inbox?status=${status}`),
+  deleteInbox: (id: string) => request<{ ok: boolean }>(`/api/inbox/${id}`, { method: 'DELETE' }),
+  deleteStaff: (id: string) => request<{ ok: boolean; firebase: string }>(`/api/staff/${id}`, { method: 'DELETE' }),
   inboxSummary: () => request<{ new: number }>('/api/inbox/summary'),
   updateInbox: (id: string, body: { status?: InboxItem['status']; note?: string }) =>
     request<InboxItem>(`/api/inbox/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),

@@ -7,6 +7,7 @@ import { DuplicateError } from '../repo/index.js';
 import { DEFAULT_PERMISSIONS, PERMISSIONS, ROLES, isRole, type StaffRole } from '../services/staffCatalog.js';
 import { generatePassword } from '../services/firebaseUsers.js';
 import { HHMM, hhmmToMinutes, shiftOf } from '../services/slots.js';
+import { rememberDeletedStaff } from '../services/staff.js';
 import { id, now, text } from '../util.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -170,6 +171,27 @@ export function staffRoutes(ctx: AppCtx) {
     if (changes.active === false) await ctx.repos.sessions.removeForUser(u.id);
     await audit(req, 'update', 'staff', u.id, `${u.email}: ${said.join('; ') || 'details updated'}`);
     res.json(view(saved));
+  });
+
+  // Permanent. An account must be disabled first, so it takes two deliberate steps, and nobody deletes their own.
+  // The records it touched keep the name that was written on them; only the sign-in and the directory entry go.
+  router.delete('/staff/:id', admin, async (req: any, res) => {
+    const u = await ctx.repos.users.byId(String(req.params.id));
+    if (!u) return res.status(404).json({ error: 'Staff account not found' });
+    if (u.id === req.user.id) return res.status(400).json({ error: 'You cannot delete your own account' });
+    if (u.active !== false) return res.status(400).json({ error: 'Disable the account first, then delete it' });
+    await ctx.repos.sessions.removeForUser(u.id);
+    await ctx.repos.users.remove({ id: u.id });
+    await rememberDeletedStaff(ctx.repos, u.email);
+    let firebase: 'removed' | 'not-configured' | 'failed' = 'not-configured';
+    if (ctx.firebaseUsers.configured) {
+      firebase = await ctx.firebaseUsers.remove(u.email).then(() => 'removed' as const).catch((e: any) => {
+        console.error('Firebase delete failed:', e?.code || e?.message);
+        return 'failed' as const; // the person cannot sign in anyway: the server only lets in people in the staff directory
+      });
+    }
+    await audit(req, 'delete', 'staff', u.id, `${u.email} (${u.role}) deleted; Firebase: ${firebase}`);
+    res.json({ ok: true, firebase });
   });
 
   // A link the person opens to choose their own password. Better than passing a password around.

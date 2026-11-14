@@ -50,6 +50,17 @@ export function Inbox({ notify, refresh, canSendLinks, onChanged }: { notify: (s
     if (m.status === 'new') void update(m, { status: 'read' });
   };
 
+  const remove = async (m: InboxItem) => {
+    if (!window.confirm(`Delete this message from ${m.fromName || m.fromEmail}? This cannot be undone.`)) return;
+    try {
+      await adminApi.deleteInbox(m.id);
+      setOpenId(null);
+      notify('Message deleted');
+      onChanged();
+      load();
+    } catch (e) { notify((e as Error).message); }
+  };
+
   const sendLink = async (m: InboxItem) => {
     try {
       const { link } = await adminApi.resetLink(m.staffId);
@@ -134,7 +145,17 @@ export function Inbox({ notify, refresh, canSendLinks, onChanged }: { notify: (s
                 Note for the record (optional)
                 <textarea value={note} maxLength={500} onChange={e => setNote(e.target.value)} style={{ minHeight: 70, width: '100%' }} />
               </label>
-              <button type="button" className="secondary small-btn" style={{ marginTop: 8 }} onClick={() => update(current, { note })} disabled={note === (current.note || '')}>Save note</button>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                <button type="button" className="secondary small-btn" onClick={() => update(current, { note })} disabled={note === (current.note || '')}>Save note</button>
+                <button
+                  type="button"
+                  className="small-btn"
+                  style={{ background: '#a3341f', color: '#fff', border: 0, borderRadius: 3, padding: '7px 12px', fontWeight: 700, cursor: 'pointer' }}
+                  onClick={() => remove(current)}
+                >
+                  Delete
+                </button>
+              </div>
               {current.status === 'resolved' && current.resolvedBy && (
                 <p className="muted" style={{ marginTop: 12, fontSize: 12 }}>Resolved by {current.resolvedBy} {ago(current.resolvedAt)}</p>
               )}
