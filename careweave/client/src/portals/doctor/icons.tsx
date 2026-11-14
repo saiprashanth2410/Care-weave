@@ -1,7 +1,7 @@
 // The CareWeave design system has no icon set: labels carry the meaning.
 // These keep the doctor markup unchanged while rendering text or nothing.
 type IconProps = { size?: number; className?: string; strokeWidth?: number; style?: React.CSSProperties; color?: string }
-const none = (_: IconProps) => null
+const none = (_props: IconProps): null => null
 
 export const Activity = none
 export const AlertCircle = none

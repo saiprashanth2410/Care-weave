@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Plus, RefreshCw } from '../icons';
 import { api } from '../api';
 import { PageHeader, StatusBadge } from '../components';
@@ -8,8 +8,8 @@ export function DoctorReconciliation({ notify }: { notify: (s: string) => void }
   const [cases, setCases] = useState<any[]>([]);
   const [show, setShow] = useState(false);
 
-  const load = () => api.cases().then(setCases).catch(e => notify(e.message));
-  useEffect(() => { load(); }, []);
+  const load = useCallback(() => api.cases().then(setCases).catch(e => notify(e.message)), [notify]);
+  useEffect(() => { load(); }, [load]);
 
   return (
     <>

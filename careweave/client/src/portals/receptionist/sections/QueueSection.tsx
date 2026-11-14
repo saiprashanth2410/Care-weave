@@ -17,7 +17,7 @@ export default function QueueSection({
   onPrintToken: (a: Appointment, idx: number) => void;
 }) {
   const [items, setItems] = useState<Appointment[]>([]);
-  const [tick, setTick] = useState(0);
+  const [, setTick] = useState(0);
 
   const load = useCallback(() => {
     api.appointments({ date: 'today' })
@@ -43,7 +43,7 @@ export default function QueueSection({
         const tb = b.checkedInAt ? new Date(b.checkedInAt).getTime() : 0;
         return ta - tb;
       });
-  }, [items, tick]);
+  }, [items]);
 
   const inConsultation = useMemo(() => {
     return items.filter(a => a.status === 'In Consultation');

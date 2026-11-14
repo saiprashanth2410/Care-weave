@@ -13,7 +13,7 @@ export default function Results() {
   const [techNotes, setTechNotes] = useState('')
   const [saveMessage, setSaveMessage] = useState('')
   const [showScanner, setShowScanner] = useState(false)
-  const [observedAt, setObservedAt] = useState(toLocalInput(new Date()))
+  const [observedAt, setObservedAt] = useState(() => toLocalInput(new Date()))
   const [amendReason, setAmendReason] = useState('')
   const [searchParams] = useSearchParams()
 
@@ -285,7 +285,7 @@ export default function Results() {
                   id="observedAt"
                   type="datetime-local"
                   required
-                  max={toLocalInput(new Date())}
+                  max={nowLocalInput()}
                   value={observedAt}
                   onChange={(e) => setObservedAt(e.target.value)}
                   className="w-full min-h-11 border border-rule bg-paper px-3 font-mono text-sm text-ink"
@@ -447,6 +447,8 @@ function evaluateFlag(param: string, rawVal: string, refRange: string): ResultFl
 }
 
 const withFlags = (rs: TestResultItem[]) => rs.map((r) => ({ ...r, flag: evaluateFlag(r.parameter, r.value, r.referenceRange) }))
+
+function nowLocalInput() { return toLocalInput(new Date()) }
 
 function toLocalInput(d: Date) {
   const pad = (n: number) => String(n).padStart(2, '0')

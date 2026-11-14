@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Plus } from '../icons';
 import { api } from '../api';
 import type { CarePlan, Patient } from '../types';
@@ -16,11 +16,11 @@ export function DoctorCarePlans({
   const [plans, setPlans] = useState<CarePlan[]>([]);
   const [showNewModal, setShowNewModal] = useState(false);
 
-  const load = () => {
+  const load = useCallback(() => {
     api.carePlans().then(setPlans).catch(e => notify(e.message));
-  };
+  }, [notify]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   return (
     <>

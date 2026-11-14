@@ -33,7 +33,7 @@ export function DoctorAppointments({
     if (filter.status) params.status = filter.status;
     api.appointments(params).then(setItems).catch(e => notify(e.message));
     api.patients().then(setPatients).catch(() => {});
-  }, [filter]);
+  }, [filter, notify]);
 
   useEffect(() => { load(); }, [load, refresh]);
 

@@ -15,9 +15,7 @@
     "preview": "cd careweave/client && npm run preview",
     "server": "cd careweave/server && npm run dev",
     "server:seed": "cd careweave/server && npm run seed",
-    "check-db": "cd careweave/server && npm run check-db",
-    "medlink:dev": "cd medlink && env -u INIT_CWD npm run dev",
-    "medlink:build": "cd medlink && env -u INIT_CWD npm run build"
+    "check-db": "cd careweave/server && npm run check-db"
   },
   "dependencies": {
     "@exasol/exasol-driver-ts": "^0.8.1",
@@ -50,5 +48,8 @@
   },
   "engines": {
     "node": "22.x"
+  },
+  "overrides": {
+    "@grpc/grpc-js": "^1.14.7"
   }
 }

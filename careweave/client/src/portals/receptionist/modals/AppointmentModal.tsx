@@ -30,19 +30,20 @@ export default function AppointmentModal({
   useEffect(() => {
     api.doctors().then(docs => {
       setDoctors(docs);
-      if (docs.length > 0 && !form.doctorId) {
-        setForm(f => ({ ...f, doctorId: docs[0].id }));
+      if (docs.length > 0) {
+        setForm(f => (f.doctorId ? f : { ...f, doctorId: docs[0].id }));
       }
     }).catch(() => {});
   }, []);
 
+  const searching = patientQ.length > 1 && !selectedPatient;
+  const visibleResults = searching || initPatient ? patientResults : [];
+
   useEffect(() => {
-    if (patientQ.length > 1 && !selectedPatient) {
+    if (searching) {
       api.patients(patientQ).then(setPatientResults).catch(() => {});
-    } else if (!initPatient) {
-      setPatientResults([]);
     }
-  }, [patientQ, selectedPatient, initPatient]);
+  }, [patientQ, searching]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -126,9 +127,9 @@ export default function AppointmentModal({
                     onChange={e => setPatientQ(e.target.value)}
                   />
                 </div>
-                {patientResults.length > 0 && (
+                {visibleResults.length > 0 && (
                   <div className="patient-results">
-                    {patientResults.map(p => (
+                    {visibleResults.map(p => (
                       <button
                         type="button"
                         key={p.id}

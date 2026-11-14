@@ -88,7 +88,7 @@ export default function AIScannerModal({ onClose, onImportSuccess }: AIScannerMo
       // 2. Scanned values are a draft. They go to the verification queue, never straight to released.
       await updateOrderStatus(created.id, 'collected')
       const fullyUpdated = await updateOrderStatus(created.id, 'awaiting_verification', {
-        results: rows.map(({ needsCheck, checkReason, ...r }) => r),
+        results: rows.map(({ needsCheck: _needsCheck, checkReason: _checkReason, ...r }) => r),
         technicianNotes: 'Values read from a scanned report. Check each one against the original before verifying.',
       })
 

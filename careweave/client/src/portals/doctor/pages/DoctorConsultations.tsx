@@ -36,7 +36,7 @@ export function DoctorConsultations({
   useEffect(() => {
     api.patients().then(res => {
       setPatients(res);
-      if (!selectedPatient && res.length > 0) setSelectedPatient(res[0]);
+      if (res.length > 0) setSelectedPatient(cur => cur ?? res[0]);
     }).catch(() => {});
   }, []);
 

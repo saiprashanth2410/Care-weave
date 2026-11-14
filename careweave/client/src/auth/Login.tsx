@@ -38,7 +38,9 @@ function LoginInner() {
   const [cfg, setCfg] = useState<{ firebase: boolean; localLogin: boolean } | null>(null)
   const [useLocal, setUseLocal] = useState(false)
   const mode: 'loading' | 'firebase' | 'local' = !cfg ? 'loading' : cfg.firebase && !useLocal ? 'firebase' : 'local'
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(() => {
+    try { return localStorage.getItem('cw_email') || '' } catch { return '' }
+  })
   const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
   const [error, setError] = useState('')
@@ -48,10 +50,6 @@ function LoginInner() {
   const [remember, setRemember] = useState(true)
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('cw_email')
-      if (saved) setEmail(saved)
-    } catch { /* storage unavailable */ }
     authConfig()
       .then(setCfg)
       .catch(() => {
