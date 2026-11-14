@@ -12,11 +12,9 @@ import Samples from '@/portals/lab/pages/Samples'
 import Verification from '@/portals/lab/pages/Verification'
 import AdminApp from '@/portals/admin/AdminApp'
 import AnalyticsApp from '@/portals/analytics/AnalyticsApp'
-import WhatsAppSimulator from '@/components/WhatsAppSimulator'
 
 export default function App() {
   return (
-    <>
     <Routes>
       <Route path="/login" element={<Login />} />
 
@@ -55,7 +53,5 @@ export default function App() {
 
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
-    <WhatsAppSimulator />
-    </>
   )
 }
