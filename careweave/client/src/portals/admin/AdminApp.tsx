@@ -42,7 +42,7 @@ export default function AdminApp({ user }: { user: SessionUser }) {
       <div className="app-shell">
         <aside className="sidebar">
           <div className="side-brand">
-            <img src="/careweave-mark.png" alt="" className="brand-logo" />
+            <img src="/careweave-mark-transparent.png" alt="" className="brand-logo" />
             <span>CareWeave</span>
           </div>
           <nav>
