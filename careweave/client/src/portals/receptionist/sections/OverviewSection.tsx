@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { ArrowRight, CalendarDays, CheckCircle2, Clock3, ClockIcon, RefreshCw, Stethoscope, UserCheck, UserPlus, Users } from '../icons';
+import Loader from '../components/Loader';
+import { ArrowRight, CalendarDays, CheckCircle2, Clock3, ClockIcon, Stethoscope, UserCheck, UserPlus, Users } from '../icons';
 import { api } from '../api';
 import type { Appointment, Dashboard, User } from '../types';
 import { initials, greeting, waitDuration, waitUrgency } from '../helpers';
@@ -39,10 +40,7 @@ export default function OverviewSection({
 
   if (loading && !data) {
     return (
-      <div className="loading-card">
-        <RefreshCw className="spin" size={24} style={{ color: 'var(--primary)' }} />
-        <span>Loading reception dashboard…</span>
-      </div>
+      <Loader label="Loading reception dashboard…" />
     );
   }
 

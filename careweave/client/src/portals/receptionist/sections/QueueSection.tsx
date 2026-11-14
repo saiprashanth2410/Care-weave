@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
+import Loader from '../components/Loader';
 import { Ban, Check, CheckCircle2, Clock3, ClockIcon, Plus, RefreshCw, Stethoscope, UserCheck } from '../icons';
 import { api } from '../api';
 import type { Appointment } from '../types';
@@ -20,11 +21,13 @@ export default function QueueSection({
 }) {
   const [items, setItems] = useState<Appointment[]>([]);
   const [, setTick] = useState(0);
+  const [loaded, setLoaded] = useState(false); // the first fetch has finished, so an empty queue really is empty
 
   const load = useCallback(() => {
     api.appointments({ date: 'today' })
       .then(setItems)
-      .catch(e => notify(e.message));
+      .catch(e => notify(e.message))
+      .finally(() => setLoaded(true));
   }, [notify]);
 
   useEffect(() => {
@@ -92,8 +95,8 @@ export default function QueueSection({
         <div className="card queue-main">
           <div className="queue-count">
             <div style={{ display: 'flex', alignItems: 'baseline' }}>
-              <strong>{waitingQueue.length}</strong>
-              <span>patients currently waiting in lobby</span>
+              <strong>{loaded ? waitingQueue.length : '–'}</strong>
+              <span>{loaded ? 'patients currently waiting in lobby' : 'checking the waiting room…'}</span>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <span className="live-badge">
@@ -102,7 +105,9 @@ export default function QueueSection({
             </div>
           </div>
 
-          {waitingQueue.length === 0 ? (
+          {!loaded ? (
+            <Loader label="Loading the live queue…" />
+          ) : waitingQueue.length === 0 ? (
             <div className="empty" style={{ padding: '60px 20px' }}>
               <ClockIcon size={36} />
               <b>No patients currently in the waiting room</b>
@@ -195,11 +200,13 @@ export default function QueueSection({
             <div className="card-head">
               <div>
                 <h3>Currently with Doctor</h3>
-                <p className="muted">{inConsultation.length} consultation{inConsultation.length !== 1 ? 's' : ''} in progress</p>
+                <p className="muted">{loaded ? `${inConsultation.length} consultation${inConsultation.length !== 1 ? 's' : ''} in progress` : 'Checking…'}</p>
               </div>
             </div>
 
-            {inConsultation.length === 0 ? (
+            {!loaded ? (
+              <Loader compact label="Loading…" />
+            ) : inConsultation.length === 0 ? (
               <p className="muted" style={{ fontSize: 12, padding: '12px 0' }}>
                 No active doctor consultations at this moment.
               </p>
@@ -231,11 +238,13 @@ export default function QueueSection({
             <div className="card-head">
               <div>
                 <h3>Scheduled Arrivals Today</h3>
-                <p className="muted">{scheduledToday.length} appointment{scheduledToday.length !== 1 ? 's' : ''} pending arrival</p>
+                <p className="muted">{loaded ? `${scheduledToday.length} appointment${scheduledToday.length !== 1 ? 's' : ''} pending arrival` : 'Checking…'}</p>
               </div>
             </div>
 
-            {scheduledToday.length === 0 ? (
+            {!loaded ? (
+              <Loader compact label="Loading…" />
+            ) : scheduledToday.length === 0 ? (
               <p className="muted" style={{ fontSize: 12, padding: '12px 0' }}>
                 All scheduled patients have either arrived or concluded.
               </p>

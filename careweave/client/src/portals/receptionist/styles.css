@@ -1711,6 +1711,40 @@ tbody tr:hover {
 .spin {
 }
 
+/* Loader: a real spinner (the icon set is text-only, so an icon cannot do this). */
+.cw-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 240px;
+  color: var(--slate-500);
+  font-size: 13px;
+}
+
+.cw-loader.compact {
+  min-height: 0;
+  padding: 14px 0;
+  flex-direction: row;
+  justify-content: flex-start;
+}
+
+.cw-spinner {
+  width: 26px;
+  height: 26px;
+  border: 3px solid var(--primary-border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.cw-loader.compact .cw-spinner {
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+}
+
 /* ──────────────────────────────────────────────────────────────────────────
    RESPONSIVE DESIGN
    ────────────────────────────────────────────────────────────────────────── */

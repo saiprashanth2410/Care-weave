@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import Loader from '../components/Loader';
 import { CalendarDays, ChevronRight, Pencil, Plus, Search, Users, X } from '../icons';
 import { api } from '../api';
 import type { Patient } from '../types';
@@ -22,11 +23,13 @@ export default function PatientsSection({
   const [q, setQ] = useState('');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [editPatient, setEditPatient] = useState<Patient | null>(null);
+  const [loaded, setLoaded] = useState(false); // the first fetch has finished, so an empty list really is empty
 
   const loadPatients = useCallback(() => {
     api.patients(q)
       .then(setPatients)
-      .catch(e => notify(e.message));
+      .catch(e => notify(e.message))
+      .finally(() => setLoaded(true));
   }, [q, notify]);
 
   useEffect(() => {
@@ -145,7 +148,8 @@ export default function PatientsSection({
           </tbody>
         </table>
 
-        {patients.length === 0 && (
+        {!loaded && <Loader label="Loading patients…" />}
+        {loaded && patients.length === 0 && (
           <div className="empty">
             <Users size={32} />
             <b>No patients found matching your search</b>
