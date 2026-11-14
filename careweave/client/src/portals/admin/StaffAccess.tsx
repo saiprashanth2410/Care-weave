@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { adminApi, type Catalog, type Created, type Staff, type StaffRole } from './api';
 import { Modal, PageHeader } from '../doctor/components';
 
-type Draft = { name: string; email: string; role: StaffRole; facility: string; permissions: string[]; password: string };
-const blank = (c: Catalog): Draft => ({ name: '', email: '', role: 'receptionist', facility: '', permissions: c.defaults.receptionist, password: '' });
+type Draft = { name: string; email: string; role: StaffRole; facility: string; permissions: string[]; password: string; room: string; shiftStart: string; shiftEnd: string };
+const blank = (c: Catalog): Draft => ({ name: '', email: '', role: 'receptionist', facility: '', permissions: c.defaults.receptionist, password: '', room: '', shiftStart: '08:30', shiftEnd: '16:30' });
 
 function StaffForm({ catalog, initial, self, existing, onClose, onSaved, notify }: {
   catalog: Catalog; initial: Draft; self: boolean; existing?: Staff; onClose: () => void; onSaved: (created?: Created) => void; notify: (s: string) => void;
@@ -23,12 +23,14 @@ function StaffForm({ catalog, initial, self, existing, onClose, onSaved, notify 
         // A person cannot change their own role or permissions; the server refuses it, so do not send them.
         await adminApi.updateStaff(existing.id, {
           name: d.name, facility: d.facility, version: existing.version,
+          ...(d.role === 'doctor' ? { room: d.room, shiftStart: d.shiftStart, shiftEnd: d.shiftEnd } : {}),
           ...(self ? {} : { role: d.role, permissions: d.permissions }),
           ...(d.password ? { password: d.password } : {}),
         });
         notify('Staff account updated');
       } else {
-        const made = await adminApi.createStaff({ ...d, ...(d.password ? {} : { password: undefined }) });
+        const { room, shiftStart, shiftEnd, ...rest } = d;
+        const made = await adminApi.createStaff({ ...rest, ...(d.role === 'doctor' ? { room, shiftStart, shiftEnd } : {}), ...(d.password ? {} : { password: undefined }) });
         notify(made.firebase === 'not-configured' ? 'Saved. No Firebase account was created (server has no Firebase service account).' : 'Staff account created');
         onSaved(made);
         return;
@@ -52,6 +54,16 @@ function StaffForm({ catalog, initial, self, existing, onClose, onSaved, notify 
           </select>
         </label>
         <label>Facility / department<input value={d.facility} onChange={e => set('facility', e.target.value)} /></label>
+        {d.role === 'doctor' && (
+          <>
+            <label>Consultation room<input value={d.room} placeholder="e.g. Room 4" maxLength={30} onChange={e => set('room', e.target.value)} /></label>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <label style={{ flex: 1 }}>Hours from<input type="time" required value={d.shiftStart} onChange={e => set('shiftStart', e.target.value)} /></label>
+              <label style={{ flex: 1 }}>to<input type="time" required value={d.shiftEnd} onChange={e => set('shiftEnd', e.target.value)} /></label>
+            </div>
+            <p className="muted span-2" style={{ margin: 0 }}>Appointments can only be booked inside these hours, and the room is shown on tokens, the queue and WhatsApp messages.</p>
+          </>
+        )}
         <div className="span-2">
           <b style={{ fontSize: 12 }}>Permissions</b>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 8 }}>
@@ -159,7 +171,7 @@ export function StaffAccess({ selfId, notify }: { selfId: string; notify: (s: st
       {editing && catalog && (
         <StaffForm
           catalog={catalog}
-          initial={editing === 'new' ? blank(catalog) : { name: editing.name, email: editing.email, role: editing.role, facility: editing.facility, permissions: editing.permissions, password: '' }}
+          initial={editing === 'new' ? blank(catalog) : { name: editing.name, email: editing.email, role: editing.role, facility: editing.facility, permissions: editing.permissions, password: '', room: editing.room, shiftStart: editing.shiftStart, shiftEnd: editing.shiftEnd }}
           self={editing !== 'new' && editing.id === selfId}
           existing={editing === 'new' ? undefined : editing}
           onClose={() => setEditing(null)}

@@ -35,7 +35,49 @@ export type Doctor = {
   id: string;
   name: string;
   facility: string;
+  /** Where they see patients, as the administrator set it. May be empty. */
+  room?: string;
+  /** Working hours, 24-hour "HH:MM". */
+  shiftStart?: string;
+  shiftEnd?: string;
 };
+
+/** One appointment as the doctor's roster shows it: who, when, and where it stands. No clinical data. */
+export type DayAppt = {
+  id: string;
+  patientName: string;
+  patientIdCode?: string;
+  time: string;
+  token?: string;
+  status: string;
+  reason?: string;
+  checkedInAt?: string;
+  startedAt?: string;
+  completedAt?: string;
+};
+
+export type RosterDoctor = Required<Pick<Doctor, 'id' | 'name' | 'facility' | 'room' | 'shiftStart' | 'shiftEnd'>> & {
+  status: 'in_consultation' | 'available' | 'off_shift';
+  current: DayAppt | null;
+  waiting: number;
+  scheduled: number;
+  seen: number;
+  nextOpenSlot: string | null;
+  freeSlots: number;
+};
+
+export type DoctorDay = {
+  doctor: Doctor;
+  date: string;
+  current: DayAppt[];
+  waiting: DayAppt[];
+  upcoming: DayAppt[];
+  seen: DayAppt[];
+  notSeen: DayAppt[];
+};
+
+export type SlotInfo = { time: string; state: 'free' | 'booked' | 'past' };
+export type DoctorSlots = { doctor: Doctor; date: string; slots: SlotInfo[]; nextFree: string | null };
 
 export type Appointment = {
   id: string;

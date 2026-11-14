@@ -6,6 +6,7 @@ import { expectedVersion } from '../middleware.js';
 import { DuplicateError } from '../repo/index.js';
 import { DEFAULT_PERMISSIONS, PERMISSIONS, ROLES, isRole, type StaffRole } from '../services/staffCatalog.js';
 import { generatePassword } from '../services/firebaseUsers.js';
+import { HHMM, hhmmToMinutes, shiftOf } from '../services/slots.js';
 import { id, now, text } from '../util.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -14,7 +15,24 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const view = (u: any) => ({
   id: u.id, name: u.name, email: u.email, role: u.role, facility: u.facility || '', permissions: u.permissions || [],
   active: u.active !== false, localLogin: !!u.passwordHash, firebaseLinked: !!u.firebaseUid, version: u.version,
+  room: u.room || '', shiftStart: shiftOf(u).start, shiftEnd: shiftOf(u).end,
 });
+
+/** Room and working hours (doctors). Returns the cleaned fields, or an error message. */
+function cleanDesk(b: any, current?: { shiftStart?: string; shiftEnd?: string }): { fields: Record<string, string> } | { error: string } {
+  const fields: Record<string, string> = {};
+  if (b.room !== undefined) fields.room = text(b.room, 30);
+  for (const k of ['shiftStart', 'shiftEnd'] as const) {
+    if (b[k] === undefined) continue;
+    if (typeof b[k] !== 'string' || !HHMM.test(b[k])) return { error: 'Working hours must be times like 08:30' };
+    fields[k] = b[k];
+  }
+  if (fields.shiftStart || fields.shiftEnd) {
+    const start = fields.shiftStart ?? shiftOf(current).start, end = fields.shiftEnd ?? shiftOf(current).end;
+    if (hhmmToMinutes(start) >= hhmmToMinutes(end)) return { error: 'The shift must end after it starts' };
+  }
+  return { fields };
+}
 
 /** Keep only permissions this role may hold. Returns null if the list is not an array of strings. */
 const cleanPermissions = (role: StaffRole, value: unknown) =>
@@ -64,8 +82,11 @@ export function staffRoutes(ctx: AppCtx) {
       }
     }
 
+    const desk = cleanDesk(b);
+    if ('error' in desk) return res.status(400).json({ error: desk.error });
+
     const u = {
-      id: id('u'), name, email, role: b.role, facility: text(b.facility, 120), permissions, active: true, managed: true,
+      id: id('u'), name, email, role: b.role, facility: text(b.facility, 120), permissions, active: true, managed: true, ...desk.fields,
       ...(password ? { passwordHash: await bcrypt.hash(password, 10) } : {}), createdAt: now(),
     };
     try { await ctx.repos.users.insert(u); } catch (err) {
@@ -91,6 +112,9 @@ export function staffRoutes(ctx: AppCtx) {
       changes.name = name;
     }
     if (b.facility !== undefined) changes.facility = text(b.facility, 120);
+    const desk = cleanDesk(b, u);
+    if ('error' in desk) return res.status(400).json({ error: desk.error });
+    if (Object.keys(desk.fields).length) { Object.assign(changes, desk.fields); said.push('room / working hours'); }
 
     const roleChange = b.role !== undefined && b.role !== u.role;
     if (roleChange || b.permissions !== undefined || b.active !== undefined) {

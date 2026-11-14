@@ -30,7 +30,7 @@ interface OPTokenPrintModalProps {
 export default function OPTokenPrintModal({
   appointment,
   tokenIndex = 1,
-  roomNumber = 'Room 4',
+  roomNumber = 'the consulting room',
   onClose,
 }: OPTokenPrintModalProps) {
   const tokenNumber = appointment.token || `A-${String(tokenIndex).padStart(3, '0')}`
@@ -81,7 +81,7 @@ export default function OPTokenPrintModal({
             <span className="text-[11px] font-bold uppercase tracking-widest text-ink-3">Your Queue Token</span>
             <div className="text-3xl font-extrabold text-accent-ink tracking-widest my-1">{tokenNumber}</div>
             <div className="inline-block bg-accent/15 px-2 py-0.5 text-[11px] font-bold text-accent-ink uppercase">
-              {roomNumber} · {appointment.doctorName || 'Dr. ANIRBAN LAHA'}
+              {roomNumber} · {appointment.doctorName || 'Doctor'}
             </div>
           </div>
 

@@ -1,13 +1,14 @@
 import { clearSession } from '@/auth/session';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useLiveRefresh } from '@/useLiveRefresh';
 import { CalendarDays, CheckCircle2, Clock3, LayoutDashboard, LogOut, Menu, RefreshCw, ShieldCheck, Stethoscope, UserPlus, Users } from './icons';
 import { Link, useNavigate } from 'react-router-dom';
 import SampleScenario from '@/components/SampleScenario';
 import OPTokenPrintModal from './components/OPTokenPrintModal';
 import DoctorSlotMatrix from './components/DoctorSlotMatrix';
-import type { ExtractedReceptionData, Appointment, Patient, User } from './types';
-import { getDoctorRoom, initials } from './helpers';
+import type { ExtractedReceptionData, Appointment, Doctor, Patient, User } from './types';
+import { api } from './api';
+import { initials } from './helpers';
 import OverviewSection from './sections/OverviewSection';
 import QueueSection from './sections/QueueSection';
 import AppointmentsSection from './sections/AppointmentsSection';
@@ -43,6 +44,12 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [showAppointmentModal, setShowAppointmentModal] = useState(false);
   const [registeredPatientToBook, setRegisteredPatientToBook] = useState<Patient | null>(null);
+  const [bookingDoctorId, setBookingDoctorId] = useState<string | undefined>(undefined);
+  // The staff list is the one source of doctors and their rooms, so a doctor added or moved by an administrator shows here on the next refresh.
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  useEffect(() => { api.doctors().then(setDoctors).catch(() => {}); }, [refresh]);
+  const roomOf = useCallback((a: { doctorId?: string; doctorName?: string }) =>
+    doctors.find((d) => d.id === a.doctorId)?.room || '', [doctors]);
 
   // New Clinical Reception Features
   const [printAppointment, setPrintAppointment] = useState<Appointment | null>(null);
@@ -206,16 +213,19 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               notify={notify}
               onBook={() => setShowAppointmentModal(true)}
               onPrintToken={handlePrintToken}
+              roomOf={roomOf}
             />
           )}
 
           {section === 'doctors' && (
             <div className="card" style={{ padding: 20 }}>
               <DoctorSlotMatrix
-                onSelectDoctorForBooking={(docName) => {
+                refresh={refresh}
+                notify={notify}
+                onBook={(doc) => {
                   setRegisteredPatientToBook(null);
+                  setBookingDoctorId(doc.id);
                   setShowAppointmentModal(true);
-                  notify(`Booking consultation for ${docName}`);
                 }}
               />
             </div>
@@ -269,13 +279,16 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
       {showAppointmentModal && (
         <AppointmentModal
           patient={registeredPatientToBook || undefined}
+          doctorId={bookingDoctorId}
           onClose={() => {
             setShowAppointmentModal(false);
             setRegisteredPatientToBook(null);
+            setBookingDoctorId(undefined);
           }}
           onSaved={() => {
             setShowAppointmentModal(false);
             setRegisteredPatientToBook(null);
+            setBookingDoctorId(undefined);
             setRefresh(r => r + 1);
             notify('Appointment scheduled successfully');
           }}
@@ -287,7 +300,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
         <OPTokenPrintModal
           appointment={printAppointment}
           tokenIndex={printTokenIndex}
-          roomNumber={getDoctorRoom(printAppointment.doctorName)}
+          roomNumber={roomOf(printAppointment) || undefined}
           onClose={() => setPrintAppointment(null)}
         />
       )}
