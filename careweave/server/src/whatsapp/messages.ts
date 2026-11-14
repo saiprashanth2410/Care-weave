@@ -8,16 +8,8 @@ const digits = (v: any) => String(v ?? '').replace(/\D/g, '');
 const today = () => new Date().toISOString().slice(0, 10);
 const isToday = (d: string) => !!d && (d === 'Today' || d.slice(0, 10) === today());
 
-export function roomFor(doctorName?: string): string {
-  const d = (doctorName || '').toLowerCase();
-  if (d.includes('laha') || d.includes('anirban')) return 'Room 4';
-  if (d.includes('iyer') || d.includes('rajesh')) return 'Room 2';
-  if (d.includes('priya') || d.includes('sharma')) return 'Room 1';
-  if (d.includes('patil') || d.includes('sneha')) return 'Room 3';
-  if (d.includes('vikram') || d.includes('seth')) return 'ICU Block B';
-  if (d.includes('meenakshi') || d.includes('sundaram')) return 'Room 5';
-  return 'Room 4';
-}
+/** Where a doctor sees patients, as the administrator set it on their account. Without one, patients are told the generic place. */
+export const roomOf = (db: any, appt: any): string => String(db.rooms?.[appt?.doctorId] || '').trim() || 'the consulting room';
 
 export function findPatients(db: any, q: { phone?: string; uhid?: string }) {
   const uhid = String(q.uhid || '').trim().toLowerCase();
@@ -69,7 +61,7 @@ export function queueStatus(db: any, q: { phone?: string; uhid?: string }) {
     const ahead = appt.status === 'In Consultation' ? 0 : queueAhead(db, appt);
     return {
       found: true as const, active: true, patient: { name: p.name, uhid: p.patientId }, token: appt.token || null, status: appt.status,
-      doctor: appt.doctorName, room: roomFor(appt.doctorName), aheadCount: ahead, estimatedWaitMinutes: ahead * MINUTES_PER_PATIENT
+      doctor: appt.doctorName, room: roomOf(db, appt), aheadCount: ahead, estimatedWaitMinutes: ahead * MINUTES_PER_PATIENT
     };
   }
   return { found: true as const, active: false, patient: { name: patients[0].name, uhid: patients[0].patientId } };

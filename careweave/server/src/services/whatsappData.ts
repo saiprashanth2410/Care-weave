@@ -20,14 +20,16 @@ export async function whatsappView(repos: Repos, q: { phone?: string; uhid?: str
   const patients = [...new Map([...byUhid, ...byPhone].map((p: any) => [p.id, p])).values()];
   const ids = patients.map((p: any) => p.id);
   const refs = patients.flatMap((p: any) => [p.id, p.patientId]);
-  const [today, theirs, labOrders, prescriptions] = await Promise.all([
+  const [today, theirs, labOrders, prescriptions, doctors] = await Promise.all([
     repos.appointments.onDay(isoToday()),
     repos.appointments.find({ patientId: { $in: ids } }),
     repos.orders.find({ $or: [{ registeredPatientRef: { $in: refs } }, { patientId: { $in: refs } }] }),
     repos.prescriptions.find({ patientId: { $in: ids } }),
+    repos.users.byRole('doctor'),
   ]);
   const appointments = [...new Map([...today, ...theirs].map((a: any) => [a.id, a])).values()];
-  return { patients, appointments, labOrders, prescriptions };
+  const rooms = Object.fromEntries(doctors.filter((d: any) => d.room).map((d: any) => [d.id, d.room]));
+  return { patients, appointments, labOrders, prescriptions, rooms };
 }
 
 /** The UHID a reply will look for: the second word of the message, as `replyTo` reads it. */

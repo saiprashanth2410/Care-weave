@@ -29,7 +29,9 @@ test('queue status counts patients ahead and finds the patient by any phone form
   const r: any = queueStatus(db, { phone: '9876543210' });
   assert.equal(r.token, 'A-002');
   assert.equal(r.aheadCount, 1);
-  assert.equal(r.room, 'Room 4');
+  assert.equal(r.room, 'the consulting room'); // no room on the doctor's account: say so plainly, never guess one
+  const withRoom: any = queueStatus({ ...db, rooms: { d1: 'Room 7' } }, { phone: '9876543210' });
+  assert.equal(withRoom.room, 'Room 7'); // the room the administrator set on the doctor's account
   assert.equal(queueStatus(db, { phone: '0000000000' }).found, false);
 });
 

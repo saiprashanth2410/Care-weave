@@ -1,22 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, CalendarDays, ChevronRight, Search, X } from '../icons';
 import { api } from '../api';
-import type { Doctor, Patient } from '../types';
-import { fmtDate, initials, todayISO } from '../helpers';
+import type { Doctor, Patient, SlotInfo } from '../types';
+import { cleanName, fmtDate, initials, todayISO } from '../helpers';
 
 // ─── APPOINTMENT BOOKING MODAL ──────────────────────────────────────────────
-/** "Dr. A. Name (Consultant Physician)" + "General Medicine" reads as two brackets; show the name, then where they sit. */
-const doctorLabel = (d: { name: string; facility?: string }) => {
-  const name = d.name.replace(/\s*\([^)]*\)\s*$/, '').trim() || d.name;
-  return d.facility ? `${name} · ${d.facility}` : name;
-};
+const doctorLabel = (d: { name: string; facility?: string }) => (d.facility ? `${cleanName(d.name)} · ${d.facility}` : cleanName(d.name));
 
 export default function AppointmentModal({
   patient: initPatient,
+  doctorId: initDoctorId,
   onClose,
   onSaved
 }: {
   patient?: Patient;
+  /** Pre-select this doctor (e.g. from the roster). */
+  doctorId?: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -26,10 +25,13 @@ export default function AppointmentModal({
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [form, setForm] = useState({
     date: todayISO(),
-    time: '10:00 AM',
+    time: '',
     reason: 'Routine Consultation',
-    doctorId: ''
+    doctorId: initDoctorId || ''
   });
+  // The chosen doctor's slots for the chosen date: free ones can be picked, booked and already-passed ones cannot.
+  const [slots, setSlots] = useState<SlotInfo[] | null>(null);
+  const [nextFree, setNextFree] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -41,6 +43,21 @@ export default function AppointmentModal({
       }
     }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!form.doctorId || !form.date) return;
+    let live = true;
+    api.doctorSlots(form.doctorId, form.date)
+      .then(r => {
+        if (!live) return;
+        setSlots(r.slots);
+        setNextFree(r.nextFree);
+        // Keep the time if it is still free, otherwise move to the first free one.
+        setForm(f => (r.slots.some(s => s.time === f.time && s.state === 'free') ? f : { ...f, time: r.nextFree || '' }));
+      })
+      .catch(() => { if (live) { setSlots([]); setNextFree(null); setForm(f => ({ ...f, time: '' })); } });
+    return () => { live = false; };
+  }, [form.doctorId, form.date]);
 
   const searching = patientQ.length > 1 && !selectedPatient;
   const visibleResults = searching || initPatient ? patientResults : [];
@@ -81,12 +98,6 @@ export default function AppointmentModal({
     'Cold / Flu Symptoms',
     'Blood Pressure Monitoring',
     'Lab Results Consultation'
-  ];
-
-  const timeSlots = [
-    '08:30 AM', '09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM',
-    '11:00 AM', '11:30 AM', '12:00 PM', '01:30 PM', '02:00 PM',
-    '02:30 PM', '03:00 PM', '03:30 PM', '04:00 PM', '04:30 PM'
   ];
 
   return (
@@ -176,10 +187,19 @@ export default function AppointmentModal({
               value={form.time}
               onChange={e => setForm({ ...form, time: e.target.value })}
             >
-              {timeSlots.map(t => (
-                <option key={t} value={t}>{t}</option>
+              {slots === null && <option value="">Loading slots…</option>}
+              {slots !== null && !form.time && <option value="">No free slot</option>}
+              {(slots ?? []).map(s => (
+                <option key={s.time} value={s.time} disabled={s.state !== 'free'}>
+                  {s.time}{s.state === 'booked' ? ' · Booked' : s.state === 'past' ? ' · Passed' : ''}
+                </option>
               ))}
             </select>
+            <span className="muted" style={{ fontSize: 11, fontWeight: 500 }}>
+              {slots !== null && !nextFree
+                ? 'No free slot on this date with this doctor. Try another date or doctor.'
+                : nextFree ? `Next free: ${nextFree}` : ''}
+            </span>
           </label>
 
           <label className="span-2">
@@ -228,7 +248,7 @@ export default function AppointmentModal({
             <button type="button" className="btn-secondary" onClick={onClose}>
               Cancel
             </button>
-            <button className="btn-primary" disabled={busy || !selectedPatient}>
+            <button className="btn-primary" disabled={busy || !selectedPatient || !form.time || !form.doctorId}>
               {busy ? 'Booking…' : 'Confirm Appointment Booking'}
               <CalendarDays size={16} />
             </button>

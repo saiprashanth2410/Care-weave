@@ -1,14 +1,4 @@
 // ─── UTILITIES & HELPERS ───────────────────────────────────────────────────
-export function getDoctorRoom(doctorName?: string): string {
-  const d = (doctorName || '').toLowerCase();
-  if (d.includes('laha') || d.includes('anirban')) return 'Room 4';
-  if (d.includes('iyer') || d.includes('rajesh')) return 'Room 2';
-  if (d.includes('priya') || d.includes('sharma')) return 'Room 1';
-  if (d.includes('patil') || d.includes('sneha')) return 'Room 3';
-  if (d.includes('vikram') || d.includes('seth')) return 'ICU Block B';
-  if (d.includes('meenakshi') || d.includes('sundaram')) return 'Room 5';
-  return 'Room 4';
-}
 export const fmtDate = (v?: string) =>
   v ? new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 
@@ -24,6 +14,22 @@ export const greeting = () => {
 };
 
 export const todayISO = () => new Date().toISOString().slice(0, 10);
+
+/** The desk's own clock as "HH:MM" (24-hour), so the server can tell which of today's slots have passed. */
+export const nowHHMM = () => {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
+/** "Dr. A. Name (Consultant Physician)" -> "Dr. A. Name": a title in brackets is not part of the name. */
+export const cleanName = (name: string) => name.replace(/\s*\([^)]*\)\s*$/, '').trim() || name;
+
+/** "16:30" -> "04:30 PM". */
+export const hhmmLabel = (v?: string) => {
+  if (!v) return '';
+  const h = Number(v.slice(0, 2));
+  return `${String(h % 12 || 12).padStart(2, '0')}:${v.slice(3, 5)} ${h >= 12 ? 'PM' : 'AM'}`;
+};
 
 export function calculateAge(dob?: string): string {
   if (!dob) return '';

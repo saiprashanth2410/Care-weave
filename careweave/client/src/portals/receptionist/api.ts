@@ -1,4 +1,5 @@
-import type { AdminPatientRecord, Appointment, Dashboard, Doctor, Patient, User } from './types';
+import type { AdminPatientRecord, Appointment, Dashboard, Doctor, DoctorDay, DoctorSlots, Patient, RosterDoctor, User } from './types';
+import { nowHHMM, todayISO } from './helpers';
 
 // The server answers 409 with this text when a record changed after this screen read it.
 const CONFLICT = 'Record was changed by someone else, reload and retry';
@@ -35,6 +36,10 @@ export const api = {
   createPatient: (body: Partial<Patient>) => request<Patient>('/api/patients', { method: 'POST', body: JSON.stringify(body) }),
   updatePatient: (id: string, body: Partial<Patient>) => request<Patient>(`/api/patients/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   doctors: () => request<Doctor[]>('/api/doctors'),
+  // The desk's own date and clock go along: the server may sit in another time zone, and "already passed" means passed for the desk.
+  roster: () => request<RosterDoctor[]>(`/api/doctors/roster?today=${todayISO()}&now=${nowHHMM()}`),
+  doctorDay: (id: string, date: string) => request<DoctorDay>(`/api/doctors/${id}/day?date=${date}&today=${todayISO()}`),
+  doctorSlots: (id: string, date: string) => request<DoctorSlots>(`/api/doctors/${id}/slots?date=${date}&today=${todayISO()}&now=${nowHHMM()}`),
   appointments: (params?: { date?: string; status?: string; patientId?: string }) =>
     request<Appointment[]>(
       `/api/appointments${

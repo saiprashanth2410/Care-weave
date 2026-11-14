@@ -7,6 +7,9 @@ export const UserModel = model('User', new Schema({
   passwordHash: { type: String, required: true },
   role: { type: String, enum: ['receptionist', 'lab', 'doctor', 'admin'], required: true },
   active: { type: Boolean, default: true },
+  room: String,
+  shiftStart: String,
+  shiftEnd: String,
   facility: String
 }, { timestamps: true }));
 

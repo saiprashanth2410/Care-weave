@@ -2,15 +2,17 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Ban, Check, CheckCircle2, Clock3, ClockIcon, Plus, RefreshCw, Stethoscope, UserCheck } from '../icons';
 import { api } from '../api';
 import type { Appointment } from '../types';
-import { getDoctorRoom, fmtTime, initials, waitDuration, waitUrgency } from '../helpers';
+import { fmtTime, initials, waitDuration, waitUrgency } from '../helpers';
 
 // ─── RECEPTIONIST: LIVE PATIENT QUEUE (WAITING ROOM MANAGER) ────────────────
 export default function QueueSection({
   refresh,
   notify,
   onBook,
-  onPrintToken
+  onPrintToken,
+  roomOf
 }: {
+  roomOf: (a: Appointment) => string;
   refresh: number;
   notify: (s: string) => void;
   onBook: () => void;
@@ -114,7 +116,7 @@ export default function QueueSection({
                   <div className="queue-row" key={a.id}>
                     <span className="queue-number">#{String(i + 1).padStart(2, '0')}</span>
                     <span className="mono" style={{ fontSize: 11, fontWeight: 700, padding: '2px 6px', border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)' }}>
-                      {getDoctorRoom(a.doctorName)}
+                      {roomOf(a) || 'No room set'}
                     </span>
                     <div className="avatar">{initials(a.patientName)}</div>
                     <div className="row-main">
