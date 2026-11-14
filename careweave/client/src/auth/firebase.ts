@@ -1,5 +1,5 @@
 import { getApp, getApps, initializeApp } from 'firebase/app'
-import { getAuth, sendPasswordResetEmail, signInWithEmailAndPassword, signOut } from 'firebase/auth'
+import { confirmPasswordReset, getAuth, sendPasswordResetEmail, signInWithEmailAndPassword, signOut, verifyPasswordResetCode } from 'firebase/auth'
 
 import { firebaseConfigured, firebaseWebConfig } from './firebaseConfig'
 
@@ -14,6 +14,9 @@ const MESSAGES: Record<string, string> = {
   'auth/too-many-requests': 'Too many attempts. Wait a few minutes and try again.',
   'auth/network-request-failed': 'Could not reach the sign-in service. Check your connection.',
   'auth/operation-not-allowed': 'Email and password sign-in is not enabled for this project.',
+  'auth/expired-action-code': 'This link has expired. Ask an administrator for a new one.',
+  'auth/invalid-action-code': 'This link is not valid or was already used. Ask an administrator for a new one.',
+  'auth/weak-password': 'Choose a stronger password (at least 8 characters).',
 }
 const friendly = (err: unknown) => new Error(MESSAGES[(err as { code?: string }).code ?? ''] ?? 'Sign-in failed. Try again.')
 
@@ -33,6 +36,24 @@ export async function firebaseResetPassword(email: string): Promise<void> {
   } catch (err) {
     // Firebase reports an unknown address differently, but the page must not reveal which emails exist.
     if ((err as { code?: string }).code === 'auth/user-not-found') return
+    throw friendly(err)
+  }
+}
+
+/** Checks a reset link's one-time code and returns the email address it is for. */
+export async function firebaseVerifyResetCode(code: string): Promise<string> {
+  try {
+    return await verifyPasswordResetCode(auth(), code)
+  } catch (err) {
+    throw friendly(err)
+  }
+}
+
+/** Saves the new password for a reset link's code. The code works once. */
+export async function firebaseConfirmReset(code: string, password: string): Promise<void> {
+  try {
+    await confirmPasswordReset(auth(), code, password)
+  } catch (err) {
     throw friendly(err)
   }
 }
