@@ -1,5 +1,8 @@
 import bcrypt from 'bcryptjs';
 
+/** Demo accounts with a published password exist only on a developer machine or in tests, never in production or on Vercel. */
+const DEMO_ACCOUNTS = process.env.NODE_ENV !== 'production' && !process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME;
+
 export async function buildSeed() {
   const users = [
     // Staff directory for Firebase sign-in. These accounts have no local password; they sign in only through Firebase.
@@ -37,12 +40,14 @@ export async function buildSeed() {
       permissions: ['audit', 'staff']
     },
 
-    // Acceptance testing & local development aliases
+    // Acceptance testing & local development aliases. Known passwords: never created on a deployed server.
+    ...(DEMO_ACCOUNTS ? [
     { id: 'u-reception', name: 'Maya Patel', email: 'reception@careweave.test', passwordHash: await bcrypt.hash('demo123', 10), role: 'receptionist', facility: 'CareWeave Front Desk' },
     { id: 'u-lab', name: 'Lena Okafor', email: 'lab@careweave.test', passwordHash: await bcrypt.hash('demo123', 10), role: 'lab', facility: 'CareWeave Central Laboratory' },
     { id: 'u-pathologist', name: 'Dr. KALA.K MD., DNB', email: 'pathologist@careweave.test', passwordHash: await bcrypt.hash('demo123', 10), role: 'lab', permissions: ['verify'], facility: 'CareWeave Laboratory' },
     { id: 'u-doctor', name: 'Dr. ANIRBAN LAHA', email: 'doctor@careweave.test', passwordHash: await bcrypt.hash('demo123', 10), role: 'doctor', facility: 'CareWeave General Medicine' },
     { id: 'u-admin', name: 'Ravi Menon', email: 'admin@careweave.test', passwordHash: await bcrypt.hash('demo123', 10), role: 'admin', permissions: ['audit', 'staff'], facility: 'CareWeave Administration' }
+    ] : [])
   ];
 
   // Only login accounts are seeded. Patients, appointments and lab orders start empty, so there is nothing to give a version to:
