@@ -24,6 +24,7 @@ import { SOAPEncounterModal } from './modals/SOAPEncounterModal';
 import { FollowUpAppointmentModal } from './modals/FollowUpAppointmentModal';
 import PortalBoundary from './PortalBoundary';
 import SampleScenario from '@/components/SampleScenario';
+import ReportIssue from '@/components/ReportIssue';
 import './styles.css';
 
 function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void }) {
@@ -122,6 +123,7 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
 
           <div className="top-actions">
             <SampleScenario className="action-pill" />
+            <ReportIssue className="action-pill" />
             <Link
               to="/analytics"
               className="action-pill"

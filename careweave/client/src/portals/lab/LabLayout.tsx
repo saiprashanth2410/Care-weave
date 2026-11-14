@@ -1,6 +1,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import SampleScenario from '@/components/SampleScenario'
+import ReportIssue from '@/components/ReportIssue'
 import { clearSession, HOME, type SessionUser } from '@/auth/session'
 
 const NAV = [
@@ -88,7 +89,7 @@ export default function LabLayout({ user }: { user: SessionUser }) {
         <div className="hidden items-center justify-between border-b border-rule bg-surface px-8 py-3 lg:flex">
           <p className="flex items-center gap-4 text-xs font-semibold uppercase tracking-wider text-accent-ink">
             <button type="button" onClick={goBack} className="min-h-8 rounded-sm border border-rule px-3 text-xs font-semibold normal-case tracking-normal text-ink hover:bg-paper">&larr; Back</button>
-            Laboratory <SampleScenario className="[&_button]:min-h-8 [&_button]:border [&_button]:border-rule [&_button]:px-2 [&_button]:text-xs [&_button]:normal-case [&_button]:tracking-normal" /></p>
+            Laboratory <SampleScenario className="[&_button]:min-h-8 [&_button]:border [&_button]:border-rule [&_button]:px-2 [&_button]:text-xs [&_button]:normal-case [&_button]:tracking-normal" /> <ReportIssue className="min-h-8 border border-rule px-2 text-xs font-semibold normal-case tracking-normal text-ink hover:bg-paper" /></p>
         </div>
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
           {notice && (

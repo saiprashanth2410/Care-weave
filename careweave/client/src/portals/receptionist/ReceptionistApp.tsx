@@ -4,6 +4,7 @@ import { useLiveRefresh } from '@/useLiveRefresh';
 import { CalendarDays, CheckCircle2, Clock3, LayoutDashboard, LogOut, Menu, RefreshCw, ShieldCheck, Stethoscope, UserPlus, Users } from './icons';
 import { Link, useNavigate } from 'react-router-dom';
 import SampleScenario from '@/components/SampleScenario';
+import ReportIssue from '@/components/ReportIssue';
 import OPTokenPrintModal from './components/OPTokenPrintModal';
 import DoctorSlotMatrix from './components/DoctorSlotMatrix';
 import type { ExtractedReceptionData, Appointment, Doctor, Patient, User } from './types';
@@ -157,6 +158,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
             </div>
 
             <SampleScenario className="btn-soft" />
+            <ReportIssue className="btn-soft" />
 
             <Link
               to="/analytics"

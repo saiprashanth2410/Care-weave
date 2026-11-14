@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AlertTriangle, CalendarCheck, Eye, EyeOff, FlaskConical, Scan, ShieldCheck, Sparkles, Users, Zap } from 'lucide-react'
 import { firebaseConfigured } from './firebaseConfig'
-import { authConfig, HOME, signIn, signInWithFirebaseToken } from './session'
+import { authConfig, HOME, sendHelpRequest, signIn, signInWithFirebaseToken } from './session'
 
 const BARS = [42, 30, 55, 38, 68, 50, 82, 62, 90, 74, 96, 88]
 
@@ -104,17 +104,18 @@ function LoginInner() {
       setError('Enter your email above first.')
       return
     }
-    if (mode !== 'firebase') {
-      setNotice('Ask an administrator to reset your password.')
+    try {
+      // The administrator sees this in the Inbox of the admin portal and sends back a link to choose a new password.
+      await sendHelpRequest(email.trim())
+    } catch (err) {
+      setError((err as Error).message || 'Could not send your request. Try again in a moment.')
       return
     }
-    try {
-      const { firebaseResetPassword } = await import('./firebase')
-      await firebaseResetPassword(email.trim())
-      setNotice('If that email belongs to a staff account, a reset link is on its way.')
-    } catch (err) {
-      setError((err as Error).message)
+    if (mode === 'firebase') {
+      // A real mailbox also gets Firebase's own email. Best effort: the request above already reached the administrator.
+      void import('./firebase').then((m) => m.firebaseResetPassword(email.trim())).catch(() => {})
     }
+    setNotice('Your request was sent to the administrator. They will send you a link to choose a new password.')
   }
 
   const missingConfig = mode === 'firebase' && !firebaseConfigured

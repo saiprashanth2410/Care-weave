@@ -31,7 +31,7 @@ export const UNIQUE_FIELDS: Record<string, string[]> = {
 /** Collections whose documents carry a `version` and are written with optimistic concurrency. */
 export const VERSIONED = new Set([
   'patients', 'encounters', 'labOrders', 'appointments', 'prescriptions',
-  'referrals', 'carePlans', 'vitals', 'externalRecords', 'cases', 'users', 'meta',
+  'referrals', 'carePlans', 'vitals', 'externalRecords', 'cases', 'users', 'meta', 'inbox',
 ]);
 
 export interface Collection {
