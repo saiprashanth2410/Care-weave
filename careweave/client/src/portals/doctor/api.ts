@@ -83,7 +83,7 @@ export const api={
 
   // Diagnostic Lab Orders
   labOrders:()=>request<LabOrder[]>('/api/lab-orders'),
-  createLabOrder:(body:{patientId:string;testName:string;sampleType?:string;priority?:string;clinicalIndication?:string;encounterId?:string})=>
+  createLabOrder:(body:{patientId:string;testName:string;department?:string;sampleContainer?:string;sampleType?:string;priority?:string;clinicalIndication?:string;encounterId?:string})=>
     request<LabOrder>('/api/lab-orders',{method:'POST',body:JSON.stringify(body)}),
   updateLabStatus:(id:string,status:string,reason?:string)=>
     request<any>(`/api/lab-orders/${id}/status`,{method:'PATCH',body:JSON.stringify({status,reason})}),

@@ -7,6 +7,7 @@ import {
   type RegisteredPatient,
   searchRegisteredPatients,
   TEST_TEMPLATES,
+  testsByCategory,
   updateOrderStatus,
 } from '../api'
 import AIScannerModal from '../components/AIScannerModal'
@@ -35,7 +36,7 @@ export default function Orders() {
   const [newOpIp, setNewOpIp] = useState<'OP' | 'IP'>('IP')
   const [newPatientAge, setNewPatientAge] = useState<number | ''>('')
   const [newPatientGender, setNewPatientGender] = useState<'' | 'M' | 'F' | 'O'>('')
-  const [newTestName, setNewTestName] = useState<string>(Object.keys(TEST_TEMPLATES)[0])
+  const [newTestName, setNewTestName] = useState<string>('') // chosen by the technician, never pre-picked
   const [newDoctor, setNewDoctor] = useState('')
   const [doctors, setDoctors] = useState<string[]>([])
   const [newPriority, setNewPriority] = useState<Priority>('routine')
@@ -703,19 +704,25 @@ export default function Orders() {
                   Requested Diagnostic Test Panel *
                 </label>
                 <select
+                  required
                   value={newTestName}
                   onChange={(e) => setNewTestName(e.target.value)}
                   className="w-full min-h-11 border border-rule bg-paper px-3 text-sm text-ink font-medium"
                 >
-                  {Object.keys(TEST_TEMPLATES).map((t) => (
-                    <option key={t} value={t}>
-                      {t} ({TEST_TEMPLATES[t].department})
-                    </option>
+                  <option value="">Choose test…</option>
+                  {testsByCategory().map(([category, names]) => (
+                    <optgroup key={category} label={category}>
+                      {names.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
-                <p className="mt-1 text-[11px] text-ink-3">
-                  Specimen: {TEST_TEMPLATES[newTestName]?.sampleType} · Container: {TEST_TEMPLATES[newTestName]?.container}
-                </p>
+                {newTestName && (
+                  <p className="mt-1 text-[11px] text-ink-3">
+                    {TEST_TEMPLATES[newTestName]?.department} · Specimen: {TEST_TEMPLATES[newTestName]?.sampleType} · Container: {TEST_TEMPLATES[newTestName]?.container}
+                  </p>
+                )}
               </div>
 
               {/* Ordering Physician */}

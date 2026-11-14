@@ -258,7 +258,8 @@ export function doctorRoutes(ctx: AppCtx) {
       patientAge: ageFromDob(p.dob), patientGender: p.gender || 'O', encounterId: enc.id, testName,
       orderingDoctor: req.user.name, referralDoctor: req.user.name, orderedAt: now(), registrationAt: now(), status: 'requested',
       priority: /urgent|stat/i.test(String(req.body?.priority)) ? 'urgent' : 'routine',
-      sampleType: text(req.body?.sampleType, 80) || undefined, handlingNote: text(req.body?.clinicalIndication, 500) || undefined,
+      sampleType: text(req.body?.sampleType, 80) || undefined, department: text(req.body?.department, 80) || undefined,
+      sampleContainer: text(req.body?.sampleContainer, 120) || undefined, handlingNote: text(req.body?.clinicalIndication, 500) || undefined,
       amendments: [], attachments: [], createdBy: req.user.id
     });
     await audit(req, 'create', 'lab-order', o.id, `Doctor order: ${testName} (${o.priority})`);

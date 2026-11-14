@@ -122,3 +122,20 @@ test('roster and day are for the front desk; room and hours are validated', asyn
     assert.deepEqual([ok.json.room, ok.json.shiftStart, ok.json.shiftEnd], ['Room 4', '09:00', '13:00']);
   } finally { await srv.close(); }
 });
+
+test('a doctor\'s lab order keeps its department and container, so the laboratory sees where it belongs', async () => {
+  const { srv, reception, doctor, book } = await setup();
+  try {
+    const a = await book(1, '09:00 AM');
+    const patientId = a.patientId as string;
+    const made = await srv.call('POST', '/api/lab-orders', { token: doctor, body: { patientId, testName: 'CT Brain (Plain)', department: 'Radiology', sampleContainer: 'Not applicable', sampleType: 'Imaging (no specimen)', priority: 'Routine' } });
+    assert.equal(made.status, 201, JSON.stringify(made.json));
+    const lab = await srv.login('lab');
+    const rows = (await srv.call('GET', '/api/lab/orders', { token: lab })).json.data as any[];
+    const row = rows.find((o) => o.testName === 'CT Brain (Plain)');
+    assert.ok(row, 'the laboratory sees the order');
+    assert.equal(row.department, 'Radiology');
+    assert.equal(row.sampleContainer, 'Not applicable');
+    void reception;
+  } finally { await srv.close(); }
+});

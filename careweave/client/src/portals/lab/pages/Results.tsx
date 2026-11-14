@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { amendResults, attachReport, getLabOrders, openReportFile, recordTestResults, TEST_TEMPLATES } from '../api'
+import { amendResults, attachReport, getLabOrders, openReportFile, recordTestResults, templateFor } from '../api'
 import AIScannerModal from '../components/AIScannerModal'
 import StatusBadge from '../components/StatusBadge'
 import type { LabOrder, ResultFlag, TestResultItem } from '../types'
@@ -29,7 +29,7 @@ export default function Results() {
       setResults(withFlags(order.results))
     } else {
       // Find matching template or generate default parameters
-      const template = TEST_TEMPLATES[order.testName]
+      const template = templateFor(order.testName)
       if (template) {
         setResults(template.params.map((p) => ({ ...p })))
       } else {

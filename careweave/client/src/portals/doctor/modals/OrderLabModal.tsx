@@ -3,6 +3,7 @@ import { AlertTriangle, TestTube2 } from '../icons';
 import { api } from '../api';
 import type { Patient } from '../types';
 import { Modal } from '../components';
+import { TEST_TEMPLATES, testsByCategory } from '@/portals/lab/testCatalog';
 
 export function OrderLabModal({ patient: initPatient, onClose, onSaved }: { patient?: Patient; onClose: () => void; onSaved: () => void }) {
   const [patients, setPatients] = useState<Patient[]>(initPatient ? [initPatient] : []);
@@ -17,18 +18,6 @@ export function OrderLabModal({ patient: initPatient, onClose, onSaved }: { pati
     if (!initPatient) api.patients().then(setPatients).catch(() => {});
   }, [initPatient]);
 
-  const testPanels = [
-    { name: 'Comprehensive Metabolic Panel (CMP)', sample: 'Blood' },
-    { name: 'Complete Blood Count with Diff (CBC)', sample: 'Blood' },
-    { name: 'Hemoglobin A1c (HbA1c)', sample: 'Blood' },
-    { name: 'Lipid Profile Panel', sample: 'Blood' },
-    { name: 'Thyroid Stimulating Hormone (TSH)', sample: 'Blood' },
-    { name: 'Renal Function Panel', sample: 'Blood' },
-    { name: 'Urinalysis with Microscopy', sample: 'Urine' },
-    { name: 'Chest X-Ray (2 Views PA/Lateral)', sample: 'Diagnostic Imaging' },
-    { name: '12-Lead Electrocardiogram (ECG)', sample: 'Diagnostic Cardiology' }
-  ];
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPatient) return setError('Please select a patient');
@@ -38,6 +27,8 @@ export function OrderLabModal({ patient: initPatient, onClose, onSaved }: { pati
       await api.createLabOrder({
         patientId: selectedPatient.id,
         testName,
+        department: TEST_TEMPLATES[testName]?.department,
+        sampleContainer: TEST_TEMPLATES[testName]?.container,
         sampleType,
         priority,
         clinicalIndication
@@ -80,13 +71,14 @@ export function OrderLabModal({ patient: initPatient, onClose, onSaved }: { pati
             value={testName}
             onChange={e => {
               setTestName(e.target.value);
-              const found = testPanels.find(t => t.name === e.target.value);
-              setSampleType(found ? found.sample : '');
+              setSampleType(TEST_TEMPLATES[e.target.value]?.sampleType ?? '');
             }}
           >
             <option value="">Choose test…</option>
-            {testPanels.map(t => (
-              <option key={t.name} value={t.name}>{t.name}</option>
+            {testsByCategory().map(([category, names]) => (
+              <optgroup key={category} label={category}>
+                {names.map(name => <option key={name} value={name}>{name}</option>)}
+              </optgroup>
             ))}
           </select>
         </label>
