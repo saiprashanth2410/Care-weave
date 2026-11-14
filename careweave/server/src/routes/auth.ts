@@ -66,7 +66,9 @@ export function authRoutes(ctx: AppCtx) {
       try {
         // verifyIdToken checks the signature, issuer, audience and expiry. A token that fails is never trusted.
         decoded = await firebaseAuth.verifyIdToken(idToken);
-      } catch {
+      } catch (err: any) {
+        // The browser only sees a generic message; the reason (expired token, wrong project, module failed to load) goes to the server log.
+        console.error('Firebase ID token verification failed:', err?.code || err?.name, String(err?.message || err).slice(0, 300));
         return res.status(401).json({ error: 'Your sign-in could not be verified. Sign in again.' });
       }
       const uid = String(decoded.uid || '');

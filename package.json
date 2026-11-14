@@ -50,6 +50,7 @@
     "node": "22.x"
   },
   "overrides": {
-    "@grpc/grpc-js": "^1.14.7"
+    "@grpc/grpc-js": "^1.14.7",
+    "jwks-rsa": "^3.2.0"
   }
 }
