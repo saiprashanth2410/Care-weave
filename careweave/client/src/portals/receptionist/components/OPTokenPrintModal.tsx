@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import qrcode from 'qrcode-generator'
 import type { Appointment } from '../types'
 
@@ -34,7 +35,7 @@ export default function OPTokenPrintModal({
 }: OPTokenPrintModalProps) {
   const tokenNumber = appointment.token || `A-${String(tokenIndex).padStart(3, '0')}`
   const waLink = `https://wa.me/${BOT_NUMBER}?text=QUEUE%20${encodeURIComponent(tokenNumber)}`
-  const now = new Date()
+  const [now] = useState(() => new Date())
   const dateStr = now.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })
   const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 

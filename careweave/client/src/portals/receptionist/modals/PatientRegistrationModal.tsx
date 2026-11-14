@@ -29,12 +29,10 @@ export default function PatientRegistrationModal({
   const [liveMatches, setLiveMatches] = useState<Patient[]>([]);
 
   // Smart Live Duplicate Check while typing
+  const q = (form.phone.trim().length > 5 ? form.phone.trim() : form.name.trim().length > 3 ? form.name.trim() : '');
+  const shownMatches = q ? liveMatches : [];
   useEffect(() => {
-    const q = (form.phone.trim().length > 5 ? form.phone.trim() : form.name.trim().length > 3 ? form.name.trim() : '');
-    if (!q) {
-      setLiveMatches([]);
-      return;
-    }
+    if (!q) return;
     const timer = setTimeout(() => {
       api.patients(q).then((res) => {
         const matches = res.filter(p =>
@@ -45,7 +43,7 @@ export default function PatientRegistrationModal({
       }).catch(() => {});
     }, 250);
     return () => clearTimeout(timer);
-  }, [form.name, form.phone]);
+  }, [q, form.name, form.phone]);
 
   const update = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm({ ...form, [k]: e.target.value });
@@ -166,18 +164,18 @@ export default function PatientRegistrationModal({
         </div>
 
         <form className="form-grid" onSubmit={submit}>
-          {liveMatches.length > 0 && (
+          {shownMatches.length > 0 && (
             <div className="alert warning span-2" style={{ marginBottom: 12, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
               <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 2 }} />
               <div style={{ flex: 1 }}>
-                <strong style={{ display: 'block' }}>⚠️ Existing Patient Record Detected ({liveMatches.length} match)</strong>
+                <strong style={{ display: 'block' }}>⚠️ Existing Patient Record Detected ({shownMatches.length} match)</strong>
                 <p style={{ margin: '2px 0 6px', fontSize: 12 }}>
-                  "{liveMatches[0].name}" · UHID: <span className="mono font-bold">{liveMatches[0].patientId}</span> · Phone: {liveMatches[0].phone}
+                  "{shownMatches[0].name}" · UHID: <span className="mono font-bold">{shownMatches[0].patientId}</span> · Phone: {shownMatches[0].phone}
                 </p>
                 <button
                   type="button"
                   className="btn-secondary small-btn"
-                  onClick={() => onBookAppt(liveMatches[0])}
+                  onClick={() => onBookAppt(shownMatches[0])}
                 >
                   Use Existing File & Book Appointment →
                 </button>

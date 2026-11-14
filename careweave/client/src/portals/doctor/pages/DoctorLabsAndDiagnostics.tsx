@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Clock3, Plus, Search } from '../icons';
 import { api } from '../api';
 import type { LabOrder, Patient } from '../types';
@@ -19,12 +19,12 @@ export function DoctorLabsAndDiagnostics({
   const [q, setQ] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<LabOrder | null>(null);
 
-  const load = () => {
+  const load = useCallback(() => {
     api.labOrders().then(setOrders).catch(e => notify(e.message));
     api.patients().then(setPatients).catch(() => {});
-  };
+  }, [notify]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   const shown = q
     ? orders.filter(o => [o.testName, o.patientName, o.orderId, o.status].some(v => String(v || '').toLowerCase().includes(q.toLowerCase())))

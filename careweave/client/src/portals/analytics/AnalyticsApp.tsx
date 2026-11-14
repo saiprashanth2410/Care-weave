@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -86,24 +86,21 @@ export default function AnalyticsApp() {
   const [activeTab, setActiveTab] = useState<'operations' | 'lab' | 'pharmacy' | 'sql'>('operations');
   const [notification, setNotification] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const fetchAnalytics = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const res = await fetch('/api/analytics/overview', {
-        headers: { 'Content-Type': 'application/json' },
-      });
+  const loadAnalytics = useCallback(() =>
+    fetch('/api/analytics/overview', { headers: { 'Content-Type': 'application/json' } })
+      .then(res => {
+        if (!res.ok) throw new Error(`Failed to load analytics: ${res.statusText}`);
+        return res.json();
+      })
+      .then(json => setData(json))
+      .catch((err: any) => setError(err?.message || 'Could not connect to Analytics Engine'))
+      .finally(() => setLoading(false)),
+  []);
 
-      if (!res.ok) {
-        throw new Error(`Failed to load analytics: ${res.statusText}`);
-      }
-      const json = await res.json();
-      setData(json);
-    } catch (err: any) {
-      setError(err?.message || 'Could not connect to Analytics Engine');
-    } finally {
-      setLoading(false);
-    }
+  const fetchAnalytics = () => {
+    setLoading(true);
+    setError(null);
+    return loadAnalytics();
   };
 
   const handleSync = async (full = false) => {
@@ -150,8 +147,8 @@ export default function AnalyticsApp() {
   };
 
   useEffect(() => {
-    fetchAnalytics();
-  }, []);
+    loadAnalytics();
+  }, [loadAnalytics]);
 
   return (
     <div className="min-h-screen bg-paper text-ink font-sans antialiased selection:bg-accent selection:text-surface">

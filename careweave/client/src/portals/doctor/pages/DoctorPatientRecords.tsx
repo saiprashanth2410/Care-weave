@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Activity, AlertTriangle, Check, ChevronRight, ClipboardList, Clock3, FileText, FlaskConical, Plus, Search, Stethoscope, TestTube2, AlertCircle } from '../icons';
 import { api } from '../api';
 import type { Patient, PatientRecord } from '../types';
@@ -34,14 +34,17 @@ export function DoctorPatientRecords({
 
   const loadPatients = useCallback(() => {
     api.patients(q).then(setPatients).catch(e => notify(e.message));
-  }, [q]);
+  }, [q, notify]);
 
   useEffect(() => { loadPatients(); }, [loadPatients]);
+
+  const selectedRef = useRef<PatientRecord | null>(null);
+  useEffect(() => { selectedRef.current = selected; }, [selected]);
 
   useEffect(() => {
     if (preSelectedPatient) {
       api.patient(preSelectedPatient.id).then(setSelected).catch(() => {});
-    } else if (patients.length > 0 && !selected) {
+    } else if (patients.length > 0 && !selectedRef.current) {
       api.patient(patients[0].id).then(setSelected).catch(() => {});
     }
   }, [preSelectedPatient, patients]);
@@ -52,13 +55,14 @@ export function DoctorPatientRecords({
     }
   };
 
-  const [brief, setBrief] = useState<{ text: string; source: 'ai' | 'rules'; model?: string; note: string } | null>(null);
+  type Brief = { text: string; source: 'ai' | 'rules'; model?: string; note: string };
+  const [briefFor, setBriefFor] = useState<{ id: string; brief: Brief } | null>(null);
+  const brief = briefFor && briefFor.id === selected?.id ? briefFor.brief : null;
   const [briefBusy, setBriefBusy] = useState(false);
-  useEffect(() => { setBrief(null); }, [selected?.id]);
   const makeBrief = () => {
     if (!selected) return;
     setBriefBusy(true);
-    api.summary(selected.id).then(setBrief).catch(e => notify(e.message)).finally(() => setBriefBusy(false));
+    api.summary(selected.id).then(b => setBriefFor({ id: selected.id, brief: b })).catch(e => notify(e.message)).finally(() => setBriefBusy(false));
   };
 
   const latestVital = selected?.vitals?.[0];

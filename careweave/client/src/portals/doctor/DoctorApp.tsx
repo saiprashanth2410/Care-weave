@@ -1,5 +1,5 @@
 import { clearSession } from '@/auth/session';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useLiveRefresh } from '../../useLiveRefresh';
 import { CriticalBanner, type CriticalAlert } from './CriticalBanner';
 import { Activity, CalendarDays, Check, ClipboardList, FileText, FlaskConical, HeartPulse, LayoutDashboard, LogOut, Menu, RefreshCw, Stethoscope, Users } from './icons';
@@ -31,12 +31,16 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
   const [collapsed, setCollapsed] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [alerts, setAlerts] = useState<CriticalAlert[]>([]);
+  const [toast, setToast] = useState('');
+  const notify = useCallback((s: string) => {
+    setToast(s);
+    setTimeout(() => setToast(''), 3500);
+  }, []);
   useLiveRefresh(() => setRefresh(r => r + 1), 5000, (type, data) => {
     if (type !== 'critical') return;
     setAlerts(a => [data as CriticalAlert, ...a.filter(x => x.orderId !== data.orderId)]);
     notify(`Critical result: ${data.patientName}`);
   });
-  const [toast, setToast] = useState('');
   const [openCases, setOpenCases] = useState(0);
   useEffect(() => { api.cases().then(c => setOpenCases(c.length)).catch(() => setOpenCases(0)); }, [refresh]);
 
@@ -60,11 +64,6 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
     ['calculators', 'Clinical Calculators', Activity],
     ['reconciliation', 'External Records Review', RefreshCw]
   ];
-
-  const notify = (s: string) => {
-    setToast(s);
-    setTimeout(() => setToast(''), 3500);
-  };
 
   const handleOpenPatientRecord = (p: Patient) => {
     setSelectedPatientForRecord(p);
@@ -225,6 +224,7 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
           {section === 'reconciliation' && (
             <DoctorReconciliation notify={notify} />
           )}
+
           </PortalBoundary>
         </div>
       </main>

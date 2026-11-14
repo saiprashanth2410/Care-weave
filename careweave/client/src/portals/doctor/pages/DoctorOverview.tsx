@@ -23,13 +23,14 @@ export function DoctorOverview({
   onOrderLab: (p: Patient) => void;
   onPrescribe: (p: Patient) => void;
 }) {
+  const [today] = useState(() => new Date());
   const [data, setData] = useState<Dashboard | null>(null);
   const [allPatients, setAllPatients] = useState<Patient[]>([]);
 
   useEffect(() => {
     api.dashboard().then(setData).catch(e => notify(e.message));
     api.patients().then(setAllPatients).catch(() => {});
-  }, [refresh]);
+  }, [refresh, notify]);
 
   if (!data) return <Loading />;
   const s = data.stats;
@@ -94,7 +95,7 @@ export function DoctorOverview({
             <div>
               <h3>Today's Clinical Roster & Patient Flow</h3>
               <p className="muted">
-                {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })} · Assigned Clinician: {user.name}
+                {today.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })} · Assigned Clinician: {user.name}
               </p>
             </div>
             <button className="text-button" onClick={() => go('appointments')}>

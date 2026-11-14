@@ -36,7 +36,8 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [refresh, setRefresh] = useState(0);
   useLiveRefresh(() => setRefresh(r => r + 1));
   const [toast, setToast] = useState('');
-  const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+  const [now, setNow] = useState(() => new Date());
+  const currentTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   // Global modals triggered from header / quick buttons
   const [showRegisterModal, setShowRegisterModal] = useState(false);
@@ -56,7 +57,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   // Live clock
   useEffect(() => {
     const timer = setInterval(() => {
-      setCurrentTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      setNow(new Date());
     }, 10000);
     return () => clearInterval(timer);
   }, []);
@@ -145,7 +146,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
           <div className="topbar-center">
             <div className="live-badge">
               <span className="pulse"></span>
-              <span>{currentTime} · {new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+              <span>{currentTime} · {now.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
             </div>
 
             <SampleScenario className="btn-soft" />

@@ -22,11 +22,11 @@ export default function OverviewSection({
   onBook: () => void;
   onPrintToken?: (a: Appointment, idx?: number) => void;
 }) {
+  const [today] = useState(() => new Date());
   const [data, setData] = useState<Dashboard | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(() => {
-    setLoading(true);
     api.dashboard()
       .then(d => setData(d))
       .catch(e => notify(e.message))
@@ -89,7 +89,7 @@ export default function OverviewSection({
           <p className="eyebrow">COMMAND CENTER</p>
           <h1>{greeting()}, {user.name.split(' ')[0]}.</h1>
           <p className="muted">
-            Front desk overview for {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}.
+            Front desk overview for {today.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}.
           </p>
         </div>
         <div className="header-actions">

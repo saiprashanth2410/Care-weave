@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Plus } from '../icons';
 import { api } from '../api';
 import type { Patient, Referral } from '../types';
@@ -16,11 +16,11 @@ export function DoctorReferrals({
 }) {
   const [referrals, setReferrals] = useState<Referral[]>([]);
 
-  const load = () => {
+  const load = useCallback(() => {
     api.referrals().then(setReferrals).catch(e => notify(e.message));
-  };
+  }, [notify]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   const updateStatus = async (r: Referral, status: string) => {
     try {

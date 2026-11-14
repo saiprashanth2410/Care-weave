@@ -1,7 +1,7 @@
 // The lab design system has no icon set: labels carry the meaning.
 // These keep the receptionist markup unchanged while rendering text or nothing.
 type IconProps = { size?: number; className?: string; strokeWidth?: number; style?: React.CSSProperties }
-const none = (_: IconProps) => null
+const none = (_props: IconProps): null => null
 
 export const AlertCircle = none
 export const AlertTriangle = none

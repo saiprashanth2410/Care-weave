@@ -17,16 +17,17 @@ export default function PatientDrawer({
   onBookAppt: (p: Patient) => void;
   onEditPatient: (p: Patient) => void;
 }) {
-  const [record, setRecord] = useState<AdminPatientRecord | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [result, setResult] = useState<{ id: string; record: AdminPatientRecord | null } | null>(null);
+  const loading = result?.id !== patient.id;
+  const record = result?.id === patient.id ? result.record : null;
 
   useEffect(() => {
-    setLoading(true);
+    let live = true;
     api.patientAdmin(patient.id)
-      .then(setRecord)
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [patient]);
+      .then(r => { if (live) setResult({ id: patient.id, record: r }); })
+      .catch(() => { if (live) setResult({ id: patient.id, record: null }); });
+    return () => { live = false; };
+  }, [patient.id]);
 
   return (
     <div className="drawer-backdrop" onClick={onClose}>
