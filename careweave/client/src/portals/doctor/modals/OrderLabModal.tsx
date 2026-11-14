@@ -7,8 +7,8 @@ import { Modal } from '../components';
 export function OrderLabModal({ patient: initPatient, onClose, onSaved }: { patient?: Patient; onClose: () => void; onSaved: () => void }) {
   const [patients, setPatients] = useState<Patient[]>(initPatient ? [initPatient] : []);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(initPatient || null);
-  const [testName, setTestName] = useState('Comprehensive Metabolic Panel (CMP)');
-  const [sampleType, setSampleType] = useState('Blood');
+  const [testName, setTestName] = useState('');
+  const [sampleType, setSampleType] = useState('');
   const [priority, setPriority] = useState('Routine');
   const [clinicalIndication, setClinicalIndication] = useState('');
   const [busy, setBusy] = useState(false);
@@ -76,13 +76,15 @@ export function OrderLabModal({ patient: initPatient, onClose, onSaved }: { pati
         <label className="span-2">
           Diagnostic Test Panel
           <select
+            required
             value={testName}
             onChange={e => {
               setTestName(e.target.value);
               const found = testPanels.find(t => t.name === e.target.value);
-              if (found) setSampleType(found.sample);
+              setSampleType(found ? found.sample : '');
             }}
           >
+            <option value="">Choose test…</option>
             {testPanels.map(t => (
               <option key={t.name} value={t.name}>{t.name}</option>
             ))}
