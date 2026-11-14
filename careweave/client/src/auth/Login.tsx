@@ -36,8 +36,7 @@ function FloatingCard({ className = '', style, children }: { className?: string;
 function LoginInner() {
   const nav = useNavigate()
   const [cfg, setCfg] = useState<{ firebase: boolean; localLogin: boolean } | null>(null)
-  const [useLocal, setUseLocal] = useState(false)
-  const mode: 'loading' | 'firebase' | 'local' = !cfg ? 'loading' : cfg.firebase && !useLocal ? 'firebase' : 'local'
+  const mode: 'loading' | 'firebase' | 'local' = !cfg ? 'loading' : cfg.firebase ? 'firebase' : 'local'
   const [email, setEmail] = useState(() => {
     try { return localStorage.getItem('cw_email') || '' } catch { return '' }
   })
@@ -188,13 +187,8 @@ function LoginInner() {
                   <Link to="/privacy" className="text-[#0284c7] hover:underline">Privacy Policy</Link>.
                 </p>
 
-                <div className="flex items-center justify-between pt-2 text-sm text-slate-300">
+                <div className="flex items-center justify-center pt-2 text-sm text-slate-300">
                   <button type="button" onClick={forgot} className="cursor-pointer hover:underline">Forgot Password?</button>
-                  {cfg?.firebase && cfg.localLogin && (
-                    <button type="button" onClick={() => { setUseLocal((v) => !v); setError(''); setNotice('') }} className="cursor-pointer text-xs text-slate-400 hover:underline">
-                      {useLocal ? 'Use Firebase' : 'Dev sign-in'}
-                    </button>
-                  )}
                 </div>
               </form>
             </div>

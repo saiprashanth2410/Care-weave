@@ -163,7 +163,7 @@ export default function AnalyticsApp() {
            >
               <ArrowLeft size={16} />
             </button>
-            <img src="/careweave-mark.png" alt="" className="h-9 w-9 rounded-sm" />
+            <img src="/careweave-mark-transparent.png" alt="" className="h-9 w-9 rounded-sm" />
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-bold tracking-tight text-ink">CareWeave</h1>
