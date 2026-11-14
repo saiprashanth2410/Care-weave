@@ -126,7 +126,6 @@ export type Dashboard = {
     followups?: number;
   };
   appointments: Appointment[];
-  recent: AuditLog[];
 };
 
 /** Details a registration form can be pre-filled with. */

@@ -201,3 +201,14 @@ test('a disabled doctor no longer appears in the booking list', async () => {
     assert.ok(!(await srv.call('GET', '/api/doctors', { token: reception })).json.some((x: any) => x.id === d.id));
   } finally { await srv.close(); }
 });
+
+test('the front desk dashboard carries no audit rows, so other staff\'s actions (including an administrator\'s) are not exposed', async () => {
+  const { srv, admin, reception } = await setup();
+  try {
+    await srv.call('POST', '/api/staff', { token: admin, body: { name: 'Private Hire', email: 'private.hire@careweave.test', role: 'doctor' } });
+    const dash = await srv.call('GET', '/api/dashboard', { token: reception });
+    assert.equal(dash.status, 200);
+    assert.equal(dash.json.recent, undefined);
+    assert.ok(!dash.text.includes('private.hire@careweave.test'));
+  } finally { await srv.close(); }
+});

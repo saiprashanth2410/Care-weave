@@ -65,8 +65,8 @@ export function adminRoutes(ctx: AppCtx) {
     if (req.user.role === 'doctor') return res.json(await doctorDashboard(ctx.repos, req.user));
     // Today's list is one day's rows; the all-time figures are counts in the database, not a scan of every appointment.
     const A = ctx.repos.appointments;
-    const [todayAppts, patients, recent, waiting, checkedIn, inConsultation, completed, cancelled] = await Promise.all([
-      A.onDay(isoToday()), ctx.repos.patients.count(), ctx.repos.audit.recent(15),
+    const [todayAppts, patients, waiting, checkedIn, inConsultation, completed, cancelled] = await Promise.all([
+      A.onDay(isoToday()), ctx.repos.patients.count(),
       A.count({ status: { $in: ['Waiting', 'Checked in', 'Checked In'] } }), A.count({ status: { $in: ['Checked in', 'Checked In'] } }),
       A.count({ status: 'In Consultation' }), A.count({ status: 'Completed' }), A.count({ status: 'Cancelled' }),
     ]);
@@ -78,7 +78,7 @@ export function adminRoutes(ctx: AppCtx) {
       todayCompleted: n(todayAppts, 'Completed'),
       todayScheduled: n(todayAppts, 'Scheduled'),
     };
-    res.json({ stats, appointments: todayAppts.sort((a: any, b: any) => String(a.time).localeCompare(String(b.time))), recent });
+    res.json({ stats, appointments: todayAppts.sort((a: any, b: any) => String(a.time).localeCompare(String(b.time))) });
   });
 
   // ── Synthetic sample scenario ───────────────────────────────────────────────
