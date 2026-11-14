@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, useCallback } from 'react';
 import { Activity, AlertTriangle, Check, ChevronRight, ClipboardList, Clock3, FileText, FlaskConical, Plus, Search, Stethoscope, TestTube2, AlertCircle } from '../icons';
 import { api } from '../api';
 import type { Patient, PatientRecord } from '../types';
 import { fmtDate, initials } from '../helpers';
 import { PageHeader, StatusBadge } from '../components';
-import { TimelineView, LabReview } from './PatientTimeline';
+const TimelineView = lazy(() => import('./PatientTimeline').then(m => ({ default: m.TimelineView })));
+const LabReview = lazy(() => import('./PatientTimeline').then(m => ({ default: m.LabReview })));
 import { RecordVitalsModal } from '../modals/RecordVitalsModal';
 import { AddAllergyModal } from '../modals/AddAllergyModal';
 import { AddProblemModal } from '../modals/AddProblemModal';
@@ -297,10 +298,12 @@ export function DoctorPatientRecords({
               )}
 
               {/* TAB 2: HEALTH TIMELINE */}
+              <Suspense fallback={<p className="muted" role="status" style={{ padding: 16 }}>Loading…</p>}>
               {activeTab === 'timeline' && <TimelineView record={selected} />}
 
               {/* TAB 3: LABS & COMPARABLE TRENDS */}
               {activeTab === 'labs' && <LabReview record={selected} />}
+              </Suspense>
 
               {/* TAB 4: PRESCRIPTIONS */}
               {activeTab === 'rx' && (
