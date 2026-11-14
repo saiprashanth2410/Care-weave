@@ -5,6 +5,12 @@ import type { Doctor, Patient } from '../types';
 import { fmtDate, initials, todayISO } from '../helpers';
 
 // ─── APPOINTMENT BOOKING MODAL ──────────────────────────────────────────────
+/** "Dr. A. Name (Consultant Physician)" + "General Medicine" reads as two brackets; show the name, then where they sit. */
+const doctorLabel = (d: { name: string; facility?: string }) => {
+  const name = d.name.replace(/\s*\([^)]*\)\s*$/, '').trim() || d.name;
+  return d.facility ? `${name} · ${d.facility}` : name;
+};
+
 export default function AppointmentModal({
   patient: initPatient,
   onClose,
@@ -183,7 +189,7 @@ export default function AppointmentModal({
               onChange={e => setForm({ ...form, doctorId: e.target.value })}
             >
               {doctors.map(d => (
-                <option key={d.id} value={d.id}>{d.name} ({d.facility})</option>
+                <option key={d.id} value={d.id}>{doctorLabel(d)}</option>
               ))}
             </select>
           </label>

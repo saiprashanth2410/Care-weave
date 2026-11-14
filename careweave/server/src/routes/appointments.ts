@@ -25,7 +25,7 @@ export function appointmentRoutes(ctx: AppCtx) {
 
   // Doctor list for receptionist appointment booking
   router.get('/doctors', roles('receptionist', 'doctor', 'lab'), async (_req, res) => {
-    const doctors = (await ctx.repos.users.byRole('doctor')).map((u: any) => ({ id: u.id, name: u.name, facility: u.facility }));
+    const doctors = (await ctx.repos.users.byRole('doctor')).filter((u: any) => u.active !== false).map((u: any) => ({ id: u.id, name: u.name, facility: u.facility }));
     res.json(doctors);
   });
 
