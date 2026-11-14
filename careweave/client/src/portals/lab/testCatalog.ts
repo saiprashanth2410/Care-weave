@@ -1,8 +1,11 @@
-import type { TestResultItem } from './types'
+import { MORE_TESTS, type TestTemplate } from './moreTests'
+
+export type { TestTemplate }
 
 // Reference catalogue: departments, specimen types, containers, parameters and reference ranges per test.
-// Order and result data lives in the database, never here.
-export const TEST_TEMPLATES: Record<string, { department: string; sampleType: string; container: string; params: TestResultItem[] }> = {
+// Order and result data lives in the database, never here. The doctor's order form and the laboratory's
+// requisition form both read this one list, so a test ordered by a doctor opens in the lab with its parameters.
+const CORE: Record<string, Omit<TestTemplate, 'category'>> = {
   'Complete Blood Count (CBC)': {
     department: 'Hematology',
     sampleType: 'Whole Blood',
@@ -107,3 +110,43 @@ export const TEST_TEMPLATES: Record<string, { department: string; sampleType: st
     ],
   },
 }
+
+const CORE_CATEGORY: Record<string, string> = {
+  'Complete Blood Count (CBC)': 'Hematology',
+  'Renal Function Panel': 'Biochemistry',
+  'Lipid Profile': 'Biochemistry',
+  'HbA1c & Fasting Glucose': 'Biochemistry',
+  'Liver Function Profile (LFT)': 'Biochemistry',
+  'Troponin I - Quantitative': 'Cardiac & Critical Care',
+  'Arterial Blood Gas (ABG)': 'Cardiac & Critical Care',
+  'Urine Routine & Microscopic': 'Urine & Stool',
+}
+
+export const TEST_TEMPLATES: Record<string, TestTemplate> = {
+  ...Object.fromEntries(Object.entries(CORE).map(([name, t]) => [name, { ...t, category: CORE_CATEGORY[name] ?? 'Biochemistry' }])),
+  ...MORE_TESTS,
+}
+
+/** Names doctors' orders carried before the catalogue was shared, so those orders still open with their parameters. */
+export const TEST_ALIASES: Record<string, string> = {
+  'Complete Blood Count with Diff (CBC)': 'Complete Blood Count (CBC)',
+  'Hemoglobin A1c (HbA1c)': 'HbA1c (Glycated Hemoglobin)',
+  'Lipid Profile Panel': 'Lipid Profile',
+  'Urinalysis with Microscopy': 'Urine Routine & Microscopic',
+  'Chest X-Ray (2 Views PA/Lateral)': 'X-Ray Chest (PA / Lateral)',
+  '12-Lead Electrocardiogram (ECG)': 'ECG (12-Lead)',
+}
+
+/** The template for an order's test name, whichever spelling the order was written with. */
+export const templateFor = (testName?: string): TestTemplate | undefined =>
+  testName ? TEST_TEMPLATES[testName] ?? TEST_TEMPLATES[TEST_ALIASES[testName]] : undefined
+
+const CATEGORY_ORDER = [
+  'Hematology', 'Biochemistry', 'Thyroid & Hormones', 'Cardiac & Critical Care', 'Urine & Stool', 'Microbiology',
+  'Serology & Infectious Disease', 'Imaging: X-Ray', 'Imaging: Ultrasound', 'Imaging: CT Scan', 'Imaging: MRI', 'Heart & Lung Function',
+]
+
+/** Test names grouped by category, in the order a person would look for them. */
+export const testsByCategory = (): [string, string[]][] =>
+  CATEGORY_ORDER.map((c): [string, string[]] => [c, Object.keys(TEST_TEMPLATES).filter((n) => TEST_TEMPLATES[n].category === c).sort()])
+    .filter(([, names]) => names.length > 0)

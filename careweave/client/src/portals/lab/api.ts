@@ -1,8 +1,8 @@
 import { clearSession } from '@/auth/session'
 import type { LabOrder, LabOrderStatus, Priority, TestResultItem } from './types'
 
-export { TEST_TEMPLATES } from './testCatalog'
-import { TEST_TEMPLATES } from './testCatalog'
+export { TEST_TEMPLATES, templateFor, testsByCategory } from './testCatalog'
+import { templateFor } from './testCatalog'
 
 // The server answers 409 with this text when a record changed after this screen read it.
 const CONFLICT = 'Record was changed by someone else, reload and retry'
@@ -170,7 +170,7 @@ export async function createLabOrder(data: {
   encounterId?: string
   external?: boolean
 }): Promise<LabOrder> {
-  const template = TEST_TEMPLATES[data.testName]
+  const template = templateFor(data.testName)
   const body = await request<{ data: LabOrder }>('/api/lab/orders', {
     method: 'POST',
     body: JSON.stringify({
