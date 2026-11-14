@@ -1,8 +1,8 @@
-export type Role='receptionist'|'lab'|'doctor';
+export type Role='receptionist'|'lab'|'doctor'|'admin';
 export type Status='Requested'|'Sample Collection Pending'|'Sample Collected'|'Processing'|'Awaiting Verification'|'Verified'|'Released to Doctor';
 export type AppointmentStatus='Scheduled'|'Checked In'|'Waiting'|'In Consultation'|'Completed'|'Cancelled'|'No Show';
 
-export type User={id:string;name:string;email:string;role:Role;facility:string};
+export type User={id:string;name:string;email:string;role:Role;facility:string;permissions?:string[]};
 
 export type Allergy={
   id:string;

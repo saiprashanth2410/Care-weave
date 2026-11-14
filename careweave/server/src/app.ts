@@ -11,15 +11,17 @@ import { makeAudit } from './services/audit.js';
 import { BROWSER_HEADER, credentialOf, userForToken } from './services/sessions.js';
 import { authRoutes, sessionRoutes } from './routes/auth.js';
 import { adminRoutes, healthRoutes } from './routes/admin.js';
+import { staffRoutes } from './routes/staff.js';
 import { cronRoutes } from './routes/cron.js';
 import { patientRoutes } from './routes/patients.js';
 import { appointmentRoutes } from './routes/appointments.js';
 import { labRoutes, UPLOAD_ROUTES } from './routes/lab.js';
 import { doctorRoutes } from './routes/doctor.js';
 import { LiveHub } from './liveEvents.js';
+import { firebaseUsersFromEnv, type FirebaseUsers } from './services/firebaseUsers.js';
 import { whatsappPublicRoutes, whatsappSimulatorRoutes } from './whatsapp/routes.js';
 
-export type CreateAppOptions = { repos: Repos | (() => Repos); config?: Partial<AppConfig>; live?: LiveHub };
+export type CreateAppOptions = { repos: Repos | (() => Repos); config?: Partial<AppConfig>; live?: LiveHub; firebaseUsers?: FirebaseUsers };
 
 /** Wires middleware and routers. All data access goes through `repos`; this file holds no state of its own. */
 export function createApp(opts: CreateAppOptions) {
@@ -40,6 +42,7 @@ export function createApp(opts: CreateAppOptions) {
   const ctx: AppCtx = {
     get repos() { return getRepos(); },
     audit, auditOnce, roles, config,
+    firebaseUsers: opts.firebaseUsers ?? firebaseUsersFromEnv(),
     live: opts.live ?? new LiveHub(getRepos),
     async auth(req: any, res: any, next: any) {
       const { token, via } = credentialOf(req);
@@ -88,6 +91,7 @@ export function createApp(opts: CreateAppOptions) {
   app.use('/api', sessionRoutes(ctx));
   app.use('/api', whatsappSimulatorRoutes({ repos: () => ctx.repos }));
   app.use('/api', adminRoutes(ctx));
+  app.use('/api', staffRoutes(ctx));
   app.use('/api', patientRoutes(ctx));
   app.use('/api', appointmentRoutes(ctx));
   app.use('/api', labRoutes(ctx));

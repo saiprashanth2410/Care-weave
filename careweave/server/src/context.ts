@@ -1,6 +1,7 @@
 import type { Repos } from './repo/index.js';
 import type { LiveHub } from './liveEvents.js';
 import type { AuditFn } from './services/audit.js';
+import type { FirebaseUsers } from './services/firebaseUsers.js';
 
 export type AppConfig = {
   isVercel: boolean;
@@ -20,4 +21,5 @@ export type AppCtx = {
   limits: { login: any; upload: any };
   config: AppConfig;
   live: LiveHub;
+  firebaseUsers: FirebaseUsers;
 };

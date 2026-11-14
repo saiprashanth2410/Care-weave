@@ -5,6 +5,8 @@ import { ConflictError } from '../repo/index.js';
 import { catchAsyncRoutes } from '../asyncRoutes.js';
 import { BROWSER_HEADER, clearedCookie, endSession, sessionCookie, startSession } from '../services/sessions.js';
 
+const DISABLED = 'This account has been disabled. Ask an administrator.';
+
 // ── Sign-in ────────────────────────────────────────────────────────────────
 // With FIREBASE_PROJECT_ID set, staff sign in with Firebase Authentication (email and password) and the server
 // verifies the Firebase ID token itself. Roles and permissions always come from the staff directory kept here,
@@ -52,6 +54,7 @@ export function authRoutes(ctx: AppCtx) {
     const hash = u?.passwordHash || '$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidi';
     const ok = await bcrypt.compare(String(password || ''), hash).catch(() => false);
     if (!u || !u.passwordHash || !ok) return res.status(401).json({ error: 'Invalid email or password' });
+    if (u.active === false) return res.status(403).json({ error: DISABLED });
     await signIn(u, 'session', req, res);
   });
 
@@ -73,6 +76,7 @@ export function authRoutes(ctx: AppCtx) {
       // Only people already in the staff directory can sign in. Roles and permissions come from there, never from the token.
       let u = await ctx.repos.users.byEmail(email);
       if (!u) return res.status(403).json({ error: 'This account is not registered as CareWeave staff. Ask an administrator.' });
+      if (u.active === false) return res.status(403).json({ error: DISABLED });
       if (u.firebaseUid && u.firebaseUid !== uid) return res.status(403).json({ error: 'This email is linked to a different sign-in account.' });
       if (!u.firebaseUid) {
         if (requireVerifiedEmail && decoded.email_verified !== true) {

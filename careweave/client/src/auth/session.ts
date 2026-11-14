@@ -1,4 +1,4 @@
-export type Role = 'receptionist' | 'lab' | 'doctor'
+export type Role = 'receptionist' | 'lab' | 'doctor' | 'admin'
 export type SessionUser = { id: string; name: string; email: string; role: Role; facility: string; permissions?: string[] }
 
 // The session itself is an httpOnly cookie; nothing about it is stored where scripts can read it.
@@ -13,6 +13,7 @@ export const HOME: Record<Role, string> = {
   receptionist: '/receptionist',
   lab: '/lab/overview',
   doctor: '/doctor',
+  admin: '/admin',
 }
 
 async function call<T>(url: string, init: RequestInit = {}): Promise<T> {

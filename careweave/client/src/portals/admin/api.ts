@@ -1,0 +1,34 @@
+export type AuditRow = { id: string; actorId: string; actorName?: string; actorRole: string; action: string; entity: string; entityId: string; detail: string; timestamp: string };
+export type StaffRole = 'receptionist' | 'lab' | 'doctor' | 'admin';
+export type Staff = {
+  id: string; name: string; email: string; role: StaffRole; facility: string; permissions: string[];
+  active: boolean; localLogin: boolean; firebaseLinked: boolean; version: number;
+};
+export type Catalog = { roles: StaffRole[]; permissions: Record<StaffRole, string[]>; defaults: Record<StaffRole, string[]>; firebase: boolean };
+export type Created = Staff & { firebase: 'created' | 'existing' | 'not-configured'; temporaryPassword?: string };
+export type NewStaff = { name: string; email: string; role: StaffRole; facility: string; permissions: string[]; password?: string };
+
+async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...(init.headers || {}) } });
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 401) window.location.assign('/login');
+  if (!res.ok) throw new Error(body.error || 'Request failed');
+  return body as T;
+}
+
+export const adminApi = {
+  catalog: () => request<Catalog>('/api/staff/catalog'),
+  staff: () => request<Staff[]>('/api/staff'),
+  createStaff: (body: NewStaff) => request<Created>('/api/staff', { method: 'POST', body: JSON.stringify(body) }),
+  updateStaff: (id: string, body: Partial<NewStaff> & { active?: boolean; version?: number }) =>
+    request<Staff>(`/api/staff/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  resetLink: (id: string) => request<{ link: string }>(`/api/staff/${id}/reset-link`, { method: 'POST' }),
+  auditLog: (q: { action?: string; patient?: string; before?: string }) => {
+    const p = new URLSearchParams();
+    if (q.action) p.set('action', q.action);
+    if (q.before) p.set('before', q.before);
+    p.set('limit', '50');
+    const url = q.patient ? `/api/patients/${encodeURIComponent(q.patient)}/access-log?${p}` : `/api/audit?${p}`;
+    return request<{ rows: AuditRow[]; nextBefore: string | null; patient?: { id: string; patientId: string; name: string } }>(url);
+  },
+};

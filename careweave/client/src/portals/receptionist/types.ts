@@ -1,4 +1,4 @@
-export type Role = 'receptionist' | 'lab' | 'doctor';
+export type Role = 'receptionist' | 'lab' | 'doctor' | 'admin';
 
 export type AppointmentStatus =
   | 'Scheduled'

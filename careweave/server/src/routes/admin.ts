@@ -28,6 +28,32 @@ export function adminRoutes(ctx: AppCtx) {
   catchAsyncRoutes(router);
   const { roles, audit } = ctx;
 
+  // ── Audit log ───────────────────────────────────────────────────────────────
+  // Only staff granted the 'audit' permission can read it, and reading it is itself recorded.
+  const auditors = (req: any, res: any, next: any) =>
+    (req.user.permissions || []).includes('audit') ? next() : res.status(403).json({ error: 'Reading the audit log needs the audit permission' });
+  const str = (v: unknown, max = 80) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+  const iso = (v: unknown) => { const s = str(v, 40); return s && !Number.isNaN(Date.parse(s)) ? new Date(s).toISOString() : ''; };
+  const pageSize = (v: unknown) => Math.min(200, Math.max(1, Number.parseInt(String(v ?? ''), 10) || 50));
+
+  router.get('/audit', auditors, async (req: any, res) => {
+    const q = req.query;
+    const filters = { actorId: str(q.actorId), action: str(q.action), entity: str(q.entity), entityId: str(q.entityId), from: iso(q.from), before: iso(q.before) };
+    const rows = await ctx.repos.audit.search(filters, pageSize(q.limit));
+    const used = Object.entries(filters).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`);
+    await ctx.auditOnce(req, 'read', 'audit-log', 'directory', used.length ? `Filtered by ${used.join(', ')}` : 'Viewed the audit log');
+    res.json({ rows, nextBefore: rows.length ? rows[rows.length - 1].timestamp : null });
+  });
+
+  // Who has opened, changed or been refused this patient's chart. Accepts the patient's id or their UHID.
+  router.get('/patients/:id/access-log', auditors, async (req: any, res) => {
+    const p = await ctx.repos.patients.byRef(String(req.params.id));
+    if (!p) return res.status(404).json({ error: 'Patient not found' });
+    const rows = await ctx.repos.audit.search({ entity: 'patient', entityId: p.id, before: iso(req.query.before) }, pageSize(req.query.limit));
+    await ctx.auditOnce(req, 'read', 'access-log', p.id, `Viewed who accessed ${p.name}'s chart`);
+    res.json({ patient: { id: p.id, patientId: p.patientId, name: p.name }, rows, nextBefore: rows.length ? rows[rows.length - 1].timestamp : null });
+  });
+
   // Live updates. A serverless host cannot hold the connection open, so there the screens fall back to polling.
   router.get('/events', (req: any, res) => {
     if (ctx.config.isVercel) return res.status(204).end();
@@ -35,6 +61,7 @@ export function adminRoutes(ctx: AppCtx) {
   });
 
   router.get('/dashboard', async (req: any, res) => {
+    if (req.user.role === 'admin') return res.status(403).json({ error: 'Administrators do not see clinical data' });
     if (req.user.role === 'doctor') return res.json(await doctorDashboard(ctx.repos, req.user));
     // Today's list is one day's rows; the all-time figures are counts in the database, not a scan of every appointment.
     const A = ctx.repos.appointments;

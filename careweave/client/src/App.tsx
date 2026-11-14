@@ -10,6 +10,7 @@ import Overview from '@/portals/lab/pages/Overview'
 import Results from '@/portals/lab/pages/Results'
 import Samples from '@/portals/lab/pages/Samples'
 import Verification from '@/portals/lab/pages/Verification'
+import AdminApp from '@/portals/admin/AdminApp'
 import AnalyticsApp from '@/portals/analytics/AnalyticsApp'
 import WhatsAppSimulator from '@/components/WhatsAppSimulator'
 
@@ -23,6 +24,10 @@ export default function App() {
       <Route
         path="/doctor/*"
         element={<RequireRole role="doctor">{(user) => <DoctorApp user={user} />}</RequireRole>}
+      />
+      <Route
+        path="/admin/*"
+        element={<RequireRole role="admin">{(user) => <AdminApp user={user} />}</RequireRole>}
       />
       <Route
         path="/receptionist/*"
