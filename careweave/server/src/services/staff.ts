@@ -1,13 +1,33 @@
 import { ConflictError, DuplicateError, type Repos } from '../repo/index.js';
 import { DEMO_ACCOUNTS, buildSeed } from '../seed.js';
 
+const DELETED = 'deleted-staff';
+
+/** Emails of seeded accounts an administrator deleted on purpose, so the start-up sync does not put them back. */
+export async function deletedStaffEmails(repos: Repos): Promise<string[]> {
+  return (await repos.meta.byId(DELETED))?.emails ?? [];
+}
+
+export async function rememberDeletedStaff(repos: Repos, email: string) {
+  const current = await repos.meta.byId(DELETED);
+  const emails = [...new Set([...(current?.emails ?? []), email.toLowerCase()])];
+  try {
+    if (!current) await repos.meta.insert({ id: DELETED, emails });
+    else await repos.meta.update(current, { emails });
+  } catch (err) {
+    if (!(err instanceof ConflictError || err instanceof DuplicateError)) throw err;
+  }
+}
+
 /** The shared demo accounts (published password). */
 export const isDemoEmail = (email: string) => /@careweave\.test$/i.test(String(email || ''));
 
 /** Makes sure the staff directory has every seeded account and the permissions the seed declares. */
 export async function ensureStaff(repos: Repos, opts: { demo?: boolean } = {}) {
   const demo = opts.demo ?? DEMO_ACCOUNTS;
+  const deleted = new Set(await deletedStaffEmails(repos));
   for (const seed of (await buildSeed()).users) {
+    if (deleted.has(seed.email.toLowerCase())) continue;
     const existing = await repos.users.byEmail(seed.email);
     try {
       if (!existing) await repos.users.insert(seed);

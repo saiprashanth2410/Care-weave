@@ -257,3 +257,44 @@ test('reset links: a link without a code is passed on unchanged, and PUBLIC_URL 
   assert.equal(ownResetLink('not a url', 'https://app.test'), 'not a url');
   assert.equal(ownResetLink('https://f.test/a?oobCode=Z9', 'https://app.test'), 'https://app.test/reset-password?mode=resetPassword&oobCode=Z9');
 });
+
+test('delete: an account must be disabled first, nobody deletes themselves, and the account, its sessions and its Firebase sign-in go', async () => {
+  const fb = fakeFirebase();
+  const { srv, admin } = await withFirebase(fb);
+  try {
+    const u = (await srv.call('POST', '/api/staff', { token: admin, body: { name: 'Leaving Person', email: 'leaving@hospital.test', role: 'receptionist', password: 'welcome-123' } })).json;
+    assert.ok(fb.accounts.has('leaving@hospital.test'));
+    const session = (await srv.call('POST', '/api/auth/login', { body: { email: 'leaving@hospital.test', password: 'welcome-123' } })).json.token;
+
+    assert.equal((await srv.call('DELETE', `/api/staff/${u.id}`, { token: admin })).status, 400, 'an active account cannot be deleted');
+    const me = (await srv.call('GET', '/api/me', { token: admin })).json;
+    assert.equal((await srv.call('DELETE', `/api/staff/${me.id}`, { token: admin })).status, 400, 'nor your own');
+    assert.equal((await srv.call('DELETE', '/api/staff/nope', { token: admin })).status, 404);
+
+    await srv.call('PATCH', `/api/staff/${u.id}`, { token: admin, body: { active: false } });
+    const gone = await srv.call('DELETE', `/api/staff/${u.id}`, { token: admin });
+    assert.equal(gone.status, 200);
+    assert.equal(gone.json.firebase, 'removed');
+    assert.ok(!fb.accounts.has('leaving@hospital.test'));
+    assert.ok(!(await srv.call('GET', '/api/staff', { token: admin })).text.includes('leaving@hospital.test'));
+    assert.equal((await srv.call('GET', '/api/me', { token: session })).status, 401);
+    assert.equal((await srv.call('POST', '/api/auth/login', { body: { email: 'leaving@hospital.test', password: 'welcome-123' } })).status, 401);
+    const log = (await srv.call('GET', '/api/audit?entity=staff&limit=50', { token: admin })).text;
+    assert.ok(log.includes('leaving@hospital.test (receptionist) deleted'));
+  } finally { await srv.close(); }
+});
+
+test('delete: only administrators can delete, and a deleted seeded account is not put back by the start-up sync', async () => {
+  const { srv, admin, reception } = await setup();
+  try {
+    const target = (await srv.call('GET', '/api/staff', { token: admin })).json.find((u: any) => u.email === 'lab@careweave.test');
+    assert.equal((await srv.call('DELETE', `/api/staff/${target.id}`, { token: reception })).status, 403);
+    assert.equal((await srv.call('DELETE', `/api/staff/${target.id}`, { token: reception })).status, 403);
+    await srv.call('PATCH', `/api/staff/${target.id}`, { token: admin, body: { active: false } });
+    assert.equal((await srv.call('DELETE', `/api/staff/${target.id}`, { token: admin })).status, 200);
+
+    await ensureStaff(srv.repos, { demo: true }); // the seed would add lab@careweave.test again
+    assert.equal(await srv.repos.users.byEmail('lab@careweave.test'), null, 'it stays deleted');
+    assert.ok(await srv.repos.users.byEmail('reception@careweave.test'), 'other seeded accounts are untouched');
+  } finally { await srv.close(); }
+});
