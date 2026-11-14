@@ -45,6 +45,10 @@ export async function signInWithFirebaseToken(idToken: string): Promise<SessionU
   return r.user
 }
 
+/** From the sign-in page: asks the administrator for help signing in. The answer is the same whoever is asking, so it reveals nothing. */
+export const sendHelpRequest = (email: string, message = '') =>
+  call<{ ok: boolean }>('/api/support/request', { method: 'POST', body: JSON.stringify({ email, message }) })
+
 export const can = (user: SessionUser, permission: string) => !!user.permissions?.includes(permission)
 
 export const currentUser = () => call<SessionUser>('/api/me')

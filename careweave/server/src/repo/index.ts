@@ -7,6 +7,7 @@ import { ordersRepo, ordersIndexes } from './orders.js';
 import { encountersRepo, encountersIndexes } from './encounters.js';
 import { prescriptionsRepo, prescriptionsIndexes } from './prescriptions.js';
 import { auditRepo, auditIndexes } from './audit.js';
+import { inboxRepo, inboxIndexes } from './inbox.js';
 import { sessionsRepo, sessionsIndexes } from './sessions.js';
 import { rateLimitsRepo, rateLimitsIndexes } from './rateLimits.js';
 import { vitalsRepo, vitalsIndexes } from './vitals.js';
@@ -48,6 +49,7 @@ function collections(store: Store) {
     whatsappPrefs: whatsappPrefsRepo(c('whatsappPrefs')),
     liveEvents: liveEventsRepo(c('liveEvents')),
     meta: metaRepo(c('meta')),
+    inbox: inboxRepo(c('inbox')),
   };
 }
 export type Repos = ReturnType<typeof collections> & {
@@ -63,7 +65,7 @@ export const INDEXES = {
   users: usersIndexes, patients: patientsIndexes, appointments: appointmentsIndexes, labOrders: ordersIndexes,
   encounters: encountersIndexes, prescriptions: prescriptionsIndexes, auditLogs: auditIndexes, sessions: sessionsIndexes, rateLimits: rateLimitsIndexes,
   vitals: vitalsIndexes, referrals: referralsIndexes, carePlans: carePlansIndexes, externalRecords: externalRecordsIndexes,
-  cases: casesIndexes, syntheticHistory: syntheticHistoryIndexes, whatsappPrefs: whatsappPrefsIndexes, liveEvents: liveEventsIndexes, meta: metaIndexes, files: [idIndex],
+  cases: casesIndexes, syntheticHistory: syntheticHistoryIndexes, whatsappPrefs: whatsappPrefsIndexes, liveEvents: liveEventsIndexes, meta: metaIndexes, inbox: inboxIndexes, files: [idIndex],
 };
 
 /** Quiet collections change on every sign-in or page view; they are not worth waking other screens for. */

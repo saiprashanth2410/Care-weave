@@ -12,6 +12,7 @@ import { BROWSER_HEADER, credentialOf, userForToken } from './services/sessions.
 import { authRoutes, sessionRoutes } from './routes/auth.js';
 import { adminRoutes, healthRoutes } from './routes/admin.js';
 import { staffRoutes } from './routes/staff.js';
+import { inboxRoutes, supportPublicRoutes } from './routes/inbox.js';
 import { markDataChanges } from './services/dataVersion.js';
 import { cronRoutes } from './routes/cron.js';
 import { patientRoutes } from './routes/patients.js';
@@ -89,11 +90,13 @@ export function createApp(opts: CreateAppOptions) {
   app.use('/api', healthRoutes(ctx));
   app.use('/api', cronRoutes(ctx));
   app.use('/api', authRoutes(ctx));
+  app.use('/api', supportPublicRoutes(ctx));
   app.use('/api', ctx.auth);
   app.use('/api', sessionRoutes(ctx));
   app.use('/api', whatsappSimulatorRoutes({ repos: () => ctx.repos }));
   app.use('/api', adminRoutes(ctx));
   app.use('/api', staffRoutes(ctx));
+  app.use('/api', inboxRoutes(ctx));
   app.use('/api', patientRoutes(ctx));
   app.use('/api', appointmentRoutes(ctx));
   app.use('/api', labRoutes(ctx));
