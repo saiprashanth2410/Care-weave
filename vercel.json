@@ -2,6 +2,9 @@
   "buildCommand": "cd careweave/server && npm run build && cd ../client && npm install --no-save --include=optional @rolldown/binding-linux-x64-gnu lightningcss-linux-x64-gnu@1.33.0 @tailwindcss/oxide-linux-x64-gnu@4.3.3 && npm run build",
   "outputDirectory": "careweave/client/dist",
   "framework": "vite",
+  "regions": [
+    "bom1"
+  ],
   "rewrites": [
     {
       "source": "/api",
