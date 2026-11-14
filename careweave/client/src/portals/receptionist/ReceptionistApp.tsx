@@ -160,15 +160,6 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               <span>Exasol Analytics</span>
             </Link>
 
-            <Link
-              to="/lab/overview"
-              className="btn-soft"
-              style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700 }}
-              title="Open Laboratory & Diagnostic Reports"
-            >
-              <span>Laboratory portal</span>
-            </Link>
-
 
             <button
               className="btn-soft"
