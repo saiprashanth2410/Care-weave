@@ -6,7 +6,10 @@ export default async function handler(req: any, res: any) {
     if (req.url && !req.url.startsWith('/api')) {
       req.url = '/api' + (req.url.startsWith('/') ? req.url : '/' + req.url);
     }
-    await ensureInitialized();
+    // The sign-in page asks for /api/auth/config first. It answers from settings alone, so it must not wait for the database
+    // to connect on a cold start; the connection starts now and is ready by the time someone signs in.
+    if (/^\/api\/auth\/config\/?(\?|$)/.test(req.url || '')) void ensureInitialized().catch(() => {});
+    else await ensureInitialized();
     return app(req, res);
   } catch (err: any) {
     console.error('API Error in Vercel Serverless Function:', err);
