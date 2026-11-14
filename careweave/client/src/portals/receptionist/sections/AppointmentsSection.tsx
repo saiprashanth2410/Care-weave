@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
+import Loader from '../components/Loader';
 import { Ban, CalendarDays, CheckCircle2, Pencil, Plus, RefreshCw, Search, Stethoscope, UserCheck, X } from '../icons';
 import { api } from '../api';
 import type { Appointment, Doctor } from '../types';
@@ -22,6 +23,7 @@ export default function AppointmentsSection({
   const [doctorFilter, setDoctorFilter] = useState('');
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [rescheduleAppt, setRescheduleAppt] = useState<Appointment | null>(null);
+  const [loaded, setLoaded] = useState(false); // the first fetch has finished, so an empty list really is empty
 
   const loadDoctors = useCallback(() => {
     api.doctors().then(setDoctors).catch(() => {});
@@ -33,7 +35,8 @@ export default function AppointmentsSection({
     if (statusFilter) params.status = statusFilter;
     api.appointments(params)
       .then(setAppointments)
-      .catch(e => notify(e.message));
+      .catch(e => notify(e.message))
+      .finally(() => setLoaded(true));
   }, [dateFilter, statusFilter, notify]);
 
   useEffect(() => {
@@ -256,7 +259,8 @@ export default function AppointmentsSection({
           </tbody>
         </table>
 
-        {filtered.length === 0 && (
+        {!loaded && <Loader label="Loading appointments…" />}
+        {loaded && filtered.length === 0 && (
           <div className="empty">
             <CalendarDays size={32} />
             <b>No appointments match your filters</b>

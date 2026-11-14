@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
+import Loader from './Loader'
 import type { DayAppt, Doctor, DoctorDay, RosterDoctor } from '../types'
 import { cleanName, fmtTime, hhmmLabel, todayISO } from '../helpers'
 
@@ -137,13 +138,13 @@ export default function DoctorSlotMatrix({
           <p className="text-xs text-ink-3">Every doctor on the staff list, with who is in the room, who waits and who has been seen today. Click a name for their day.</p>
         </div>
         <div className="flex gap-1.5">
-          {chip('all', `All doctors (${all.length})`)}
-          {chip('in_consultation', `In consultation (${inRoom})`)}
-          {chip('available', `Available (${all.filter((d) => d.status === 'available').length})`)}
+          {chip('all', roster ? `All doctors (${all.length})` : 'All doctors')}
+          {chip('in_consultation', roster ? `In consultation (${inRoom})` : 'In consultation')}
+          {chip('available', roster ? `Available (${all.filter((d) => d.status === 'available').length})` : 'Available')}
         </div>
       </div>
 
-      {roster === null && <p className="text-xs text-ink-3">Loading doctors…</p>}
+      {roster === null && <Loader label="Loading doctors…" />}
       {roster !== null && all.length === 0 && (
         <p className="border border-rule bg-paper p-4 text-sm text-ink-2">No doctors yet. An administrator adds them under Staff &amp; Access, and they appear here at once.</p>
       )}
