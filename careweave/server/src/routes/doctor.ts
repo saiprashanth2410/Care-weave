@@ -82,7 +82,11 @@ export function doctorRoutes(ctx: AppCtx) {
     const p = await patientFor(req, res, req.params.id);
     if (!p) return;
     const t = Date.now();
-    if (t - (lastBrief.get(req.user.id) ?? 0) < 4000) return res.status(429).json({ error: 'Wait a few seconds before asking for another brief.' });
+    const wait = 4000 - (t - (lastBrief.get(req.user.id) ?? 0));
+    if (wait > 0) {
+      res.set('Retry-After', String(Math.ceil(wait / 1000)));
+      return res.status(429).json({ error: 'Wait a few seconds before asking for another brief.' });
+    }
     lastBrief.set(req.user.id, t);
     const [allLabs, vitalsList, prescriptions, encounters, referrals] = await Promise.all([
       labsFor(R(), p), R().vitals.forPatient(p.id, 1), R().prescriptions.forPatient(p.id), R().encounters.forPatient(p.id, 3), R().referrals.find({ patientId: p.id }),
