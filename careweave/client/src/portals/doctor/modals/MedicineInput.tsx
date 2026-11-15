@@ -4,10 +4,12 @@ import { api } from '../api';
 export type MedicineHit = Awaited<ReturnType<typeof api.searchMedicines>>[number];
 
 // Text box that suggests medicines from the catalogue as the doctor types.
-export function MedicineInput({ value, onChange, onPick }: {
+export function MedicineInput({ value, onChange, onPick, compact = false }: {
   value: string;
   onChange: (text: string) => void;
   onPick: (medicine: MedicineHit) => void;
+  /** One row of a table: no label above the box (the column heading names it). */
+  compact?: boolean;
 }) {
   const [hits, setHits] = useState<MedicineHit[]>([]);
   const [open, setOpen] = useState(false);
@@ -22,11 +24,12 @@ export function MedicineInput({ value, onChange, onPick }: {
     return () => clearTimeout(timer);
   }, [value, open]);
 
+  const Wrap = compact ? 'div' : 'label';
   return (
-    <label className="med-field">
-      Drug Name & Formulation
+    <Wrap className="med-field">
+      {!compact && 'Drug Name & Formulation'}
       <input
-        required
+        aria-label="Medicine name"
         autoComplete="off"
         placeholder="Type a brand or generic name…"
         value={value}
@@ -47,6 +50,6 @@ export function MedicineInput({ value, onChange, onPick }: {
           ))}
         </div>
       )}
-    </label>
+    </Wrap>
   );
 }

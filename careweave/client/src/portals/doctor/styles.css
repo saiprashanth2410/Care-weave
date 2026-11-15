@@ -154,3 +154,24 @@
 .dx .dup-ack{display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.4}
 .dx .dup-ack input{margin-top:3px}
 @media(max-width:640px){.dx .dup-compare{grid-template-columns:1fr}}
+
+/* E-prescription: several medicines as rows */
+.dx .modal.wide{width:min(1080px,100%)}
+.dx .rx-section{display:flex;flex-direction:column;gap:10px}
+.dx .rx-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.dx .rx-bar-actions{display:flex;align-items:center;gap:8px}
+.dx .rx-bar-actions select{min-height:36px;padding:6px 10px;font-size:12px;max-width:300px}
+.dx .rx-head{display:grid;gap:8px;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#56655f;padding:0 2px}
+.dx .rx-row{border:1px solid var(--line);border-radius:3px;padding:10px;display:flex;flex-direction:column;gap:8px;background:#f6f7f3}
+.dx .rx-line{display:grid;gap:8px;align-items:start}
+.dx .rx-line input,.dx .rx-line select{width:100%;min-width:0}
+.dx .rx-line2{display:flex;gap:8px;align-items:center}
+.dx .rx-line2>input{flex:1;min-width:0}
+.dx .rx-refills{display:flex;flex-direction:row;align-items:center;gap:8px;font-size:11px;white-space:nowrap}
+.dx .rx-refills input{width:70px}
+.dx .rx-remove{background:transparent;border:1px solid var(--line);border-radius:3px;height:40px;cursor:pointer;font-size:15px;color:#a3341f}
+.dx .rx-remove:disabled{opacity:.35;cursor:not-allowed}
+.dx .rx-alert{display:flex;flex-direction:column;gap:8px}
+.dx .rx-alert .alert{align-items:center;gap:10px}
+.dx .rx-note{margin:0;font-size:11px}
+@media(max-width:860px){.dx .rx-head{display:none}.dx .rx-line{grid-template-columns:1fr 1fr!important}}
