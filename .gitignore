@@ -67,10 +67,11 @@ wheels/
 *.log
 *.sqlite3
 
-# Lockfiles stay out of git: one made on a Mac pins nested native packages (lightningcss, rolldown, tailwind oxide) at versions
-# that do not match the Linux binaries the Vercel build installs, and the build then fails with MODULE_NOT_FOUND. Versions that
-# must not float are pinned in package.json instead (see jwks-rsa).
-package-lock.json
+# The root package-lock.json IS committed (it was generated from scratch, with no node_modules present, so it lists the optional
+# native packages for every platform; a lockfile made on top of a Mac's node_modules pins only the Mac ones and breaks the Linux
+# build with MODULE_NOT_FOUND). If you regenerate it, delete the old file and node_modules first, then run
+# `npm install --package-lock-only`. Per-workspace lockfiles are not used.
+careweave/*/package-lock.json
 
 
 .vercel

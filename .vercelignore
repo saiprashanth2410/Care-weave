@@ -4,6 +4,4 @@
 .env*
 careweave/server/data
 careweave/server/uploads
-# Same as git: builds resolve fresh, so a CLI deploy behaves like a GitHub one
-package-lock.json
 careweave/*/package-lock.json
