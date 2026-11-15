@@ -44,10 +44,10 @@ export function Loading() {
 }
 
 
-export function Modal({ title, sub, onClose, children }: { title: string; sub?: string; onClose: () => void; children: React.ReactNode }) {
+export function Modal({ title, sub, onClose, children, wide = false }: { title: string; sub?: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
+      <div className={wide ? 'modal wide' : 'modal'} onClick={e => e.stopPropagation()}>
         <div className="modal-head">
           <div>
             <h2>{title}</h2>
