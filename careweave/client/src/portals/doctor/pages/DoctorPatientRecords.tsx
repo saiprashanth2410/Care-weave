@@ -60,10 +60,16 @@ export function DoctorPatientRecords({
   const [briefFor, setBriefFor] = useState<{ id: string; brief: Brief } | null>(null);
   const brief = briefFor && briefFor.id === selected?.id ? briefFor.brief : null;
   const [briefBusy, setBriefBusy] = useState(false);
+  // The server allows one brief per doctor every few seconds (it protects the AI service). Keep the button off for that long after an
+  // answer, so a second click or a double-click never reaches the server and turns into an error.
+  const [briefCooling, setBriefCooling] = useState(false);
   const makeBrief = () => {
-    if (!selected) return;
+    if (!selected || briefBusy || briefCooling) return;
     setBriefBusy(true);
-    api.summary(selected.id).then(b => setBriefFor({ id: selected.id, brief: b })).catch(e => notify(e.message)).finally(() => setBriefBusy(false));
+    api.summary(selected.id)
+      .then(b => setBriefFor({ id: selected.id, brief: b }))
+      .catch(e => notify(e.message))
+      .finally(() => { setBriefBusy(false); setBriefCooling(true); setTimeout(() => setBriefCooling(false), 4500); });
   };
 
   const latestVital = selected?.vitals?.[0];
@@ -161,7 +167,7 @@ export function DoctorPatientRecords({
                 </div>
 
                 <div className="row-actions">
-                  <button className="action-pill" disabled={briefBusy} onClick={makeBrief}>
+                  <button className="action-pill" disabled={briefBusy || briefCooling} onClick={makeBrief}>
                     <FileText size={14} /> {briefBusy ? 'Reading chart…' : 'Pre-consult brief'}
                   </button>
                   <button className="action-pill amber" onClick={() => onReferral(selected)}>
