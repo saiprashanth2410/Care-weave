@@ -222,6 +222,11 @@ test('on a deployed system, leftover demo accounts are switched off (not deleted
     await ensureStaff(srv.repos, { demo: true });
     assert.equal((await srv.call('POST', '/api/auth/login', { body: { email: 'doctor@careweave.test', password: 'demo123' } })).status, 200);
 
+    // An older directory also holds the real accounts next to the demo ones (the seed now gives one set per environment)
+    for (const [role, who] of [['receptionist', 'reception'], ['lab', 'lab'], ['doctor', 'doctor'], ['admin', 'admin']] as const) {
+      await srv.repos.users.insert({ id: `u-${who}-real`, name: `Real ${who}`, email: `${who}@careweave.com`, role, facility: 'CareWeave', permissions: [] });
+    }
+
     const session = await srv.login('reception');
     await ensureStaff(srv.repos, { demo: false });
     const all = await srv.repos.users.find({});
@@ -297,4 +302,13 @@ test('delete: only administrators can delete, and a deleted seeded account is no
     assert.equal(await srv.repos.users.byEmail('lab@careweave.test'), null, 'it stays deleted');
     assert.ok(await srv.repos.users.byEmail('reception@careweave.test'), 'other seeded accounts are untouched');
   } finally { await srv.close(); }
+});
+
+test('seed: one set of people per environment, so no name or email appears twice', async () => {
+  const { buildSeed } = await import('./seed.js');
+  const users = (await buildSeed()).users as any[];
+  const names = users.map((u) => u.name.replace(/\s*\(.*\)$/, ''));
+  assert.equal(new Set(names).size, names.length, `repeated names: ${names.join(', ')}`);
+  assert.equal(new Set(users.map((u) => u.email)).size, users.length);
+  assert.ok(users.some((u) => u.role === 'doctor') && users.some((u) => u.role === 'admin'), 'every role is still there');
 });
