@@ -34,6 +34,16 @@ test('batch: several medicines are saved together, each as its own record linked
   } finally { await srv.close(); }
 });
 
+test('batch: diagnosis and notes are kept on each medicine of the prescription', async () => {
+  const { srv, batch, saved } = await setup();
+  try {
+    const r = await batch([metformin, amlodipine], { diagnosis: 'Type 2 diabetes with hypertension', notes: 'Review in 4 weeks' });
+    assert.equal(r.status, 201, JSON.stringify(r.json));
+    const rows = await saved();
+    assert.ok(rows.every((x: any) => x.diagnosis === 'Type 2 diabetes with hypertension' && x.notes === 'Review in 4 weeks'));
+  } finally { await srv.close(); }
+});
+
 test('batch: needs at least one medicine, and name, dose and frequency on each; nothing is saved on a bad row', async () => {
   const { srv, batch, saved } = await setup();
   try {

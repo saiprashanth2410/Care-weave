@@ -99,6 +99,17 @@ describe('Prescribe modal: several medicines', () => {
     expect(sent[2]).toMatchObject({ dosage: '650 mg', frequency: 'SOS', duration: '5 days', instructions: 'After food' })
   })
 
+  it('sends the optional diagnosis and notes with the medicines', async () => {
+    const user = userEvent.setup()
+    const { onSaved } = open()
+    await fill(user, 1, { medicine: 'Paracetamol', dosage: '650 mg', frequency: 'SOS' })
+    await user.type(screen.getByLabelText('Diagnosis'), 'Viral fever')
+    await user.type(screen.getByLabelText('Notes'), 'Plenty of fluids')
+    await user.click(screen.getByRole('button', { name: /Sign & Transmit/ }))
+    await waitFor(() => expect(onSaved).toHaveBeenCalled())
+    expect(vi.mocked(api.createPrescriptions).mock.calls[0][0]).toMatchObject({ diagnosis: 'Viral fever', notes: 'Plenty of fluids' })
+  })
+
   it('asks for at least one medicine, and name, dosage and frequency on each filled row', async () => {
     const user = userEvent.setup()
     open()

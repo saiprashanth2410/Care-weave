@@ -8,11 +8,13 @@ import '../doctor/styles.css';
 import { adminApi } from './api';
 import { AuditLog } from './AuditLog';
 import { Inbox } from './Inbox';
+import { Integrations } from './Integrations';
 import { StaffAccess } from './StaffAccess';
 
 const NAV: [string, string][] = [
   ['inbox', 'Inbox'],
   ['staff', 'Staff & Access'],
+  ['integrations', 'Integrations'],
   ['audit', 'Audit Log'],
 ];
 
@@ -35,7 +37,7 @@ export default function AdminApp({ user }: { user: SessionUser }) {
   useEffect(() => { loadUnread(); }, [loadUnread, refresh]);
   useEffect(() => { adminApi.catalog().then(c => setFirebase(c.firebase)).catch(() => {}); }, []);
 
-  const allowed = (id: string) => (id === 'audit' ? user.permissions?.includes('audit') : id === 'staff' || id === 'inbox' ? user.permissions?.includes('staff') : true);
+  const allowed = (id: string) => (id === 'audit' ? user.permissions?.includes('audit') : id === 'staff' || id === 'inbox' || id === 'integrations' ? user.permissions?.includes('staff') : true);
 
   return (
     <div className="dx">
@@ -69,6 +71,7 @@ export default function AdminApp({ user }: { user: SessionUser }) {
             <PortalBoundary key={section}>
               {section === 'inbox' && allowed('inbox') && <Inbox notify={notify} refresh={refresh} canSendLinks={firebase} onChanged={loadUnread} />}
               {section === 'staff' && allowed('staff') && <StaffAccess selfId={user.id} notify={notify} />}
+              {section === 'integrations' && allowed('integrations') && <Integrations notify={notify} />}
               {section === 'audit' && allowed('audit') && <AuditLog notify={notify} />}
             </PortalBoundary>
           </div>

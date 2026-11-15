@@ -14,6 +14,12 @@ export type Catalog = { roles: StaffRole[]; permissions: Record<StaffRole, strin
 export type Created = Staff & { firebase: 'created' | 'existing' | 'not-configured'; temporaryPassword?: string };
 export type NewStaff = { name: string; email: string; role: StaffRole; facility: string; permissions: string[]; password?: string; room?: string; shiftStart?: string; shiftEnd?: string };
 
+export type GeminiStatus = {
+  configured: boolean; source: 'admin' | 'env' | 'none'; last4: string; hasPasscode: boolean; model: string;
+  features: { scan: boolean; brief: boolean }; updatedAt: string | null; updatedBy: string; lockedUntil: string | null;
+};
+export type GeminiTest = { ok: true; model: string; ms: number } | { ok: false; error: string };
+
 async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...(init.headers || {}) } });
   const body = await res.json().catch(() => ({}));
@@ -36,6 +42,15 @@ export const adminApi = {
   inboxSummary: () => request<{ new: number }>('/api/inbox/summary'),
   updateInbox: (id: string, body: { status?: InboxItem['status']; note?: string }) =>
     request<InboxItem>(`/api/inbox/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  gemini: () => request<GeminiStatus>('/api/integrations/gemini'),
+  saveGemini: (apiKey: string, passcode: string) => request<GeminiStatus>('/api/integrations/gemini', { method: 'PUT', body: JSON.stringify({ apiKey, passcode }) }),
+  unlockGemini: (passcode: string) => request<{ apiKey: string }>('/api/integrations/gemini/unlock', { method: 'POST', body: JSON.stringify({ passcode }) }),
+  changeGeminiPasscode: (currentPasscode: string, newPasscode: string) =>
+    request<GeminiStatus>('/api/integrations/gemini/passcode', { method: 'POST', body: JSON.stringify({ currentPasscode, newPasscode }) }),
+  removeGemini: (passcode: string) => request<GeminiStatus>('/api/integrations/gemini', { method: 'DELETE', body: JSON.stringify({ passcode }) }),
+  geminiOptions: (body: { scan?: boolean; brief?: boolean; model?: string }) =>
+    request<GeminiStatus>('/api/integrations/gemini/options', { method: 'PATCH', body: JSON.stringify(body) }),
+  testGemini: (apiKey?: string) => request<GeminiTest>('/api/integrations/gemini/test', { method: 'POST', body: JSON.stringify({ apiKey: apiKey || undefined }) }),
   auditLog: (q: { action?: string; patient?: string; before?: string }) => {
     const p = new URLSearchParams();
     if (q.action) p.set('action', q.action);

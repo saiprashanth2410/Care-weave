@@ -58,6 +58,11 @@ function printPrescriptionSlip(patient: PatientRecord, rxList: Prescription[]) {
         ` : ''}
 
         <div class="rx-symbol">℞</div>
+        ${(() => {
+          const esc = (t: string) => t.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+          const diagnosis = activeRx.find(r => r.diagnosis)?.diagnosis, notes = activeRx.find(r => r.notes)?.notes;
+          return (diagnosis ? `<p><b>Diagnosis:</b> ${esc(diagnosis)}</p>` : '') + (notes ? `<p><b>Notes:</b> ${esc(notes)}</p>` : '');
+        })()}
 
         <table>
           <thead>

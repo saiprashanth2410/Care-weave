@@ -5,7 +5,7 @@
 // the server, and the request asks the API not to store it.
 
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/interactions';
-const MODELS = ['gemma-4-26b-a4b-it', 'gemini-3.6-flash'];
+export const MODELS = ['gemma-4-26b-a4b-it', 'gemini-3.6-flash'];
 const TIMEOUT_MS = 20_000;
 
 export type BriefInput = {
@@ -63,7 +63,7 @@ invent values, and say "not recorded" when something is missing. Plain text, one
 FACTS
 `;
 
-async function ask(model: string, text: string, key: string): Promise<string | null> {
+export async function ask(model: string, text: string, key: string): Promise<string | null> {
   try {
     const res = await fetch(ENDPOINT, {
       method: 'POST',
@@ -83,9 +83,9 @@ async function ask(model: string, text: string, key: string): Promise<string | n
   }
 }
 
-export async function makeBrief(b: BriefInput, key = process.env.GEMINI_API_KEY): Promise<{ text: string; source: 'ai' | 'rules'; model?: string }> {
+export async function makeBrief(b: BriefInput, key = process.env.GEMINI_API_KEY, preferred = process.env.GEMINI_MODEL): Promise<{ text: string; source: 'ai' | 'rules'; model?: string }> {
   if (key) {
-    for (const model of [process.env.GEMINI_MODEL, ...MODELS].filter(Boolean) as string[]) {
+    for (const model of [preferred, ...MODELS].filter(Boolean) as string[]) {
       const out = await ask(model, PROMPT + factsOf(b), key);
       if (out) {
         const lines = out.split('\n').map((l) => l.trim()).filter((l) => /^[-•*]/.test(l)).slice(0, 8).map((l) => '- ' + l.replace(/^[-•*]\s*/, ''));

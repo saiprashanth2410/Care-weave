@@ -174,4 +174,8 @@
 .dx .rx-alert{display:flex;flex-direction:column;gap:8px}
 .dx .rx-alert .alert{align-items:center;gap:10px}
 .dx .rx-note{margin:0;font-size:11px}
+.dx .rx-line input,.dx .rx-line select{height:42px;padding:0 10px;font-size:13px}
+.dx .rx-line input[type=number]{padding:0 6px}
+.dx .rx-row{padding:8px;background:#eef2ee}
+.dx .rx-remove{height:42px}
 @media(max-width:860px){.dx .rx-head{display:none}.dx .rx-line{grid-template-columns:1fr 1fr!important}}

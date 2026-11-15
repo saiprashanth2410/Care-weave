@@ -4,6 +4,7 @@ import type { Repos } from './repo/index.js';
 import { extractWithGemini } from './geminiScan.js';
 import { searchMedicines } from './medicines.js';
 import { ScanError } from './scanSchema.js';
+import { readAiConfig } from './services/aiConfig.js';
 
 export type ScanCtx = {
   app: IRouter;
@@ -19,8 +20,10 @@ export function registerScanRoutes({ app, roles, uploadLimit, text, audit, repos
   const scanCache = new Map<string, unknown>(); // identical uploads reuse the result instead of spending quota
 
   app.post('/lab/extract', roles('lab'), uploadLimit, async (req: any, res) => {
-    const geminiKey = process.env.GEMINI_API_KEY as string;
-    if (!geminiKey) return res.status(503).json({ error: 'Report scanning is not configured. Set GEMINI_API_KEY on the server.' });
+    const ai = await readAiConfig(repos());
+    if (!ai.features.scan) return res.status(503).json({ error: 'Report scanning is switched off. Ask the administrator to turn it on.' });
+    const geminiKey = ai.key;
+    if (!geminiKey) return res.status(503).json({ error: 'Report scanning is not set up yet. Ask the administrator to add the Gemini API key in the admin portal.' });
     const mimeType = text(req.body?.mimeType, 60);
     const data = String(req.body?.data || '').replace(/^data:[^;]+;base64,/, '');
     if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(mimeType) || !data) {
@@ -30,7 +33,7 @@ export function registerScanRoutes({ app, roles, uploadLimit, text, audit, repos
     const fileKey = crypto.createHash('sha256').update(mimeType + data).digest('hex');
     if (scanCache.has(fileKey)) return res.json({ data: scanCache.get(fileKey), cached: true });
     try {
-      const parsed = await extractWithGemini(mimeType, data, geminiKey);
+      const parsed = await extractWithGemini(mimeType, data, geminiKey, ai.model || undefined);
       console.log(`[scan] ${parsed.model} -> ok (${mimeType}, ${kb} KB, ${parsed.results.length} rows)`);
       await audit(req, 'scan', 'labReport', 'upload', `${mimeType} via ${parsed.model}`);
       scanCache.set(fileKey, parsed);
