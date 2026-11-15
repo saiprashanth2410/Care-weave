@@ -78,6 +78,8 @@ export type Prescription={version?:number;
   frequency:string;
   duration:string;
   instructions?:string;
+  diagnosis?:string;
+  notes?:string;
   refills?:number;
   status?:'Active'|'Discontinued'|'Completed';
   date:string;

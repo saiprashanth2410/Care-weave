@@ -8,6 +8,7 @@ import { searchMedicines } from '../medicines.js';
 import { checkDuplicateTherapy } from '../safety/molecules.js';
 import { emitEvent } from '../whatsapp/emitter.js';
 import { makeBrief } from '../clinicalSummary.js';
+import { readAiConfig } from '../services/aiConfig.js';
 import { adminPatientView, ageFromDob, id, now, text } from '../util.js';
 import { linkedPatientIds } from '../services/access.js';
 import { casesFor, chartPoints, doctorLab, importedFor, labsFor, timeline } from '../services/chart.js';
@@ -93,6 +94,7 @@ export function doctorRoutes(ctx: AppCtx) {
     ]);
     const labs = allLabs.filter((o: any) => ['verified', 'released'].includes(o.status)).slice(0, 6)
       .flatMap((o: any) => (o.results ?? []).filter((r: any) => r.value).map((r: any) => ({ test: r.parameter, value: r.value, unit: r.unit, flag: r.flag, date: o.verifiedAt })));
+    const ai = await readAiConfig(R());
     const brief = await makeBrief({
       ageYears: ageFromDob(p.dob), sex: p.gender || 'O',
       allergies: p.allergies || [], problems: (p.problems || []).slice(0, 12),
@@ -104,7 +106,7 @@ export function doctorRoutes(ctx: AppCtx) {
         ...referrals.filter((r: any) => r.status !== 'Completed').map((r: any) => `Referral to ${r.specialty} is ${String(r.status).toLowerCase()}`),
         ...allLabs.filter((o: any) => !['verified', 'released', 'cancelled'].includes(o.status)).map((o: any) => `${o.testName} not yet verified`),
       ].slice(0, 6),
-    });
+    }, ai.features.brief ? ai.key : '', ai.model || undefined);
     await audit(req, 'read', 'summary', p.id, `Pre-consultation brief (${brief.source})`);
     res.json({ ...brief, generatedAt: now(), note: 'A reading aid made from the chart. Check it against the record before acting on it.' });
   });
@@ -317,6 +319,7 @@ export function doctorRoutes(ctx: AppCtx) {
   const rxRecord = (p: any, enc: any, req: any, r: any, allergy: any, high: any[], ov: any) => ({
     id: id('rx'), patientId: p.id, encounterId: enc.id, medicine: r.medicine, dosage: r.dosage, route: text(r.route, 40), frequency: r.frequency,
     duration: text(r.duration, 60), instructions: text(r.instructions, 500), refills: Math.max(0, Math.min(12, Number(r.refills) || 0)),
+    ...(r.diagnosis ? { diagnosis: text(r.diagnosis, 200) } : {}), ...(r.notes ? { notes: text(r.notes, 500) } : {}),
     status: 'Active', date: now(), source: 'CareWeave Clinic', prescribingClinician: req.user.name, imported: false,
     allergyOverrideReason: allergy ? text(r.allergyOverrideReason, 300) : undefined,
     duplicateOverride: high.length ? { reason: text(ov.overrideReason, 500), acknowledgedRisks: true, molecules: high.flatMap((x: any) => x.matchedMolecules), conflictsWith: high.map((x: any) => x.conflictingDrug.name) } : undefined,
@@ -366,6 +369,7 @@ export function doctorRoutes(ctx: AppCtx) {
     const rows = (Array.isArray(b.medicines) ? b.medicines : []).slice(0, 15).map((r: any) => ({
       medicine: text(r?.medicine, 120), dosage: text(r?.dosage, 80), frequency: text(r?.frequency, 80), route: text(r?.route, 40),
       duration: text(r?.duration, 60), instructions: text(r?.instructions, 500), refills: r?.refills,
+      diagnosis: text(b.diagnosis, 200), notes: text(b.notes, 500),
       allergyOverrideReason: text(r?.allergyOverrideReason, 300), duplicateOverride: r?.duplicateOverride,
     }));
     if (!rows.length) return res.status(400).json({ error: 'Add at least one medicine' });

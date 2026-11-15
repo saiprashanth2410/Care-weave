@@ -72,8 +72,8 @@ function toReport(raw: string) {
  * Models are tried in order; if all are busy the round repeats with exponential backoff.
  * The result names the model that actually read the file.
  */
-export async function extractWithGemini(mimeType: string, data: string, key: string) {
-  const models = [process.env.GEMINI_MODEL, ...MODELS].filter(Boolean) as string[];
+export async function extractWithGemini(mimeType: string, data: string, key: string, preferred = process.env.GEMINI_MODEL) {
+  const models = [preferred, ...MODELS].filter(Boolean) as string[];
   let busy = false;
   for (let round = 0; round < ROUNDS; round++) {
     if (round) await new Promise((resolve) => setTimeout(resolve, BACKOFF_MS * 2 ** (round - 1)));

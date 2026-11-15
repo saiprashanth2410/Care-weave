@@ -95,7 +95,7 @@ export const api={
   validatePrescription:(body:{patientId:string;medicine:string;dosage?:string;frequency?:string;alsoPrescribing?:{medicine:string;dosage?:string;frequency?:string;duration?:string}[]})=>request<{alerts:CollisionAlert[];blocking:boolean}>('/api/encounters/validate-prescription',{method:'POST',body:JSON.stringify(body)}),
   createPrescription:(body:any)=>request<Prescription>('/api/prescriptions',{method:'POST',body:JSON.stringify(body)}),
   // One prescription with several medicines: checked together, saved together or not at all.
-  createPrescriptions:(body:{patientId:string;medicines:object[]})=>request<Prescription[]>('/api/prescriptions/batch',{method:'POST',body:JSON.stringify(body)}),
+  createPrescriptions:(body:{patientId:string;diagnosis?:string;notes?:string;medicines:object[]})=>request<Prescription[]>('/api/prescriptions/batch',{method:'POST',body:JSON.stringify(body)}),
   updatePrescription:(id:string,body:{status?:string;refills?:number;discontinueReason?:string;version?:number})=>
     request<Prescription>(`/api/prescriptions/${id}`,{method:'PATCH',body:JSON.stringify(body)}),
 

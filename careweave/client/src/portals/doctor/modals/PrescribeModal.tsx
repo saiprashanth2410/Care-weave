@@ -43,12 +43,15 @@ const POPULAR = [
   { name: 'Ferrous Sulfate', dose: '325 mg', route: 'Oral', freq: 'Once daily with Vitamin C' },
 ];
 
-const COLUMNS = 'minmax(190px, 2.2fr) minmax(90px, 1fr) 108px minmax(120px, 1.3fr) minmax(90px, 1fr) 36px';
+// One line per medicine, as in MediTrack: name, dose, route, frequency, duration, instructions, refills, bin.
+const COLUMNS = 'minmax(150px, 2fr) 84px 100px minmax(100px, 1.2fr) 84px minmax(130px, 1.6fr) 58px 36px';
 
 export function PrescribeModal({ patient: initPatient, onClose, onSaved }: { patient?: Patient; onClose: () => void; onSaved: () => void }) {
   const [patients, setPatients] = useState<Patient[]>(initPatient ? [initPatient] : []);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(initPatient || null);
   const [rows, setRows] = useState<Row[]>(() => [blankRow()]);
+  const [diagnosis, setDiagnosis] = useState('');
+  const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   // The row whose duplicate-therapy warning is open
@@ -103,6 +106,7 @@ export function PrescribeModal({ patient: initPatient, onClose, onSaved }: { pat
     try {
       await api.createPrescriptions({
         patientId: selectedPatient.id,
+        ...(diagnosis.trim() ? { diagnosis: diagnosis.trim() } : {}), ...(notes.trim() ? { notes: notes.trim() } : {}),
         medicines: filled.map(r => ({
           medicine: r.medicine, dosage: r.dosage, route: r.route, frequency: r.frequency, duration: r.duration, instructions: r.instructions, refills: r.refills,
           ...(r.allergyBlock ? { allergyOverrideReason: r.allergyReason.trim() } : {}),
@@ -158,6 +162,10 @@ export function PrescribeModal({ patient: initPatient, onClose, onSaved }: { pat
           )}
         </div>
 
+        <label className="span-2">Diagnosis <span className="muted">(optional)</span>
+          <input aria-label="Diagnosis" placeholder="e.g. Viral fever" maxLength={200} value={diagnosis} onChange={e => setDiagnosis(e.target.value)} />
+        </label>
+
         <div className="span-2 rx-section">
           <div className="rx-bar">
             <b>Medicines ({rows.length})</b>
@@ -176,7 +184,7 @@ export function PrescribeModal({ patient: initPatient, onClose, onSaved }: { pat
           </div>
 
           <div className="rx-head" style={{ gridTemplateColumns: COLUMNS }}>
-            <span>Medicine name *</span><span>Dosage *</span><span>Route</span><span>Frequency *</span><span>Duration</span><span />
+            <span>Medicine name *</span><span>Dosage *</span><span>Route</span><span>Frequency *</span><span>Duration</span><span>Instructions</span><span>Refills</span><span />
           </div>
 
           {rows.map((r, i) => (
@@ -198,6 +206,8 @@ export function PrescribeModal({ patient: initPatient, onClose, onSaved }: { pat
                 </select>
                 <input aria-label={`Frequency for medicine ${i + 1}`} placeholder="1-0-1 / twice daily" value={r.frequency} onChange={e => patch(r.key, { frequency: e.target.value, ...cleared })} />
                 <input aria-label={`Duration for medicine ${i + 1}`} placeholder="5 days" value={r.duration} onChange={e => patch(r.key, { duration: e.target.value })} />
+                <input aria-label={`Instructions for medicine ${i + 1}`} placeholder="After food" value={r.instructions} onChange={e => patch(r.key, { instructions: e.target.value })} />
+                <input aria-label={`Refills for medicine ${i + 1}`} type="number" min="0" max="12" value={r.refills} onChange={e => patch(r.key, { refills: Number(e.target.value) })} />
                 <button
                   type="button"
                   className="rx-remove"
@@ -209,14 +219,6 @@ export function PrescribeModal({ patient: initPatient, onClose, onSaved }: { pat
                   🗑
                 </button>
               </div>
-              <div className="rx-line2">
-                <input aria-label={`Instructions for medicine ${i + 1}`} placeholder="Instructions (e.g. after food)" value={r.instructions} onChange={e => patch(r.key, { instructions: e.target.value })} />
-                <label className="rx-refills">
-                  Refills
-                  <input aria-label={`Refills for medicine ${i + 1}`} type="number" min="0" max="12" value={r.refills} onChange={e => patch(r.key, { refills: Number(e.target.value) })} />
-                </label>
-              </div>
-
               {r.allergyBlock && (
                 <div className="rx-alert">
                   <div className="alert danger"><AlertTriangle size={16} /><span><b>ALLERGY ALERT:</b> {r.allergyBlock}</span></div>
@@ -239,6 +241,10 @@ export function PrescribeModal({ patient: initPatient, onClose, onSaved }: { pat
             </div>
           ))}
         </div>
+
+        <label className="span-2">Notes <span className="muted">(optional)</span>
+          <textarea aria-label="Notes" rows={2} placeholder="Any additional notes…" maxLength={500} value={notes} onChange={e => setNotes(e.target.value)} style={{ minHeight: 60 }} />
+        </label>
 
         {error && <div className="alert danger span-2" role="alert"><AlertTriangle size={16} />{error}</div>}
 
