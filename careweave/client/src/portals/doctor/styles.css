@@ -179,3 +179,25 @@
 .dx .rx-row{padding:8px;background:#eef2ee}
 .dx .rx-remove{height:42px}
 @media(max-width:860px){.dx .rx-head{display:none}.dx .rx-line{grid-template-columns:1fr 1fr!important}}
+/* Phones: the top bar's buttons wrap under the title instead of pushing the page sideways. */
+.dx select{max-width:100%}
+@media(max-width:760px){
+  .dx .topbar{height:auto;min-height:72px;flex-wrap:wrap;padding:10px 17px;row-gap:8px}
+  .dx .top-actions{margin-left:0;width:100%;flex-wrap:wrap;gap:8px}
+  .dx .calc-grid{grid-template-columns:minmax(0,1fr)}
+  .dx .calc-card{min-width:0}
+}
+.dx .form-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.dx .form-grid>*{min-width:0}
+.dx .form-grid select,.dx .form-grid input,.dx .form-grid textarea{max-width:100%}
+@media(max-width:760px){.dx .form-grid{grid-template-columns:minmax(0,1fr)}}
+/* The close button is easy to hit. */
+.dx .modal-head .icon-button{min-width:36px;min-height:36px}
+.dx .rx-bar-actions{flex-wrap:wrap;min-width:0;max-width:100%}
+.dx .rx-bar-actions select{flex:1 1 180px;min-width:0}
+@media(max-width:860px){.dx .rx-bar-actions{width:100%}.dx .rx-bar-actions select{max-width:none}}
+@media(max-width:760px){
+  .dx .content{padding:22px 14px 48px}
+  .dx .card{padding:18px}
+  .dx .page-header h1{font-size:25px}
+}

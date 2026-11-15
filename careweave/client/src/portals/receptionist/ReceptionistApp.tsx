@@ -101,7 +101,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               <button
                 key={item.id}
                 className={isActive ? 'active' : ''}
-                onClick={() => setSection(item.id as any)}
+                onClick={() => { setSection(item.id as any); if (window.matchMedia('(max-width: 760px)').matches) setCollapsed(false); }}
               >
                 <Icon size={18} />
                 <span>{item.label}</span>

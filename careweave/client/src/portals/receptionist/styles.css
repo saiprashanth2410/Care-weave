@@ -733,11 +733,13 @@ label {
   border-radius: var(--radius-sm);
 }
 
-.side-user-chip div {
+.side-user-chip > div:not(.avatar) {
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-width: 0;
 }
+.side-user-chip .avatar { flex: none; width: 32px; height: 32px; }
 
 .side-user-chip b {
   font-size: 12px;
@@ -805,13 +807,15 @@ label {
 }
 
 .topbar {
-  height: 68px;
+  min-height: 68px;
+  flex-wrap: wrap;
+  row-gap: 8px;
   background: #f6f7f3;
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
-  padding: 0 36px;
-  gap: 16px;
+  padding: 8px 24px;
+  gap: 12px;
   position: sticky;
   top: 0;
   z-index: 5;
@@ -834,8 +838,13 @@ label {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
+/* One line, one height: a label never wraps inside its own button. */
+.topbar-center > *, .topbar-center .btn-soft, .topbar-center .btn-primary { white-space: nowrap; flex-shrink: 0; }
+.topbar-center .btn-soft, .topbar-center .btn-primary { min-height: 36px; padding-left: 10px; padding-right: 10px; }
 
 .live-badge {
   display: inline-flex;
@@ -1433,9 +1442,12 @@ tbody tr:hover {
 
 .form-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 16px;
 }
+/* A long option in a select must not make its column wider than the modal. */
+.form-grid > * { min-width: 0; }
+.form-grid select, .form-grid input, .form-grid textarea { max-width: 100%; }
 
 .form-grid .span-2 {
   grid-column: span 2;
@@ -1770,6 +1782,7 @@ tbody tr:hover {
   .login-panel {
     padding: 32px 20px;
   }
+  /* On a phone the sidebar is a drawer: shut until the menu button opens it (the app-shell then has .nav-collapsed). */
   .sidebar {
     position: fixed;
     z-index: 50;
@@ -1777,12 +1790,24 @@ tbody tr:hover {
     top: 0;
     bottom: 0;
     box-shadow: none;
+    transform: translateX(-100%);
+    transition: transform .18s ease;
   }
   .nav-collapsed .sidebar {
     width: 260px;
+    transform: none;
   }
   .topbar {
-    padding: 0 16px;
+    padding: 10px 16px;
+    height: auto;
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  .topbar-center {
+    margin-left: 0;
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
   .content {
     padding: 20px 16px;
@@ -1801,14 +1826,18 @@ tbody tr:hover {
     min-width: 650px;
   }
   .form-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .form-grid .span-2 {
     grid-column: span 1;
   }
   .search {
-    min-width: 100%;
+    min-width: 0;
+    width: 100%;
   }
+  .search input { min-width: 0; }
+  .toolbar-row, .filter-row { flex-wrap: wrap; width: 100%; }
+  .filter-row select { max-width: 100%; }
 }
 
 
@@ -1894,3 +1923,6 @@ tbody tr:hover {
 
 .breadcrumb span, .breadcrumb b { white-space: nowrap; flex-shrink: 0; }
 .breadcrumb .crumb-sep { color: #c3cac2; }
+
+/* The close button is easy to hit. */
+.modal-head button { min-width: 36px; min-height: 36px; display: grid; place-items: center; }

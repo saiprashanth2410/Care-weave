@@ -159,12 +159,12 @@ export function DoctorPrescriptions({
       />
 
       <div className="card" style={{ marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           <b>Select Patient Record:</b>
           <select
             value={selectedPatientId}
             onChange={e => setSelectedPatientId(e.target.value)}
-            style={{ minWidth: 260 }}
+            style={{ minWidth: 'min(260px, 100%)', flex: '1 1 260px', maxWidth: 420 }}
           >
             {patients.map(p => (
               <option key={p.id} value={p.id}>{p.name} ({p.patientId})</option>

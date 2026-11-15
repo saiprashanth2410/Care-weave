@@ -83,7 +83,7 @@ export function Inbox({ notify, refresh, canSendLinks, onChanged }: { notify: (s
         {tabBtn('all', 'All')}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 380px) 1fr', gap: 16, alignItems: 'start' }}>
+      <div className="inbox-grid">
         <div className="table-card card" style={{ padding: 0, maxHeight: '70vh', overflowY: 'auto' }} role="list" aria-label="Messages">
           {items === null && <p className="muted" style={{ padding: 16 }} role="status">Loading…</p>}
           {items?.length === 0 && <p className="muted" style={{ padding: 16 }}>{tab === 'resolved' ? 'Nothing resolved yet.' : 'No messages. When staff ask for help, it appears here.'}</p>}
