@@ -49,3 +49,7 @@
   .dx .ig-status { margin-left: 0; }
   .dx .ig-save { margin-left: 0; width: 100%; }
 }
+
+/* Inbox: list and message side by side, stacked on a phone. */
+.dx .inbox-grid { display: grid; grid-template-columns: minmax(260px, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 760px) { .dx .inbox-grid { grid-template-columns: minmax(0, 1fr); } }

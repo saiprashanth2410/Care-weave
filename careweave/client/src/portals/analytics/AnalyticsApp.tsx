@@ -155,7 +155,7 @@ export default function AnalyticsApp() {
     <div className="min-h-screen bg-paper text-ink font-sans antialiased selection:bg-accent selection:text-surface">
       {/* Top Banner & Exasol Engine Status */}
       <header className="sticky top-0 z-30 border-b border-rule bg-surface px-6 py-3.5">
-        <div className="mx-auto flex max-w-7xl items-center justify-between">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate(-1)}
@@ -173,7 +173,7 @@ export default function AnalyticsApp() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {/* Engine Status Pill */}
             <div
               className={`flex items-center gap-2 rounded-sm border px-3 py-1.5 text-xs font-medium transition ${
@@ -332,7 +332,7 @@ export default function AnalyticsApp() {
             </div>
 
             {/* View Navigation Tabs */}
-            <div className="flex border-b border-rule gap-6 text-sm font-medium">
+            <div className="flex gap-6 overflow-x-auto whitespace-nowrap border-b border-rule text-sm font-medium [&>button]:shrink-0">
               <button
                 onClick={() => setActiveTab('operations')}
                 className={`pb-3 transition flex items-center gap-2 ${

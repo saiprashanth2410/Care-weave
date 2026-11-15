@@ -131,7 +131,7 @@ export function DoctorConsultations({
             </select>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)' }}>Clinical Template:</span>
             <button
               type="button"
