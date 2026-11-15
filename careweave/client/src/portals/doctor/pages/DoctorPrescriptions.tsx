@@ -93,7 +93,7 @@ function printPrescriptionSlip(patient: PatientRecord, rxList: Prescription[]) {
           </div>
           <div class="signature-line">
             Authorized Medical Officer<br/>
-            <span style="font-size: 10px; font-weight: normal; color: #56655f;">Reg No: KMC-74921 / Signed Digitally</span>
+            <span style="font-size: 10px; font-weight: normal; color: #56655f;">Signed Digitally</span>
           </div>
         </div>
 
