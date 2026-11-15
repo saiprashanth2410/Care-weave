@@ -35,8 +35,7 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^24.19.2",
-    "@types/ws": "^8.18.2",
-    "@vercel/node": "^5.1.10"
+    "@types/ws": "^8.18.2"
   },
   "optionalDependencies": {
     "@rolldown/binding-darwin-arm64": "1.2.15",
