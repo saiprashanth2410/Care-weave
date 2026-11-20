@@ -4,10 +4,11 @@ import Loader from './Loader'
 import type { DayAppt, Doctor, DoctorDay, RosterDoctor } from '../types'
 import { cleanName, fmtTime, hhmmLabel, todayISO } from '../helpers'
 
-type Filter = 'all' | 'in_consultation' | 'available'
+type Filter = 'all' | 'in_consultation' | 'in_video' | 'available'
 
 const STATUS_LABEL: Record<RosterDoctor['status'], string> = {
   in_consultation: '● In Consultation',
+  in_video: '● In Video Consultation',
   available: '● Available',
   off_shift: '● Off Shift',
 }
@@ -123,6 +124,7 @@ export default function DoctorSlotMatrix({
   const all = roster ?? []
   const shown = all.filter((d) => filter === 'all' || d.status === filter)
   const inRoom = all.filter((d) => d.status === 'in_consultation').length
+  const inVideo = all.filter((d) => d.status === 'in_video').length
   const chip = (id: Filter, label: string) => (
     <button onClick={() => setFilter(id)} className={filter === id ? 'btn-primary' : 'btn-soft'}>
       {label}
@@ -140,6 +142,7 @@ export default function DoctorSlotMatrix({
         <div className="flex gap-1.5">
           {chip('all', roster ? `All doctors (${all.length})` : 'All doctors')}
           {chip('in_consultation', roster ? `In consultation (${inRoom})` : 'In consultation')}
+          {chip('in_video', roster ? `On video (${inVideo})` : 'On video')}
           {chip('available', roster ? `Available (${all.filter((d) => d.status === 'available').length})` : 'Available')}
         </div>
       </div>
@@ -151,9 +154,10 @@ export default function DoctorSlotMatrix({
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {shown.map((doc) => {
-          const busy = doc.status === 'in_consultation'
+          const onVideo = doc.status === 'in_video'
+          const busy = doc.status === 'in_consultation' || onVideo
           return (
-            <div key={doc.id} className={`flex flex-col justify-between space-y-3 border-2 bg-surface p-4 transition hover:border-accent ${busy ? 'border-amber-600' : 'border-rule'}`}>
+            <div key={doc.id} className={`flex flex-col justify-between space-y-3 border-2 bg-surface p-4 transition hover:border-accent ${onVideo ? 'border-sky-700' : busy ? 'border-amber-600' : 'border-rule'}`}>
               <div>
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -171,7 +175,9 @@ export default function DoctorSlotMatrix({
                     className={`border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                       doc.status === 'available'
                         ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
-                        : busy
+                        : onVideo
+                          ? 'animate-pulse border-sky-700 bg-sky-50 text-sky-900'
+                          : busy
                           ? 'animate-pulse border-amber-600 bg-amber-50 text-amber-900'
                           : 'border-rule bg-paper text-ink-3'
                     }`}
@@ -180,7 +186,13 @@ export default function DoctorSlotMatrix({
                   </span>
                 </div>
 
-                {busy && doc.current && (
+                {onVideo && doc.video && (
+                  <p className="mt-2 border border-sky-700/40 bg-sky-50 px-2 py-1 text-xs text-sky-900">
+                    📹 On a <b>video consultation</b> with <b>{doc.video.patientName}</b> since {fmtTime(doc.video.startedAt)}
+                  </p>
+                )}
+
+                {!onVideo && busy && doc.current && (
                   <p className="mt-2 border border-amber-600/40 bg-amber-50 px-2 py-1 text-xs text-amber-900">
                     With <b>{doc.current.patientName}</b> since {fmtTime(doc.current.startedAt)}
                   </p>

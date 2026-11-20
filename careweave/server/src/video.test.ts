@@ -104,3 +104,96 @@ test('video: an expired link is refused', async () => {
     assert.match(gone.json.error, /expired/i);
   } finally { await srv.close(); }
 });
+
+test('video: chat and captions are kept, validated, and shown to the doctor as one transcript', async () => {
+  const { srv, doctor, patient, start } = await setup();
+  try {
+    const c = (await start(patient.id)).json;
+    const post = (body: object) => srv.call('POST', `/api/video/public/${c.id}/signal`, { body });
+    assert.equal((await post({ role: 'patient', type: 'chat', data: { text: '   ' } })).status, 400);
+    assert.equal((await post({ role: 'patient', type: 'chat', data: { text: 'x'.repeat(1001) } })).status, 413);
+    assert.equal((await post({ role: 'patient', type: 'chat', data: { text: 'I have fever since 2 days' } })).status, 201);
+    assert.equal((await post({ role: 'doctor', key: c.doctorKey, type: 'caption', data: { text: 'Take paracetamol 500 after food' } })).status, 201);
+    const t = await srv.call('GET', `/api/video/consults/${c.id}/transcript`, { token: doctor });
+    assert.deepEqual(t.json.lines.map((l: any) => `${l.from}/${l.kind}: ${l.text}`), ['patient/chat: I have fever since 2 days', 'doctor/caption: Take paracetamol 500 after food']);
+    assert.equal((await srv.call('GET', `/api/video/consults/${c.id}/transcript`, { token: await srv.login('lab') })).status, 403);
+  } finally { await srv.close(); }
+});
+
+test('video: the summary needs something to summarise, falls back to the transcript with no AI key, and never sends names to the AI', async () => {
+  const { forgetAiConfig } = await import('./services/aiConfig.js');
+  const realFetch = globalThis.fetch;
+  const saved = process.env.GEMINI_API_KEY;
+  const { srv, doctor, patient, start } = await setup();
+  try {
+    const c = (await start(patient.id)).json;
+    const post = (body: object) => srv.call('POST', `/api/video/public/${c.id}/signal`, { body });
+    const summary = () => srv.call('POST', `/api/video/consults/${c.id}/summary`, { token: doctor });
+
+    assert.equal((await summary()).status, 400);
+    await post({ role: 'patient', type: 'chat', data: { text: 'Fever and cough for two days' } });
+    await post({ role: 'doctor', key: c.doctorKey, type: 'chat', data: { text: 'Take rest, drink water, paracetamol if above 100F' } });
+
+    delete process.env.GEMINI_API_KEY; forgetAiConfig();
+    const off = (await summary()).json;
+    assert.equal(off.summary, null);
+    assert.equal(off.reason, 'ai-off');
+    assert.equal(off.lines.length, 2);
+
+    process.env.GEMINI_API_KEY = 'AIzaSyFakeKeyForTheSummaryTest123456789'; forgetAiConfig();
+    let sent = '';
+    globalThis.fetch = (async (url: any, init: any) => {
+      if (!String(url).includes('generativelanguage')) return realFetch(url, init);
+      sent = String(init.body);
+      return new Response(JSON.stringify({ steps: [{ type: 'model_output', content: [{ text: 'Reason for consultation: fever and cough.' }] }] }), { status: 200 });
+    }) as typeof fetch;
+    const ok = (await summary()).json;
+    assert.match(ok.summary, /fever and cough/);
+    assert.match(sent, /Patient: Fever and cough for two days/);
+    assert.match(sent, /Doctor: Take rest/);
+    assert.ok(!sent.includes('Video Patient'), 'the patient name must not reach the AI');
+    assert.ok(!sent.includes('ANIRBAN'), 'the doctor name must not reach the AI');
+  } finally {
+    globalThis.fetch = realFetch;
+    if (saved === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = saved;
+    forgetAiConfig();
+    await srv.close();
+  }
+});
+
+test('video: the front desk roster shows the doctor as "in a video consultation" while the call is live, and not after it ends or goes silent', async () => {
+  const store = await memoryStore();
+  const srv = await startInstance(store);
+  try {
+    const reception = await srv.login('reception'), doctor = await srv.login('doctor');
+    const me = (await srv.call('GET', '/api/me', { token: doctor })).json;
+    const patient = (await srv.call('POST', '/api/patients', { token: reception, body: { name: 'Roster Patient', dob: '1980-08-08', gender: 'F', phone: '+91 90000 77777' } })).json;
+    await srv.call('POST', '/api/appointments', { token: reception, body: { patientId: patient.id, doctorId: me.id, date: new Date().toISOString().slice(0, 10), time: '04:00 PM', reason: 'Video' } });
+    const roster = async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const rows = (await srv.call('GET', `/api/doctors/roster?today=${today}&now=12:00`, { token: reception })).json as any[];
+      return rows.find((d) => d.id === me.id);
+    };
+    assert.notEqual((await roster()).status, 'in_video');
+
+    const c = (await srv.call('POST', '/api/video/consults', { token: doctor, body: { patientId: patient.id } })).json;
+    const during = await roster();
+    assert.equal(during.status, 'in_video');
+    assert.equal(during.video.patientName, 'Roster Patient');
+
+    // The doctor closes the tab without pressing End: after 45 s of silence the badge goes away.
+    const repos = createRepos(store);
+    await repos.videoConsults.update(await repos.videoConsults.byToken(c.id), { doctorSeenAt: new Date(Date.now() - 60_000).toISOString() });
+    assert.notEqual((await roster()).status, 'in_video');
+    // Polling again is the heartbeat that brings it back.
+    await srv.call('GET', `/api/video/public/${c.id}/signals?role=doctor&key=${c.doctorKey}&since=0`);
+    assert.equal((await roster()).status, 'in_video');
+
+    await srv.call('POST', `/api/video/consults/${c.id}/end`, { token: doctor });
+    const after = await roster();
+    assert.notEqual(after.status, 'in_video');
+    assert.equal(after.video, null);
+    // Receptionists cannot see anyone else's call details beyond the patient name: no link or key in the roster.
+    assert.ok(!JSON.stringify(during).includes(c.id) && !JSON.stringify(during).includes(c.doctorKey));
+  } finally { await srv.close(); }
+});

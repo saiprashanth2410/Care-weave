@@ -24,6 +24,7 @@ import { LiveHub } from './liveEvents.js';
 import { firebaseUsersFromEnv, type FirebaseUsers } from './services/firebaseUsers.js';
 import { whatsappPublicRoutes, whatsappSimulatorRoutes } from './whatsapp/routes.js';
 import { videoPublicRoutes, videoStaffRoutes } from './routes/video.js';
+import { messageRoutes } from './routes/messages.js';
 
 export type CreateAppOptions = { repos: Repos | (() => Repos); config?: Partial<AppConfig>; live?: LiveHub; firebaseUsers?: FirebaseUsers };
 
@@ -106,6 +107,7 @@ export function createApp(opts: CreateAppOptions) {
   app.use('/api', labRoutes(ctx));
   app.use('/api', doctorRoutes(ctx));
   app.use('/api', videoStaffRoutes(ctx));
+  app.use('/api', messageRoutes(ctx));
 
   app.use(errorHandler);
   return app;
