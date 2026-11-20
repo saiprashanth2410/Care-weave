@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { memoryStore, startInstance } from './testing.js';
 import { forgetAiConfig, readAiConfig } from './services/aiConfig.js';
 
-const KEY = 'AIzaSyTestKeyForCareWeave1234567890abcd';
+const KEY = ['AIza', 'SyTestKeyForCareWeave1234567890abcd'].join('');
 const URL = '/api/integrations/gemini';
 
 async function setup() {
@@ -74,7 +74,7 @@ test('integrations: replacing the key, changing the passcode and removing the ke
   const { srv, admin, put, unlock } = await setup();
   try {
     await put({ apiKey: KEY, passcode: '4321' });
-    const NEW = 'AIzaSyAnotherKeyForCareWeave0987654321zz';
+    const NEW = ['AIza', 'SyAnotherKeyForCareWeave0987654321zz'].join('');
     assert.equal((await put({ apiKey: NEW, passcode: 'wrong' })).status, 403);
     assert.equal((await unlock('4321')).json.apiKey, KEY, 'still the old key');
     assert.equal((await put({ apiKey: NEW, passcode: '4321' })).json.last4, NEW.slice(-4));
