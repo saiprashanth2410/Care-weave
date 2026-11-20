@@ -353,7 +353,7 @@ export function doctorRoutes(ctx: AppCtx) {
     const r = await R().prescriptions.insert(rxRecord(p, enc, req, { ...b, medicine, dosage, frequency }, allergy, high, ov));
     await audit(req, 'create', 'prescription', r.id, `${medicine} ${dosage}${allergy ? ' (allergy override)' : ''}`);
     if (high.length) await audit(req, 'override', 'prescription', r.id, `Duplicate therapy override for ${molecules}: ${text(ov.overrideReason, 500)}`);
-    emitEvent('PRESCRIPTION_PRESCRIBED', {
+    await emitEvent('PRESCRIPTION_PRESCRIBED', {
       patientId: p.patientId, name: p.name, phone: p.phone, doctor: req.user.name,
       medicines: [{ name: medicine, dosage, frequency, foodInstruction: r.instructions || '' }],
     });
@@ -411,7 +411,7 @@ export function doctorRoutes(ctx: AppCtx) {
       await audit(req, 'create', 'prescription', saved[i].id, `${rows[i].medicine} ${rows[i].dosage}${allergy ? ' (allergy override)' : ''} · ${saved.length} medicine(s) in one prescription`);
       if (high.length) await audit(req, 'override', 'prescription', saved[i].id, `Duplicate therapy override for ${[...new Set(high.flatMap((x: any) => x.matchedMolecules))].join(', ')}: ${text(ov.overrideReason, 500)}`);
     }
-    emitEvent('PRESCRIPTION_PRESCRIBED', {
+    await emitEvent('PRESCRIPTION_PRESCRIBED', {
       patientId: p.patientId, name: p.name, phone: p.phone, doctor: req.user.name,
       medicines: saved.map((r: any) => ({ name: r.medicine, dosage: r.dosage, frequency: r.frequency, foodInstruction: r.instructions || '' })),
     });

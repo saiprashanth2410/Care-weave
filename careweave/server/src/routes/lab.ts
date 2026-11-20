@@ -210,7 +210,7 @@ export function labRoutes(ctx: AppCtx) {
     if (labReleased) {
       const pt = o.registeredPatientRef ? await ctx.repos.patients.byRef(o.registeredPatientRef) : null;
       const rs = (o.results || []).filter((r: any) => r.value);
-      emitEvent('LAB_REPORT_RELEASED', {
+      await emitEvent('LAB_REPORT_RELEASED', {
         patientId: o.patientId, name: o.patientName, phone: pt?.phone, testName: o.testName, pathologist: o.verifiedBy, verifiedAt: o.verifiedAt,
         criticalCount: rs.filter((r: any) => r.flag === 'critical').length, abnormalCount: rs.filter((r: any) => r.flag === 'abnormal').length,
         summary: rs.slice(0, 10).map((r: any) => ({ parameter: r.parameter, value: r.value, unit: r.unit, flag: r.flag || 'normal' }))

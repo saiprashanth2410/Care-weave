@@ -35,7 +35,7 @@ In typical community hospitals and diagnostic centers, **Front Desk (OPD)**, **D
 | Resource | Description | Direct Link |
 | :--- | :--- | :--- |
 | 🎬 **Demo Video** | 5-minute end-to-end video walkthrough of CareWeave | [`CareWeave_Demo_5min.mp4`](CareWeave_Demo_5min.mp4) |
-| 🌐 **Live Demo** | Deployed on Vercel (synthetic data; sign in with the demo accounts in the setup section) | [careweave-ten.vercel.app](https://careweave-ten.vercel.app) |
+| 🌐 **Live Demo** | Deployed on Vercel with synthetic data. Sign in with the staff accounts in [Live demo access](#-live-demo-access) | [careweave-ten.vercel.app](https://careweave-ten.vercel.app) |
 | 📊 **Pitch Deck** | 10-slide presentation deck | [`CareWeave.pptx`](CareWeave.pptx) |
 | 📝 **Demo Guide & Script** | Slide-by-slide pitch narrative and demo script | [`DEMO.md`](DEMO.md) |
 | 🏛️ **Exasol Integration Guide** | Comprehensive schema design, SQL queries, and scale benchmarks | [`EXASOL_SETUP.md`](EXASOL_SETUP.md) |
@@ -147,6 +147,7 @@ Separately, every analytics widget has a **SQL Inspector** that shows the exact 
 - **Brand catalogue:** 93,911 brand rows with their generic composition (`server/catalog/BrandMaster.tsv`).
 - **Allergy check:** Matches the allergen against the medicine name and against four hand-written drug families (penicillins, sulfonamides, NSAIDs, cephalosporins). Prescribing Amoxicillin to a patient with a penicillin allergy is blocked; an override needs a written reason (15+ characters) and is audited. Allergies outside those families are matched by name only.
 - **Duplicate Molecule Interceptor:** Blocks accidental therapeutic doubling across different brand names (e.g., Augmentin + Moxikind-CV, or Calpol + Ultracet).
+- **One-line prescription form:** one row per medicine (name, dosage, route, frequency, duration, instructions, refills), **Add medicine** for more rows, and an optional **Diagnosis** and **Notes** for the whole prescription. All rows are saved together; the printable slip shows the diagnosis and notes.
 
 ### 3. Record Reconciliation (rule-based scoring)
 - Outside medical records (JSON) are scored: UHID 50, date of birth 25, phone 20, name 20 (exact) or 10 (similar), minus 20 for a conflicting date of birth. A record is linked automatically only when the UHID matches, one other field confirms it, nothing contradicts it and the score is at least 70. Everything else goes to a human reviewer.
@@ -160,7 +161,12 @@ Separately, every analytics widget has a **SQL Inspector** that shows the exact 
   - `REPORT <UHID>` — Latest verified laboratory test parameters and critical flags.
   - Reports and medicines are private: they are shown only when the sender's phone number and the UHID belong to the same patient.
 
-### 5. Live Operations
+### 5. Admin Portal: staff, audit log and Gemini key vault
+- **Staff access:** the administrator adds staff, sets roles and permissions, and switches accounts off.
+- **Audit log:** every sensitive action is recorded with who did it and when.
+- **Gemini API key vault (Integrations page):** the key for report scanning and the pre-consult brief is entered once in the admin portal instead of a server file. It is sealed with AES-256-GCM before it is stored, shown only as `••••` plus the last four characters, and revealed only after a separate passcode (5 wrong tries lock it for 15 minutes). **Test connection** checks the key before saving. The administrator can switch scanning and the brief on or off, choose the model, and remove the key. If no key is stored, `GEMINI_API_KEY` from the environment is used. The key and passcode never appear in the audit log.
+
+### 6. Live Operations
 - **Live sync:** a server-sent-events stream (`/api/events`) refreshes the front desk and doctor screens when anything changes, including changes made on another server instance (instances pass events through the `liveEvents` collection and read it every 1.5 s while a screen is connected). Where the host cannot hold a connection open (serverless), screens fall back to polling every 5 seconds.
 - **Critical lab alerts:** when a verifier releases a result with a critical value, the ordering and linked doctors get a banner at once, and their Overview keeps it for 3 days.
 - **Pre-consult brief:** one click on a patient chart summarises allergies, flagged labs, medicines and open items. It uses Gemma/Gemini when `GEMINI_API_KEY` is set (no name, phone or UHID is sent) and plain rules otherwise.
@@ -214,9 +220,26 @@ npm run dev
 
 ---
 
-## 👥 Demo Credentials (All Portals)
+## 🔑 Live demo access
 
-Sign in at **`http://localhost:5173/login`** using the credentials below (Password for all: `demo123`):
+The deployed site ([careweave-ten.vercel.app](https://careweave-ten.vercel.app)) signs in through Firebase with these staff accounts. The published `.test` accounts below are switched off on the deployed server.
+
+| Role / Portal | Email | Key Features to Test |
+| :--- | :--- | :--- |
+| **Receptionist** | `reception@careweave.com` | Register patient, book appointment, OP token, live queue, **Load sample scenario** |
+| **Doctor** | `doctor@careweave.com` | One-line multi-drug prescription, allergy block, SOAP notes, lab orders, pre-consult brief |
+| **Laboratory** | `lab@careweave.com` | Report scan, specimen collection, result entry, verification |
+| **Administrator** | `admin@careweave.com` | Staff access, audit log, **Integrations (Gemini key vault)** |
+
+**Password:** `12345678`
+
+**Fastest way to see everything (about 3 minutes):** sign in as the receptionist and press **Load sample scenario (synthetic)**. It creates the patient *Priya Raman* with an appointment, a penicillin allergy, lab orders and outside-hospital records. Then check her in (receptionist), prescribe Amoxicillin as the doctor to see the allergy block, and open the lab portal to see her orders.
+
+---
+
+## 👥 Local development accounts
+
+On a developer machine only (never on a deployed server), sign in at **`http://localhost:5173/login`** with these accounts (password for all: `demo123`):
 
 | Role / Portal | Email | Key Features to Test |
 | :--- | :--- | :--- |
@@ -224,6 +247,7 @@ Sign in at **`http://localhost:5173/login`** using the credentials below (Passwo
 | **Laboratory** | `lab@careweave.test` | AI report scanning, specimen collection, result entry |
 | **Pathologist** | `pathologist@careweave.test` | Result verification, amendment approvals, critical release |
 | **Physician (Doctor)** | `doctor@careweave.test` | SOAP notes, 94k e-prescribing, allergy blocks, lab orders |
+| **Administrator** | `admin@careweave.test` | Staff access, audit log, Gemini key vault |
 | **Executive Analytics** | *Any logged-in user* | Exasol intelligence dashboard, SQL inspector, TAT audit |
 
 ---
@@ -256,6 +280,7 @@ cd careweave/client && npm test
 - `vercel.json` builds the server (`tsc` into `careweave/server/dist`, which is **not** committed) and then the client; `api/index.ts` imports the built server.
 - Required: `MONGODB_URI` (the server refuses to start in production without it). Several instances can run at once because sessions and data are in MongoDB.
 - WhatsApp: set `META_APP_SECRET` (Meta app secret, used to verify `X-Hub-Signature-256`; without it production refuses Meta webhook calls), `META_VERIFY_TOKEN` for the one-time handshake, and `WHATSAPP_API_KEY` for n8n and Twilio calls.
+- Optional: set `AI_CONFIG_KEY` (any long random string) to seal the Gemini key stored from the admin portal under your own secret; without it the server derives one from `ATTACHMENT_KEY` or a built-in fallback.
 - Lab report attachments (PDF, PNG, JPEG, up to 10 MB) are stored in the MongoDB `files` collection, so every instance serves them and they survive restarts. In the local-file development mode they are written to `server/uploads/store`. Files saved by older versions are still read from `uploads/` on that server's disk if present.
 
 ---
@@ -275,7 +300,7 @@ Still true after the changes above:
 - **WhatsApp language preference** (`LANG TA/EN`) is stored per phone number in the `whatsappPrefs` collection, so it survives restarts and is shared by instances. `LANG RESET` deletes it.
 - **Attachments are stored in MongoDB documents** (10 MB cap). With `ATTACHMENT_KEY` set they are encrypted with AES-256-GCM before they are stored (losing the key makes them unreadable; older unencrypted files still open). With `CLAMAV_HOST` set each upload is scanned by a ClamAV daemon and refused if the scanner is unreachable. Without it only the standard EICAR test signature is checked, so no real malware scan happens.
 - **Live updates across instances** arrive as they are written when MongoDB is a replica set (change stream, written but not exercised against a replica set in the test run here); otherwise they take up to about 1.5 s (the polling interval of the shared event collection). Screens also poll every 5 seconds as a safety net, and on Vercel only polling is used.
-- **The public demo uses open demo accounts.** The Vercel deployment sets `ALLOW_LOCAL_LOGIN=true` so anyone can sign in with the demo accounts, and its Atlas network access is open to all addresses. Use it with synthetic data only, and switch both off (use Firebase sign-in and an IP allowlist) for anything real.
+- **The public demo is for synthetic data only.** The deployed server creates no published-password accounts (the `.test` demo accounts exist only on a developer machine) and signs staff in through Firebase, but the demo staff password is shared for judging. Use a private password, per-person accounts and an Atlas IP allowlist for anything real.
 - **Sample data:** the "sample scenario" and 30-day analytics history are synthetic and generated by the app.
 - **Not benchmarked:** no performance figure is claimed anywhere in this repository. `npm run demo:scale` exists but its results have not been recorded.
 - **Not a medical device.** No regulatory review, no security audit, no penetration test.
@@ -289,4 +314,4 @@ CareWeave is a demonstration prototype. All clinical scenarios, patient identifi
 
 ## 📄 License
 This project is open-source under the [MIT License](LICENSE).  
-Copyright (c) 2026 Saiprashanth T, Suriya Sudhakar, Dhivya Dharshini C S.
+Copyright (c) 2026 Saiprashanth T, Saveetha G.

@@ -3,6 +3,7 @@ import express, { Router } from 'express';
 import type { Repos } from '../repo/index.js';
 import { catchAsyncRoutes } from '../asyncRoutes.js';
 import { recentEvents } from './emitter.js';
+import { sendViaMeta } from './meta.js';
 import { activePrescriptions, eventText, latestReport, queueStatus } from './messages.js';
 import { replyFor, whatsappView } from '../services/whatsappData.js';
 
@@ -31,17 +32,6 @@ export function validMetaSignature(raw: Buffer, header: string | undefined, secr
 }
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-async function sendViaMeta(to: string, text: string) {
-  const token = process.env.META_WHATSAPP_TOKEN, phoneId = process.env.META_PHONE_NUMBER_ID;
-  if (!token || !phoneId) return;
-  await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'text', text: { body: text } }),
-    signal: AbortSignal.timeout(3000)
-  }).catch(() => {});
-}
 
 /** Reads the raw bytes of a webhook body as JSON or as a form post. A body that cannot be read is `null`. */
 function parseBody(raw: Buffer, contentType: string): Record<string, any> | null {
