@@ -2,6 +2,7 @@ import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { validMetaSignature } from './whatsapp/routes.js';
+import { createRepos } from './repo/index.js';
 import { memoryStore, startInstance } from './testing.js';
 
 const SECRET = 'test-app-secret';
@@ -66,7 +67,9 @@ test('webhook: with no META_APP_SECRET, production refuses the call and developm
 });
 
 test('webhook: n8n and Twilio calls (no Meta signature) still need the shared key when one is set', async () => {
-  const s = await startInstance(await memoryStore());
+  const store = await memoryStore();
+  await createRepos(store).patients.insert({ id: 'p-wh', patientId: 'CW-98766', name: 'Anbu', dob: '1990-01-01', gender: 'M', phone: '+919876543210', createdAt: new Date().toISOString() });
+  const s = await startInstance(store);
   try {
     process.env.WHATSAPP_API_KEY = 'shared-key';
     const body = JSON.stringify({ from: '919876543210', message: 'HELP' });

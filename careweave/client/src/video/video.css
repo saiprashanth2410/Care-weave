@@ -1,0 +1,44 @@
+/* ---------- The call itself ---------- */
+.vc { width: 100%; display: flex; flex-direction: column; gap: 12px; }
+.vc-stage { position: relative; width: 100%; aspect-ratio: 4 / 3; max-height: 70vh; background: #0f1a17; border-radius: 6px; overflow: hidden; }
+.vc-remote { width: 100%; height: 100%; object-fit: cover; background: #0f1a17; display: block; }
+.vc-local { position: absolute; right: 10px; bottom: 10px; width: 28%; min-width: 88px; max-width: 180px; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 6px; border: 2px solid rgba(255, 255, 255, .85); background: #1d2b27; transform: scaleX(-1); box-shadow: 0 2px 10px rgba(0, 0, 0, .4); }
+.vc-local.vc-cam-off { opacity: .25; }
+.vc-overlay { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 8px; padding: 16px; color: #fff; background: rgba(15, 26, 23, .72); font-size: 15px; }
+.vc-error { margin: 0; max-width: 420px; color: #ffd2c8; font-size: 13px; line-height: 1.5; }
+.vc-bar { display: flex; justify-content: center; gap: 10px; }
+.vc-bar button { flex: 1 1 0; max-width: 200px; min-height: 46px; padding: 0 14px; border-radius: 6px; border: 1px solid #c3cac2; background: #fff; color: #14231f; font-weight: 700; font-size: 14px; cursor: pointer; }
+.vc-bar button:disabled { opacity: .5; cursor: not-allowed; }
+.vc-bar .vc-off { background: #fbe9e5; border-color: #e9b8ad; color: #a3341f; }
+.vc-bar .vc-end { background: #a3341f; border-color: #a3341f; color: #fff; }
+
+/* ---------- Doctor portal: video on the left half, link and details on the right half ---------- */
+.vc-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.vc-layout .vc-side { display: grid; gap: 14px; align-content: start; }
+.vc-layout .vc-side h3 { margin: 0; font-size: 16px; }
+.vc-layout .vc-side p { margin: 0; }
+.vc-tips { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.7; color: #56655f; }
+@media (max-width: 1000px) { .vc-layout { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- Patient page ---------- */
+.vc-page { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px 16px; background: #f6f7f3; color: #14231f; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+.vc-page h1 { margin: 0; font-size: 20px; text-align: center; }
+.vc-page p { margin: 0; color: #56655f; }
+.vc-card { width: 100%; max-width: 440px; background: #fff; border: 1px solid #c3cac2; border-radius: 10px; padding: 24px 20px; text-align: center; display: grid; gap: 14px; }
+.vc-card b { font-size: 17px; line-height: 1.4; }
+.vc-join { min-height: 52px; border: 0; border-radius: 8px; background: #0c6b6d; color: #fff; font-size: 17px; font-weight: 800; cursor: pointer; }
+.vc-note { font-size: 12px; line-height: 1.5; }
+
+/* The patient's call fills the phone screen: doctor full-bleed, yourself small in the corner, big buttons at the bottom. */
+.vc-page.in-call { padding: 0; gap: 0; justify-content: flex-start; background: #0f1a17; }
+.vc-page.in-call h1 { display: none; }
+.vc.vc-full { height: 100vh; height: 100dvh; gap: 0; max-width: none; }
+.vc-full .vc-stage { flex: 1; aspect-ratio: auto; max-height: none; border-radius: 0; }
+.vc-full .vc-local { top: max(12px, env(safe-area-inset-top)); right: 12px; bottom: auto; width: 27%; min-width: 84px; max-width: 150px; aspect-ratio: 3 / 4; }
+.vc-full .vc-bar { padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); background: #0f1a17; gap: 10px; }
+.vc-full .vc-bar button { min-height: 52px; font-size: 15px; border-radius: 26px; max-width: none; }
+@media (min-width: 760px) {
+  /* A patient on a laptop gets a centred window instead of an edge-to-edge screen. */
+  .vc-page.in-call { justify-content: center; padding: 24px; background: #f6f7f3; }
+  .vc.vc-full { height: min(82vh, 760px); max-width: 960px; border-radius: 10px; overflow: hidden; background: #0f1a17; }
+}

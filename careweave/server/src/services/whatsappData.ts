@@ -2,6 +2,7 @@ import type { Repos } from '../repo/index.js';
 import { exactCI } from '../repo/base.js';
 import { isoToday } from '../util.js';
 import { replyTo } from '../whatsapp/messages.js';
+import { unregisteredReply } from './whatsappRegister.js';
 
 const digitsOf = (v: any) => String(v ?? '').replace(/\D/g, '');
 
@@ -38,6 +39,11 @@ export const uhidFromBody = (body: string) => String(body || '').trim().split(/\
 /** One WhatsApp message in, one reply out, with the sender's saved language applied and a language change saved. */
 export async function replyFor(repos: Repos, phone: string, body: string) {
   const key = digitsOf(phone).slice(-10);
+  // A number no patient owns can only register (or switch language); QUEUE, REPORT and MEDS stay locked until it has.
+  const word = String(body || '').trim().split(/\s+/)[0]?.toUpperCase() || '';
+  if (key.length === 10 && word !== 'LANG' && word !== 'LANGUAGE' && !(await repos.patients.byPhone(key)).length) {
+    return unregisteredReply(repos, phone, key, body, await repos.whatsappPrefs.languageOf(key));
+  }
   const [view, language] = await Promise.all([
     whatsappView(repos, { phone, uhid: uhidFromBody(body) }),
     key ? repos.whatsappPrefs.languageOf(key) : 'en' as const,
