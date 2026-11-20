@@ -221,7 +221,7 @@ export function appointmentRoutes(ctx: AppCtx) {
     if (issuedToken) {
       const pt = await ctx.repos.patients.byRef(a.patientId);
       const queue = { appointments: [...(await ctx.repos.appointments.onDay(isoToday()))] };
-      emitEvent('PATIENT_CHECKED_IN', {
+      await emitEvent('PATIENT_CHECKED_IN', {
         patientId: a.patientIdCode || pt?.patientId, name: a.patientName, phone: pt?.phone, token: issuedToken, doctor: a.doctorName,
         room: (a.doctorId && (await ctx.repos.users.byId(a.doctorId))?.room) || 'the consulting room', triagePriority: a.priority || 'Normal OPD', queuePosition: queueAhead(queue, saved) + 1
       });
