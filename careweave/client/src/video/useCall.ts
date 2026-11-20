@@ -18,8 +18,9 @@ export type CallApi = ReturnType<typeof useCall>
 
 type Signal = { id: string; at: number; type: 'ready' | 'offer' | 'answer' | 'ice' | 'bye' | 'caption' | 'chat'; data: any }
 
-const POLL_MS = 1000
-const READY_MS = 2000
+const POLL_MS = 1000 // once connected: only chat and captions travel this way
+const SETUP_POLL_MS = 350 // while the call is being set up, poll fast so the handshake does not feel like a freeze
+const READY_MS = 1000
 const GIVE_UP_MS = 30_000
 
 function iceServers(): RTCIceServer[] {
@@ -44,6 +45,7 @@ export function useCall(opts: { token: string; role: CallRole; doctorKey?: strin
   const { token, role, doctorKey, enabled } = opts
   const [state, setState] = useState<CallState>('starting')
   const [error, setError] = useState('')
+  const [attempt, setAttempt] = useState(0)
   const [localStream, setLocalStream] = useState<MediaStream | null>(null)
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
   const [micOn, setMicOn] = useState(true)
@@ -60,7 +62,8 @@ export function useCall(opts: { token: string; role: CallRole; doctorKey?: strin
     let session = ''
     let lastAt = 0
     let readyTimer: ReturnType<typeof setInterval> | undefined
-    let pollTimer: ReturnType<typeof setInterval> | undefined
+    let pollTimer: ReturnType<typeof setTimeout> | undefined
+    let linked = false
     let giveUp: ReturnType<typeof setTimeout> | undefined
     const seen = new Set<string>()
     let pending: RTCIceCandidateInit[] = []
@@ -95,6 +98,7 @@ export function useCall(opts: { token: string; role: CallRole; doctorKey?: strin
         if (peer.connectionState === 'connected') {
           clearTimeout(giveUp)
           clearInterval(readyTimer)
+          linked = true
           setState('connected')
         } else if (peer.connectionState === 'failed') {
           setState('failed')
@@ -196,8 +200,12 @@ export function useCall(opts: { token: string; role: CallRole; doctorKey?: strin
           void ready()
           readyTimer = setInterval(ready, READY_MS)
         }
-        pollTimer = setInterval(poll, POLL_MS)
-        void poll()
+        const loop = async () => {
+          if (!alive) return
+          await poll()
+          if (alive) pollTimer = setTimeout(loop, linked ? POLL_MS : SETUP_POLL_MS)
+        }
+        void loop()
         giveUp = setTimeout(() => {
           if (!alive) return
           setState((s) => {
@@ -214,13 +222,13 @@ export function useCall(opts: { token: string; role: CallRole; doctorKey?: strin
     return () => {
       alive = false
       clearInterval(readyTimer)
-      clearInterval(pollTimer)
+      clearTimeout(pollTimer)
       clearTimeout(giveUp)
       pc?.close()
       localRef.current?.getTracks().forEach((t) => t.stop())
       localRef.current = null
     }
-  }, [enabled, token, role, doctorKey])
+  }, [enabled, token, role, doctorKey, attempt])
 
   const toggleMic = useCallback(() => {
     const on = !micOn
@@ -233,6 +241,9 @@ export function useCall(opts: { token: string; role: CallRole; doctorKey?: strin
     localRef.current?.getVideoTracks().forEach((t) => { t.enabled = on })
     setCamOn(on)
   }, [camOn])
+
+  /** Asks for the camera and microphone again, for example after the person changed the browser permission. */
+  const retry = useCallback(() => { setError(''); setState('starting'); setAttempt((a) => a + 1) }, [])
 
   /** Tells the other side the call is over. Safe to call more than once. */
   const sendBye = useCallback(() => sendRef.current('bye', null), [])
@@ -250,5 +261,5 @@ export function useCall(opts: { token: string; role: CallRole; doctorKey?: strin
     return sendRef.current('chat', { text: t, image })
   }, [role])
 
-  return { state, error, localStream, remoteStream, micOn, camOn, toggleMic, toggleCam, sendBye, sendCaption, captions, sendChat, messages }
+  return { state, error, retry, localStream, remoteStream, micOn, camOn, toggleMic, toggleCam, sendBye, sendCaption, captions, sendChat, messages }
 }

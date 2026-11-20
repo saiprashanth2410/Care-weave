@@ -22,6 +22,9 @@ const NOTES: Record<string, string> = {
 export function DoctorVideoConsult({ notify }: { notify: (s: string) => void }) {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [patientId, setPatientId] = useState('');
+  const [walkIn, setWalkIn] = useState(false);
+  const [guestName, setGuestName] = useState('');
+  const [guestPhone, setGuestPhone] = useState('');
   const [started, setStarted] = useState<Started | null>(null);
   const [ended, setEnded] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -49,7 +52,7 @@ export function DoctorVideoConsult({ notify }: { notify: (s: string) => void }) 
     setBusy(true);
     setSendNote('');
     try {
-      const res = await fetch('/api/video/consults', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ patientId }) });
+      const res = await fetch('/api/video/consults', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(walkIn ? { name: guestName, phone: guestPhone } : { patientId }) });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || 'Could not start the consultation');
       setStarted(body);
@@ -77,7 +80,14 @@ export function DoctorVideoConsult({ notify }: { notify: (s: string) => void }) 
   };
 
   const end = async () => {
-    if (started) await fetch(`/api/video/consults/${started.id}/end`, { method: 'POST' }).catch(() => {});
+    if (started) {
+      // The front desk shows this doctor as on a video call until the server hears the call has ended, so a failure must not be hidden.
+      const res = await fetch(`/api/video/consults/${started.id}/end`, { method: 'POST' }).catch(() => null);
+      if (!res || !res.ok) {
+        notify('Could not end the consultation on the server. Check your connection and press End again.');
+        return;
+      }
+    }
     setEnded(true);
     setTab('summary');
     notify('Consultation ended. You can still generate the summary.');
@@ -110,14 +120,31 @@ export function DoctorVideoConsult({ notify }: { notify: (s: string) => void }) 
 
       {!started ? (
         <div className="card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-            <b>Patient:</b>
-            <select value={patientId} onChange={(e) => setPatientId(e.target.value)} style={{ minWidth: 'min(260px, 100%)', flex: '1 1 260px', maxWidth: 420 }} aria-label="Patient">
-              {patients.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.patientId})</option>)}
-            </select>
-            <button className="primary" onClick={start} disabled={busy || !patientId}>{busy ? 'Starting…' : 'Start video consult'}</button>
+          <div className="vc-mode" role="tablist" aria-label="Who is the call with">
+            <button type="button" role="tab" aria-selected={!walkIn} className={!walkIn ? 'on' : ''} onClick={() => setWalkIn(false)}>Registered patient</button>
+            <button type="button" role="tab" aria-selected={walkIn} className={walkIn ? 'on' : ''} onClick={() => setWalkIn(true)}>Walk-in / phone-in</button>
           </div>
-          {patients.length === 0 && <p className="muted" style={{ marginTop: 12 }}>Only patients with an appointment or encounter assigned to you appear here.</p>}
+          {!walkIn ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                <b>Patient:</b>
+                <select value={patientId} onChange={(e) => setPatientId(e.target.value)} style={{ minWidth: 'min(260px, 100%)', flex: '1 1 260px', maxWidth: 420 }} aria-label="Patient">
+                  {patients.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.patientId})</option>)}
+                </select>
+                <button className="primary" onClick={start} disabled={busy || !patientId}>{busy ? 'Starting…' : 'Start video consult'}</button>
+              </div>
+              {patients.length === 0 && <p className="muted" style={{ marginTop: 12 }}>Only patients with an appointment or encounter assigned to you appear here. For anyone else use Walk-in / phone-in.</p>}
+            </>
+          ) : (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <input value={guestName} onChange={(e) => setGuestName(e.target.value)} placeholder="Name" aria-label="Walk-in name" style={{ flex: '1 1 200px', maxWidth: 300 }} maxLength={80} />
+                <input value={guestPhone} onChange={(e) => setGuestPhone(e.target.value)} placeholder="Phone (optional, for the WhatsApp link)" aria-label="Walk-in phone" style={{ flex: '1 1 240px', maxWidth: 340 }} inputMode="tel" maxLength={20} />
+                <button className="primary" onClick={start} disabled={busy || guestName.trim().length < 2}>{busy ? 'Starting…' : 'Start video consult'}</button>
+              </div>
+              <p className="muted" style={{ marginTop: 12 }}>For someone with no record yet: only a name and phone are used, no chart is opened. Ask the front desk to register them afterwards.</p>
+            </>
+          )}
         </div>
       ) : (
         <div className="vc-layout">

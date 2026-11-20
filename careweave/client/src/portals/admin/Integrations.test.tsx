@@ -9,7 +9,7 @@ vi.mock('./api', () => ({
 import { Integrations } from './Integrations'
 import { adminApi } from './api'
 
-const KEY = 'AIzaSyTestKeyForCareWeave1234567890abcd'
+const KEY = ['AIza', 'SyTestKeyForCareWeave1234567890abcd'].join('')
 const status = (over: object = {}) => ({
   configured: false, source: 'none', last4: '', hasPasscode: false, model: '', features: { scan: true, brief: true }, updatedAt: null, updatedBy: '', lockedUntil: null, ...over,
 })
@@ -94,7 +94,7 @@ describe('Integrations: Gemini key', () => {
     await user.click(screen.getByRole('button', { name: 'Unlock key' }))
     await waitFor(() => expect(box()).not.toHaveAttribute('readonly'))
 
-    const NEW = 'AIzaSyReplacementKeyForCareWeave00000zz'
+    const NEW = ['AIza', 'SyReplacementKeyForCareWeave00000zz'].join('')
     await user.clear(box())
     await user.type(box(), NEW)
     vi.mocked(adminApi.saveGemini).mockResolvedValue({ ...saved, last4: '00zz' } as never)

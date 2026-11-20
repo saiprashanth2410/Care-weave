@@ -50,6 +50,10 @@ export default function VideoCall({ call, role, layout = 'panel', cc, onHangUp }
           <div className="vc-overlay" role="status">
             <b>{STATUS[call.state](role)}</b>
             {call.error && <p className="vc-error">{call.error}</p>}
+            {call.state === 'failed' && /blocked/i.test(call.error) && (
+              <p className="vc-error">To allow it: tap the camera or lock icon next to the web address, choose Allow for camera and microphone, then press Try again.</p>
+            )}
+            {call.state === 'failed' && <button type="button" className="vc-retry" onClick={call.retry}>Try again</button>}
           </div>
         )}
         {cc.on && lines.length > 0 && (
@@ -78,6 +82,7 @@ export default function VideoCall({ call, role, layout = 'panel', cc, onHangUp }
           {role === 'doctor' ? 'End' : 'Leave'}
         </button>
       </div>
+      {!cc.supported && <p className="vc-hint">Live captions are not available in this browser (they need Chrome or Edge). Use Chat to type to each other.</p>}
       {full && chatOpen && (
         <div className="vc-sheet">
           <div className="vc-sheet-head"><b>Chat</b><button type="button" onClick={toggleChat} aria-label="Close chat">Close</button></div>

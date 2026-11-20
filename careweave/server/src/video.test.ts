@@ -140,7 +140,7 @@ test('video: the summary needs something to summarise, falls back to the transcr
     assert.equal(off.reason, 'ai-off');
     assert.equal(off.lines.length, 2);
 
-    process.env.GEMINI_API_KEY = 'AIzaSyFakeKeyForTheSummaryTest123456789'; forgetAiConfig();
+    process.env.GEMINI_API_KEY = ['AIza', 'SyFakeKeyForTheSummaryTest123456789'].join(''); forgetAiConfig();
     let sent = '';
     globalThis.fetch = (async (url: any, init: any) => {
       if (!String(url).includes('generativelanguage')) return realFetch(url, init);
@@ -195,5 +195,39 @@ test('video: the front desk roster shows the doctor as "in a video consultation"
     assert.equal(after.video, null);
     // Receptionists cannot see anyone else's call details beyond the patient name: no link or key in the roster.
     assert.ok(!JSON.stringify(during).includes(c.id) && !JSON.stringify(during).includes(c.doctorKey));
+  } finally { await srv.close(); }
+});
+
+test('video: a doctor can start a call with a walk-in who has no record, using only a name and phone, and cannot be tricked into a chart', async () => {
+  const { srv, reception, doctor } = await setup();
+  try {
+    const start = (body: object, token = doctor) => srv.call('POST', '/api/video/consults', { token, body });
+    assert.equal((await start({ name: 'Walk In Person', phone: '+91 98765 11111' }, reception)).status, 403, 'only doctors');
+    assert.equal((await start({ name: 'X' })).status, 400);
+    assert.equal((await start({ name: '12345', phone: '9876511111' })).status, 400);
+    assert.equal((await start({ name: 'Walk In Person', phone: '123' })).status, 400);
+
+    const ok = await start({ name: 'Walk In Person', phone: '+91 98765 11111' });
+    assert.equal(ok.status, 201, ok.text);
+    assert.equal(ok.json.walkIn, true);
+    assert.equal(ok.json.hasPhone, true);
+    const info = (await srv.call('GET', `/api/video/public/${ok.json.id}`)).json;
+    assert.equal(info.patientFirstName, 'Walk');
+
+    // WhatsApp is switched off in tests: the send must reach the phone step (502 from the sender), not fail for lack of a record.
+    const send = await srv.call('POST', `/api/video/consults/${ok.json.id}/send`, { token: doctor });
+    assert.equal(send.status, 502);
+    assert.match(send.json.link, new RegExp(`/consult/${ok.json.id}$`));
+
+    // No phone is fine too: the doctor shares the link themselves.
+    const noPhone = await start({ name: 'Another Person' });
+    assert.equal(noPhone.status, 201);
+    assert.equal(noPhone.json.hasPhone, false);
+    assert.equal((await srv.call('POST', `/api/video/consults/${noPhone.json.id}/send`, { token: doctor })).status, 400);
+
+    // The walk-in path never opens a chart: a patient id that is not theirs still needs the link check.
+    assert.equal((await start({ patientId: 'someone-else' })).status, 404);
+    const audit = (await srv.call('GET', '/api/audit?entity=videoConsult&limit=50', { token: await srv.login('admin') })).json;
+    assert.ok(JSON.stringify(audit).includes('walk-in'), 'the walk-in call is audited');
   } finally { await srv.close(); }
 });

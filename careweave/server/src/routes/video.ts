@@ -112,28 +112,40 @@ export function videoStaffRoutes(ctx: AppCtx) {
   };
 
   router.post('/video/consults', roles('doctor'), async (req: any, res) => {
-    const p = await R().patients.byRef(String(req.body?.patientId || ''));
-    if (!p) return res.status(404).json({ error: 'Patient not found' });
-    if (!(await linkedPatientIds(R(), req.user.id)).has(p.id)) {
-      await audit(req, 'denied', 'patient', p.id, 'Doctor is not linked to this patient (video consult)');
-      return res.status(403).json({ error: 'This patient is not linked to you' });
+    // Either a patient the doctor is linked to, or a walk-in / phone-in person who has no record yet: then only a name and a phone
+    // number are taken, nothing about any chart is reachable, and the call has nothing to attach to until the front desk registers them.
+    let who: { patientId: string | null; patientName: string; phone: string; note: string };
+    if (req.body?.patientId) {
+      const p = await R().patients.byRef(String(req.body.patientId));
+      if (!p) return res.status(404).json({ error: 'Patient not found' });
+      if (!(await linkedPatientIds(R(), req.user.id)).has(p.id)) {
+        await audit(req, 'denied', 'patient', p.id, 'Doctor is not linked to this patient (video consult)');
+        return res.status(403).json({ error: 'This patient is not linked to you' });
+      }
+      who = { patientId: p.id, patientName: p.name, phone: p.phone || '', note: `Started a video consult with ${p.patientId}` };
+    } else {
+      const name = String(req.body?.name ?? '').replace(/\s+/g, ' ').trim();
+      const phone = String(req.body?.phone ?? '').trim();
+      if (!/^[\p{L}][\p{L}\p{M} .'-]{1,79}$/u.test(name)) return res.status(400).json({ error: "Enter the person's name (letters only, 2 to 80 characters)" });
+      if (phone && phone.replace(/\D/g, '').length < 10) return res.status(400).json({ error: 'Enter a phone number with at least 10 digits, or leave it empty and share the link yourself' });
+      who = { patientId: null, patientName: name, phone, note: 'Started a video consult with a walk-in (no patient record)' };
     }
     const consult = {
-      id: random(18), doctorKey: random(18), patientId: p.id, patientName: p.name, doctorId: req.user.id, doctorName: req.user.name,
+      id: random(18), doctorKey: random(18), patientId: who.patientId, patientName: who.patientName, phone: who.phone, doctorId: req.user.id, doctorName: req.user.name,
       createdAt: now(), doctorSeenAt: now(), expiresAt: new Date(Date.now() + CONSULT_MINUTES * 60_000).toISOString()
     };
     await R().videoConsults.insert(consult);
-    await audit(req, 'create', 'videoConsult', consult.id.slice(0, 8), `Started a video consult with ${p.patientId}`);
-    res.status(201).json({ id: consult.id, doctorKey: consult.doctorKey, expiresAt: consult.expiresAt, patientName: p.name, hasPhone: Boolean(p.phone) });
+    await audit(req, 'create', 'videoConsult', consult.id.slice(0, 8), who.note);
+    res.status(201).json({ id: consult.id, doctorKey: consult.doctorKey, expiresAt: consult.expiresAt, patientName: who.patientName, hasPhone: Boolean(who.phone), walkIn: !who.patientId });
   });
 
   router.post('/video/consults/:id/send', roles('doctor'), async (req: any, res) => {
     const c = await own(req, res);
     if (!c) return;
-    const p = await R().patients.byRef(c.patientId);
-    if (!p?.phone) return res.status(400).json({ error: 'This patient has no phone number on file' });
+    const phone = c.patientId ? (await R().patients.byRef(c.patientId))?.phone : c.phone;
+    if (!phone) return res.status(400).json({ error: 'There is no phone number for this person' });
     const link = `${appOrigin(req)}/consult/${c.id}`;
-    const out = await sendWhatsAppText(p.phone, `📹 CareWeave: ${c.doctorName} is ready for your video consultation. Open this link on your phone (allow camera and microphone): ${link}\nThe link works for about 2 hours.`);
+    const out = await sendWhatsAppText(phone, `📹 CareWeave: ${c.doctorName} is ready for your video consultation. Open this link on your phone (allow camera and microphone): ${link}\nThe link works for about 2 hours.`);
     await audit(req, 'update', 'videoConsult', c.id.slice(0, 8), out.ok ? 'Link sent on WhatsApp' : `Link not sent: ${out.error}`);
     res.status(out.ok ? 200 : 502).json({ sent: out.ok, via: out.via, error: out.error, link });
   });
