@@ -18,6 +18,7 @@ import { casesRepo, casesIndexes } from './cases.js';
 import { syntheticHistoryRepo, syntheticHistoryIndexes } from './syntheticHistory.js';
 import { whatsappPrefsRepo, whatsappPrefsIndexes } from './whatsappPrefs.js';
 import { whatsappSignupsRepo, whatsappSignupsIndexes } from './whatsappSignups.js';
+import { messagesRepo, messagesIndexes, messageImagesRepo, messageImagesIndexes } from './messages.js';
 import { videoConsultsRepo, videoConsultsIndexes, videoSignalsRepo, videoSignalsIndexes } from './videoConsults.js';
 import { liveEventsRepo, liveEventsIndexes } from './liveEvents.js';
 import { metaRepo, metaIndexes } from './meta.js';
@@ -50,6 +51,8 @@ function collections(store: Store) {
     syntheticHistory: syntheticHistoryRepo(c('syntheticHistory')),
     whatsappPrefs: whatsappPrefsRepo(c('whatsappPrefs')),
     whatsappSignups: whatsappSignupsRepo(c('whatsappSignups')),
+    messages: messagesRepo(c('messages')),
+    messageImages: messageImagesRepo(c('messageImages')),
     videoConsults: videoConsultsRepo(c('videoConsults')),
     videoSignals: videoSignalsRepo(c('videoSignals')),
     liveEvents: liveEventsRepo(c('liveEvents')),
@@ -70,7 +73,7 @@ export const INDEXES = {
   users: usersIndexes, patients: patientsIndexes, appointments: appointmentsIndexes, labOrders: ordersIndexes,
   encounters: encountersIndexes, prescriptions: prescriptionsIndexes, auditLogs: auditIndexes, sessions: sessionsIndexes, rateLimits: rateLimitsIndexes,
   vitals: vitalsIndexes, referrals: referralsIndexes, carePlans: carePlansIndexes, externalRecords: externalRecordsIndexes,
-  cases: casesIndexes, syntheticHistory: syntheticHistoryIndexes, whatsappPrefs: whatsappPrefsIndexes, whatsappSignups: whatsappSignupsIndexes, videoConsults: videoConsultsIndexes, videoSignals: videoSignalsIndexes, liveEvents: liveEventsIndexes, meta: metaIndexes, inbox: inboxIndexes, files: [idIndex],
+  cases: casesIndexes, syntheticHistory: syntheticHistoryIndexes, whatsappPrefs: whatsappPrefsIndexes, whatsappSignups: whatsappSignupsIndexes, messages: messagesIndexes, messageImages: messageImagesIndexes, videoConsults: videoConsultsIndexes, videoSignals: videoSignalsIndexes, liveEvents: liveEventsIndexes, meta: metaIndexes, inbox: inboxIndexes, files: [idIndex],
 };
 
 /** Quiet collections change on every sign-in or page view; they are not worth waking other screens for. */

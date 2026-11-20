@@ -9,6 +9,7 @@ import { linkedPatientIds } from '../services/access.js';
 import { nextToken, queueAhead } from '../whatsapp/messages.js';
 import { INACTIVE_STATUSES, WAITING_STATUSES, hhmmToMinutes, labelToMinutes, shiftOf, slotsForShift } from '../services/slots.js';
 import { emitEvent } from '../whatsapp/emitter.js';
+import { isLive } from '../repo/videoConsults.js';
 import { isoToday } from '../util.js';
 
 /** Which of the unique guards fired: the patient already booked at that time, or the doctor's slot taken. */
@@ -55,6 +56,7 @@ export function appointmentRoutes(ctx: AppCtx) {
   router.get('/doctors/roster', roles('receptionist'), async (req: any, res) => {
     const day = dayOf(req);
     const [doctors, rows] = await Promise.all([activeDoctors(), rowsOn(day.date, day.isToday)]);
+    const calls = (await ctx.repos.videoConsults.recentForDoctors(doctors.map((u: any) => u.id))).filter((c: any) => isLive(c));
     const nowMin = day.now ? hhmmToMinutes(day.now) : null;
     res.json(doctors.map((u: any) => {
       const mine = rows.filter((a: any) => a.doctorId === u.id);
@@ -63,9 +65,11 @@ export function appointmentRoutes(ctx: AppCtx) {
       const free = slotsForShift(shift).filter((l) => !booked.has(l) && !(day.isToday && nowMin !== null && labelToMinutes(l)! < nowMin));
       const current = mine.filter((a: any) => a.status === 'In Consultation').sort((a: any, b: any) => String(a.startedAt || '').localeCompare(String(b.startedAt || '')))[0];
       const onShift = !(day.isToday && nowMin !== null) || (nowMin >= hhmmToMinutes(shift.start) && nowMin <= hhmmToMinutes(shift.end) + 30);
+      const video = calls.find((c: any) => c.doctorId === u.id);
       return {
         ...doctorView(u),
-        status: current ? 'in_consultation' : onShift ? 'available' : 'off_shift',
+        status: video ? 'in_video' : current ? 'in_consultation' : onShift ? 'available' : 'off_shift',
+        video: video ? { patientName: video.patientName, startedAt: video.createdAt } : null,
         current: current ? slim(current) : null,
         waiting: mine.filter((a: any) => WAITING_STATUSES.includes(a.status)).length,
         scheduled: mine.filter((a: any) => a.status === 'Scheduled').length,

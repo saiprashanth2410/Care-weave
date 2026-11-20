@@ -5,10 +5,20 @@ import { catchAsyncRoutes } from '../asyncRoutes.js';
 import { linkedPatientIds } from '../services/access.js';
 import { MAX_SIGNALS_PER_CONSULT, SIGNAL_TYPES } from '../repo/videoConsults.js';
 import { sendWhatsAppText } from '../whatsapp/emitter.js';
+import { parseImageDataUrl } from '../services/imageData.js';
+import { ask, MODELS } from '../clinicalSummary.js';
+import { readAiConfig } from '../services/aiConfig.js';
 import { id, now } from '../util.js';
 
 const CONSULT_MINUTES = 120;
 const MAX_SIGNAL_BYTES = 24_000; // a session description is about 5 to 10 KB
+const MAX_TEXT = 1000; // one chat message or caption line
+const MAX_PHOTO_SIGNAL_BYTES = 640_000; // a chat message that carries one photo
+const MAX_PHOTOS_PER_CONSULT = 15;
+const MAX_TRANSCRIPT_CHARS = 12_000;
+const SUMMARY_PROMPT = `You are helping a doctor write notes after a video consultation. Below is the transcript: typed chat and speech-to-text, in English, Tamil or Hindi, and it may contain recognition mistakes.
+Write a short clinical summary in plain text with these headings, one or two lines each: Reason for consultation; Symptoms and history reported; Advice and plan from the doctor; Medicines mentioned; Follow-up.
+Rules: use only what is in the transcript, never invent a symptom, dose or diagnosis, write "not discussed" for a heading with nothing, and say "unclear" where the transcript is unclear. Under 180 words.\n\nTRANSCRIPT\n`;
 const random = (bytes: number) => crypto.randomBytes(bytes).toString('base64url');
 const sameSecret = (a: unknown, b: unknown) => {
   const x = Buffer.from(String(a ?? '')), y = Buffer.from(String(b ?? ''));
@@ -51,10 +61,22 @@ export function videoPublicRoutes(ctx: AppCtx) {
     if (role !== 'doctor' && role !== 'patient') return res.status(400).json({ error: 'role must be doctor or patient' });
     if (role === 'doctor' && !sameSecret(key, r.consult.doctorKey)) return res.status(403).json({ error: 'Not allowed' });
     if (!(SIGNAL_TYPES as readonly string[]).includes(type)) return res.status(400).json({ error: 'Unknown signal type' });
+    let hasImage = false;
+    if (type === 'chat' || type === 'caption') {
+      const t = typeof data?.text === 'string' ? data.text.trim() : '';
+      if (t.length > MAX_TEXT) return res.status(413).json({ error: 'Message too long' });
+      if (type === 'chat' && data?.image !== undefined && data?.image !== null) {
+        const parsed = parseImageDataUrl(data.image);
+        if (!parsed.ok) return res.status(400).json({ error: parsed.error });
+        hasImage = true;
+      }
+      if (!t && !hasImage) return res.status(400).json({ error: 'text is required' });
+    }
     const payload = JSON.stringify(data ?? null);
-    if (payload.length > MAX_SIGNAL_BYTES) return res.status(413).json({ error: 'Signal too large' });
+    if (payload.length > (hasImage ? MAX_PHOTO_SIGNAL_BYTES : MAX_SIGNAL_BYTES)) return res.status(413).json({ error: 'Signal too large' });
+    if (hasImage && (await R().videoSignals.photoCount(r.consult.id)) >= MAX_PHOTOS_PER_CONSULT) return res.status(429).json({ error: 'Too many photos in this call' });
     if ((await R().videoSignals.count(r.consult.id)) >= MAX_SIGNALS_PER_CONSULT) return res.status(429).json({ error: 'Too many signals for this call' });
-    await R().videoSignals.insert({ id: id('sig'), consultId: r.consult.id, from: role, type, data: payload, at: Date.now() });
+    await R().videoSignals.insert({ id: id('sig'), consultId: r.consult.id, from: role, type, data: payload, at: Date.now(), hasImage });
     res.status(201).json({ ok: true });
   });
 
@@ -64,6 +86,11 @@ export function videoPublicRoutes(ctx: AppCtx) {
     const role = String(req.query.role);
     if (role !== 'doctor' && role !== 'patient') return res.status(400).json({ error: 'role must be doctor or patient' });
     if (role === 'doctor' && !sameSecret(req.query.key, r.consult.doctorKey)) return res.status(403).json({ error: 'Not allowed' });
+    if (role === 'doctor') {
+      // A heartbeat for the front desk's "in a video consultation" badge, written at most every 15 seconds.
+      const last = Date.parse(r.consult.doctorSeenAt || r.consult.createdAt);
+      if (Date.now() - last > 15_000) await R().videoConsults.update(r.consult, { doctorSeenAt: now() }).catch(() => {});
+    }
     const rows = await R().videoSignals.forReader(r.consult.id, role, Number(req.query.since) || 0);
     res.json({ signals: rows.map((s: any) => ({ id: s.id, at: s.at, type: s.type, data: JSON.parse(s.data) })), now: Date.now() });
   });
@@ -93,7 +120,7 @@ export function videoStaffRoutes(ctx: AppCtx) {
     }
     const consult = {
       id: random(18), doctorKey: random(18), patientId: p.id, patientName: p.name, doctorId: req.user.id, doctorName: req.user.name,
-      createdAt: now(), expiresAt: new Date(Date.now() + CONSULT_MINUTES * 60_000).toISOString()
+      createdAt: now(), doctorSeenAt: now(), expiresAt: new Date(Date.now() + CONSULT_MINUTES * 60_000).toISOString()
     };
     await R().videoConsults.insert(consult);
     await audit(req, 'create', 'videoConsult', consult.id.slice(0, 8), `Started a video consult with ${p.patientId}`);
@@ -109,6 +136,36 @@ export function videoStaffRoutes(ctx: AppCtx) {
     const out = await sendWhatsAppText(p.phone, `📹 CareWeave: ${c.doctorName} is ready for your video consultation. Open this link on your phone (allow camera and microphone): ${link}\nThe link works for about 2 hours.`);
     await audit(req, 'update', 'videoConsult', c.id.slice(0, 8), out.ok ? 'Link sent on WhatsApp' : `Link not sent: ${out.error}`);
     res.status(out.ok ? 200 : 502).json({ sent: out.ok, via: out.via, error: out.error, link });
+  });
+
+  const transcriptOf = async (consultId: string) => {
+    const rows = await R().videoSignals.transcript(consultId);
+    return rows.map((r: any) => ({ from: r.from as 'doctor' | 'patient', kind: r.type as 'chat' | 'caption', text: String(JSON.parse(r.data)?.text || '') || (r.hasImage ? '(shared a photo)' : ''), at: r.at as number })).filter((l: any) => l.text);
+  };
+
+  router.get('/video/consults/:id/transcript', roles('doctor'), async (req: any, res) => {
+    const c = await own(req, res);
+    if (!c) return;
+    res.json({ lines: await transcriptOf(c.id) });
+  });
+
+  // A summary of what was said, written by the AI key the administrator stored. Names are never sent: only "Doctor" and "Patient" lines.
+  router.post('/video/consults/:id/summary', roles('doctor'), async (req: any, res) => {
+    const c = await own(req, res);
+    if (!c) return;
+    const lines = await transcriptOf(c.id);
+    if (!lines.length) return res.status(400).json({ error: 'Nothing to summarise yet: no chat messages or captions were recorded in this call.' });
+    const text = lines.map((l: any) => `${l.from === 'doctor' ? 'Doctor' : 'Patient'}: ${l.text}`).join('\n').slice(-MAX_TRANSCRIPT_CHARS);
+    const ai = await readAiConfig(R());
+    if (!ai.key || !ai.features.brief) return res.json({ summary: null, reason: 'ai-off', lines });
+    for (const model of [ai.model, ...MODELS].filter(Boolean) as string[]) {
+      const out = await ask(model, SUMMARY_PROMPT + text, ai.key);
+      if (out) {
+        await audit(req, 'create', 'videoConsult', c.id.slice(0, 8), 'Consultation summary generated');
+        return res.json({ summary: out.slice(0, 3000), model, lines });
+      }
+    }
+    res.json({ summary: null, reason: 'ai-failed', lines });
   });
 
   router.post('/video/consults/:id/end', roles('doctor'), async (req: any, res) => {

@@ -33,7 +33,8 @@ const READS = new Set(['GET', 'HEAD', 'OPTIONS']);
 export function markDataChanges(getRepos: () => Repos) {
   return (req: any, res: any, next: any) => {
     // Signing in and out does not change anything a list shows.
-    if (READS.has(req.method) || req.path.startsWith('/auth/') || req.path === '/health') return next();
+    // The video call's setup messages (several per second) change nothing a list shows; starting and ending a consult do, and still count.
+    if (READS.has(req.method) || req.path.startsWith('/auth/') || req.path === '/health' || req.path.startsWith('/video/public/')) return next();
     const end = res.end.bind(res);
     res.end = (...args: any[]) => {
       res.end = end;

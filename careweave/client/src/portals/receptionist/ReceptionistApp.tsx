@@ -1,7 +1,9 @@
 import { clearSession } from '@/auth/session';
 import { useCallback, useEffect, useState } from 'react';
 import { useLiveRefresh } from '@/useLiveRefresh';
-import { CalendarDays, CheckCircle2, Clock3, LayoutDashboard, LogOut, Menu, RefreshCw, ShieldCheck, Stethoscope, UserPlus, Users } from './icons';
+import { CalendarDays, CheckCircle2, Clock3, LayoutDashboard, LogOut, Mail, Menu, RefreshCw, ShieldCheck, Stethoscope, UserPlus, Users } from './icons';
+import MessagesPage from '@/messaging/MessagesPage';
+import { useUnreadMessages } from '@/messaging/useUnreadMessages';
 import { Link, useNavigate } from 'react-router-dom';
 import SampleScenario from '@/components/SampleScenario';
 import ReportIssue from '@/components/ReportIssue';
@@ -33,7 +35,8 @@ function App({ user }: { user: User }) {
 }
 
 function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
-  const [section, setSection] = useState<'overview' | 'queue' | 'appointments' | 'patients' | 'doctors'>('overview');
+  const [section, setSection] = useState<'overview' | 'queue' | 'appointments' | 'patients' | 'doctors' | 'messages'>('overview');
+  const unreadMessages = useUnreadMessages();
   const [collapsed, setCollapsed] = useState(false);
   const [refresh, setRefresh] = useState(0);
   useLiveRefresh(() => setRefresh(r => r + 1));
@@ -81,6 +84,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
     { id: 'doctors', label: 'Doctor Roster & Slots', icon: Stethoscope },
     { id: 'appointments', label: 'Appointments', icon: CalendarDays },
     { id: 'patients', label: 'Patient Directory', icon: Users },
+    { id: 'messages', label: 'Messages', icon: Mail },
   ];
 
   return (
@@ -105,6 +109,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               >
                 <Icon size={18} />
                 <span>{item.label}</span>
+                {item.id === 'messages' && unreadMessages > 0 && <span className="nav-count alert">{unreadMessages}</span>}
               </button>
             );
           })}
@@ -252,6 +257,8 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               }}
             />
           )}
+
+          {section === 'messages' && <MessagesPage notify={notify} />}
         </div>
       </main>
 

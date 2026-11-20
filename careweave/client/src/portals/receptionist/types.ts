@@ -57,8 +57,10 @@ export type DayAppt = {
 };
 
 export type RosterDoctor = Required<Pick<Doctor, 'id' | 'name' | 'facility' | 'room' | 'shiftStart' | 'shiftEnd'>> & {
-  status: 'in_consultation' | 'available' | 'off_shift';
+  status: 'in_consultation' | 'in_video' | 'available' | 'off_shift';
   current: DayAppt | null;
+  /** Set while the doctor is on a live video consultation. */
+  video?: { patientName: string; startedAt: string } | null;
   waiting: number;
   scheduled: number;
   seen: number;

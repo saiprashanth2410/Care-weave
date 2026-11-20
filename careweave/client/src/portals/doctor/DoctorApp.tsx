@@ -2,7 +2,7 @@ import { clearSession } from '@/auth/session';
 import { useCallback, useEffect, useState } from 'react';
 import { useLiveRefresh } from '../../useLiveRefresh';
 import { CriticalBanner, type CriticalAlert } from './CriticalBanner';
-import { Activity, CalendarDays, Check, ClipboardList, FileText, FlaskConical, HeartPulse, LayoutDashboard, LogOut, Menu, RefreshCw, Stethoscope, Users } from './icons';
+import { Activity, CalendarDays, Check, ClipboardList, FileText, FlaskConical, HeartPulse, LayoutDashboard, LogOut, Mail, Menu, RefreshCw, Stethoscope, Users } from './icons';
 import { api } from './api';
 import type { Patient, User } from './types';
 import { useNavigate, Link } from 'react-router-dom';
@@ -14,6 +14,8 @@ import { DoctorConsultations } from './pages/DoctorConsultations';
 import { DoctorLabsAndDiagnostics } from './pages/DoctorLabsAndDiagnostics';
 import { DoctorPrescriptions } from './pages/DoctorPrescriptions';
 import { DoctorVideoConsult } from './pages/DoctorVideoConsult';
+import MessagesPage from '@/messaging/MessagesPage';
+import { useUnreadMessages } from '@/messaging/useUnreadMessages';
 import { DoctorCarePlans } from './pages/DoctorCarePlans';
 import { DoctorReferrals } from './pages/DoctorReferrals';
 import { DoctorClinicalCalculators } from './pages/DoctorClinicalCalculators';
@@ -44,6 +46,7 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
     notify(`Critical result: ${data.patientName}`);
   });
   const [openCases, setOpenCases] = useState(0);
+  const unreadMessages = useUnreadMessages();
   useEffect(() => { api.cases().then(c => setOpenCases(c.length)).catch(() => setOpenCases(0)); }, [refresh]);
 
   // Doctor Quick Action Modal Triggers
@@ -62,6 +65,7 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
     ['labs', 'Labs & Diagnostics', FlaskConical],
     ['prescriptions', 'E-Prescriptions', FileText],
     ['video', 'Video Consultation', Stethoscope],
+    ['messages', 'Messages', Mail],
     ['careplans', 'Care Plans & Protocols', HeartPulse],
     ['referrals', 'Specialist Referrals', ClipboardList],
     ['calculators', 'Clinical Calculators', Activity],
@@ -91,6 +95,7 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
               <Icon size={18} />
               <span>{label}</span>
               {navId === 'reconciliation' && openCases > 0 && <span className="nav-count">{openCases}</span>}
+              {navId === 'messages' && unreadMessages > 0 && <span className="nav-count">{unreadMessages}</span>}
             </button>
           ))}
         </nav>
@@ -207,6 +212,8 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
           )}
 
           {section === 'video' && <DoctorVideoConsult notify={notify} />}
+
+          {section === 'messages' && <MessagesPage notify={notify} />}
 
           {section === 'careplans' && (
             <DoctorCarePlans

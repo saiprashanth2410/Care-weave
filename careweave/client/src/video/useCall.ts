@@ -13,8 +13,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 export type CallRole = 'doctor' | 'patient'
 export type CallState = 'starting' | 'waiting' | 'connecting' | 'connected' | 'ended' | 'failed'
 export type Caption = { id: string; from: CallRole; text: string; at: number }
+export type ChatMsg = { id: string; from: CallRole; text: string; at: number; image?: string }
+export type CallApi = ReturnType<typeof useCall>
 
-type Signal = { id: string; at: number; type: 'ready' | 'offer' | 'answer' | 'ice' | 'bye' | 'caption'; data: any }
+type Signal = { id: string; at: number; type: 'ready' | 'offer' | 'answer' | 'ice' | 'bye' | 'caption' | 'chat'; data: any }
 
 const POLL_MS = 1000
 const READY_MS = 2000
@@ -47,6 +49,7 @@ export function useCall(opts: { token: string; role: CallRole; doctorKey?: strin
   const [micOn, setMicOn] = useState(true)
   const [camOn, setCamOn] = useState(true)
   const [captions, setCaptions] = useState<Caption[]>([])
+  const [messages, setMessages] = useState<ChatMsg[]>([])
   const localRef = useRef<MediaStream | null>(null)
   const sendRef = useRef<(type: Signal['type'], data: unknown) => Promise<void>>(async () => {})
 
@@ -110,6 +113,12 @@ export function useCall(opts: { token: string; role: CallRole; doctorKey?: strin
 
     const handle = async (s: Signal) => {
       if (s.type === 'bye') { setState('ended'); return }
+      if (s.type === 'chat') {
+        const text = String(s.data?.text || '').slice(0, 1000)
+        const image = typeof s.data?.image === 'string' && s.data.image.startsWith('data:image/') ? s.data.image : undefined
+        if (text || image) setMessages((m) => [...m.slice(-199), { id: s.id, from: role === 'doctor' ? 'patient' : 'doctor', text, at: s.at, image }])
+        return
+      }
       if (s.type === 'caption') {
         const text = String(s.data?.text || '').slice(0, 400)
         if (text) setCaptions((c) => [...c.slice(-19), { id: s.id, from: role === 'doctor' ? 'patient' : 'doctor', text, at: s.at }])
@@ -227,7 +236,19 @@ export function useCall(opts: { token: string; role: CallRole; doctorKey?: strin
 
   /** Tells the other side the call is over. Safe to call more than once. */
   const sendBye = useCallback(() => sendRef.current('bye', null), [])
-  const sendCaption = useCallback((text: string) => sendRef.current('caption', { text }), [])
+  const sendCaption = useCallback((text: string) => {
+    const t = text.trim().slice(0, 400)
+    if (!t) return Promise.resolve()
+    setCaptions((c) => [...c.slice(-19), { id: `me-${Date.now()}-${Math.random()}`, from: role, text: t, at: Date.now() }])
+    return sendRef.current('caption', { text: t })
+  }, [role])
+  /** Types a chat message: shown at once on this side and sent to the other. */
+  const sendChat = useCallback((text: string, image?: string) => {
+    const t = text.trim().slice(0, 1000)
+    if (!t && !image) return Promise.resolve()
+    setMessages((m) => [...m.slice(-199), { id: `me-${Date.now()}-${Math.random()}`, from: role, text: t, at: Date.now(), image }])
+    return sendRef.current('chat', { text: t, image })
+  }, [role])
 
-  return { state, error, localStream, remoteStream, micOn, camOn, toggleMic, toggleCam, sendBye, sendCaption, captions }
+  return { state, error, localStream, remoteStream, micOn, camOn, toggleMic, toggleCam, sendBye, sendCaption, captions, sendChat, messages }
 }
