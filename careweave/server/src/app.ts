@@ -23,6 +23,7 @@ import { doctorRoutes } from './routes/doctor.js';
 import { LiveHub } from './liveEvents.js';
 import { firebaseUsersFromEnv, type FirebaseUsers } from './services/firebaseUsers.js';
 import { whatsappPublicRoutes, whatsappSimulatorRoutes } from './whatsapp/routes.js';
+import { videoPublicRoutes, videoStaffRoutes } from './routes/video.js';
 
 export type CreateAppOptions = { repos: Repos | (() => Repos); config?: Partial<AppConfig>; live?: LiveHub; firebaseUsers?: FirebaseUsers };
 
@@ -92,6 +93,7 @@ export function createApp(opts: CreateAppOptions) {
   app.use('/api', cronRoutes(ctx));
   app.use('/api', authRoutes(ctx));
   app.use('/api', supportPublicRoutes(ctx));
+  app.use('/api', videoPublicRoutes(ctx));
   app.use('/api', ctx.auth);
   app.use('/api', sessionRoutes(ctx));
   app.use('/api', whatsappSimulatorRoutes({ repos: () => ctx.repos }));
@@ -103,6 +105,7 @@ export function createApp(opts: CreateAppOptions) {
   app.use('/api', appointmentRoutes(ctx));
   app.use('/api', labRoutes(ctx));
   app.use('/api', doctorRoutes(ctx));
+  app.use('/api', videoStaffRoutes(ctx));
 
   app.use(errorHandler);
   return app;

@@ -13,6 +13,7 @@ import { DoctorPatientRecords } from './pages/DoctorPatientRecords';
 import { DoctorConsultations } from './pages/DoctorConsultations';
 import { DoctorLabsAndDiagnostics } from './pages/DoctorLabsAndDiagnostics';
 import { DoctorPrescriptions } from './pages/DoctorPrescriptions';
+import { DoctorVideoConsult } from './pages/DoctorVideoConsult';
 import { DoctorCarePlans } from './pages/DoctorCarePlans';
 import { DoctorReferrals } from './pages/DoctorReferrals';
 import { DoctorClinicalCalculators } from './pages/DoctorClinicalCalculators';
@@ -60,6 +61,7 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
     ['consultations', 'Encounters & SOAP', Stethoscope],
     ['labs', 'Labs & Diagnostics', FlaskConical],
     ['prescriptions', 'E-Prescriptions', FileText],
+    ['video', 'Video Consultation', Stethoscope],
     ['careplans', 'Care Plans & Protocols', HeartPulse],
     ['referrals', 'Specialist Referrals', ClipboardList],
     ['calculators', 'Clinical Calculators', Activity],
@@ -203,6 +205,8 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
               onOpenPatient={handleOpenPatientRecord}
             />
           )}
+
+          {section === 'video' && <DoctorVideoConsult notify={notify} />}
 
           {section === 'careplans' && (
             <DoctorCarePlans

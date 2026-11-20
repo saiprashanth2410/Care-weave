@@ -58,6 +58,7 @@ test('a patient cannot be booked twice at one time, with two different doctors, 
 
 test('WhatsApp language choice is stored in the database: another instance, and a restart, keep it', async () => {
   const store = await memoryStore();
+  await createRepos(store).patients.insert({ id: 'p-wa', patientId: 'CW-98765', name: 'Anbu', dob: '1990-01-01', gender: 'M', phone: '+91 98765 43210', createdAt: new Date().toISOString() });
   const a = await startInstance(store);
   const rec = await a.login();
   const say = (s: typeof a, token: string, message: string) => s.call('POST', '/api/whatsapp/simulate', { token, body: { phone: '+91 98765 43210', message } });
@@ -106,6 +107,7 @@ test('every response carries a Content-Security-Policy, also when running on Ver
 
 test('LANG RESET forgets the saved language', async () => {
   const store = await memoryStore();
+  await createRepos(store).patients.insert({ id: 'p-wa', patientId: 'CW-98765', name: 'Anbu', dob: '1990-01-01', gender: 'M', phone: '+91 98765 43210', createdAt: new Date().toISOString() });
   const a = await startInstance(store);
   const rec = await a.login();
   const say = (message: string) => a.call('POST', '/api/whatsapp/simulate', { token: rec, body: { phone: '+91 98765 43210', message } });
