@@ -40,12 +40,39 @@ async function callModel(model: string, mimeType: string, data: string, key: str
 
 const str = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : String(v));
 
+/** Pulls the JSON object out of the model's text: tolerates prose or fences around it and repairs output cut off mid-way. */
+function parseJson(raw: string): unknown {
+  try { return JSON.parse(raw.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, '')); } catch { /* look for the object inside the text */ }
+  const start = raw.indexOf('{');
+  if (start < 0) return undefined;
+  const body = raw.slice(start, raw.lastIndexOf('}') + 1);
+  try { return JSON.parse(body); } catch { /* fall through to repair */ }
+  // Cut off mid-way (token limit): drop the unfinished tail and close what is open.
+  let text = raw.slice(start);
+  for (let cut = 0; cut < 40; cut++) {
+    const end = Math.max(text.lastIndexOf('},'), text.lastIndexOf('}]'));
+    if (end < 0) return undefined;
+    text = text.slice(0, end + 1);
+    const stack: string[] = [];
+    let inStr = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inStr) { if (c === '\\') i++; else if (c === '"') inStr = false; continue; }
+      if (c === '"') inStr = true;
+      else if (c === '{') stack.push('}');
+      else if (c === '[') stack.push(']');
+      else if (c === '}' || c === ']') stack.pop();
+    }
+    try { return JSON.parse(text + stack.reverse().join('')); } catch { /* shorten again */ }
+  }
+  return undefined;
+}
+
 /** Coerces the model's JSON into the Report shape; a field it got wrong becomes empty rather than failing the scan. */
 function toReport(raw: string) {
-  let json: any;
-  try {
-    json = JSON.parse(raw.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, ''));
-  } catch {
+  const json: any = parseJson(raw);
+  if (json === undefined) {
+    console.log(`[scan] unreadable output (${raw.length} chars): ${JSON.stringify(raw.slice(0, 160))} ... ${JSON.stringify(raw.slice(-80))}`);
     throw new ScanError(422, 'The scanner returned something unreadable. Enter the results by hand.');
   }
   const j = json && typeof json === 'object' ? json : {};
@@ -91,7 +118,13 @@ export async function extractWithGemini(mimeType: string, data: string, key: str
         .flatMap((step: any) => step.content || [])
         .map((c: any) => c.text ?? '')
         .join('');
-      return { ...toReport(text), model };
+      try {
+        return { ...toReport(text), model };
+      } catch (err) {
+        // This model's answer was unusable: try the next model instead of giving up.
+        if (err instanceof ScanError && err.status === 422 && model !== models[models.length - 1]) continue;
+        throw err;
+      }
     }
     if (!busy) break;
   }

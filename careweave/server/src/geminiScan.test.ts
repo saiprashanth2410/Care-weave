@@ -45,3 +45,12 @@ test('a rejected file is a 422', async () => {
   reply('', 400);
   await fails(422);
 });
+
+test('JSON wrapped in prose, or cut off mid-row, still yields the rows that were complete', async () => {
+  reply('Here is the report:\n{"patientName":"Ravi","results":[{"parameter":"Hb","value":"10.2","unit":"g/dL"}]}\nHope this helps.');
+  assert.equal((await extractWithGemini('image/png', 'AAAA', 'k')).results[0].value, '10.2');
+  reply('```json\n{"patientName":"Ravi","results":[{"parameter":"Hb","value":"10.2"},{"parameter":"WBC","val');
+  const cut = await extractWithGemini('image/png', 'AAAA', 'k');
+  assert.equal(cut.patientName, 'Ravi');
+  assert.equal(cut.results.length, 1);
+});
