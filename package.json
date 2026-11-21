@@ -11,11 +11,14 @@
   "scripts": {
     "dev": "cd careweave/client && npm run dev",
     "build": "cd careweave/client && npm install --include=optional @rolldown/binding-linux-x64-gnu && npm run build",
-    "lint": "cd careweave/client && npm run lint",
+    "lint": "cd careweave/client && npm run lint && npm run lint:server",
     "preview": "cd careweave/client && npm run preview",
     "server": "cd careweave/server && npm run dev",
     "server:seed": "cd careweave/server && npm run seed",
-    "check-db": "cd careweave/server && npm run check-db"
+    "check-db": "cd careweave/server && npm run check-db",
+    "typecheck": "cd careweave/server && npx tsc --noEmit && cd ../client && npx tsc -b",
+    "test": "cd careweave/server && npm test && cd ../client && npm test",
+    "check": "npm run lint && npm run typecheck && npm test"
   },
   "dependencies": {
     "@exasol/exasol-driver-ts": "^0.8.1",
