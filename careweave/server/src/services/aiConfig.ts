@@ -55,7 +55,7 @@ export class AiConfigError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 
-export const validKey = (k: unknown) => typeof k === 'string' && /^[\w-]{20,200}$/.test(k.trim());
+export const validKey = (k: unknown) => typeof k === 'string' && /^[\w.-]{20,200}$/.test(k.trim());
 export const validPasscode = (p: unknown) => typeof p === 'string' && p.trim().length >= 4 && p.length <= 100;
 
 let cache: { at: number; value: AiConfig } | null = null;
