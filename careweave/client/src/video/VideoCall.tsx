@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import ChatPanel from './ChatPanel'
 import type { CallApi, CallRole, CallState } from './useCall'
 import './video.css'
@@ -29,7 +29,7 @@ export type CaptionControl = { on: boolean; toggle: () => void; supported: boole
  * `layout="full"` (the patient's phone) also has a Chat button that opens a sheet over the video; in `panel` layout (doctor portal)
  * the chat lives in the side panel next to it.
  */
-export default function VideoCall({ call, role, layout = 'panel', cc, onHangUp }: { call: CallApi; role: CallRole; layout?: 'panel' | 'full'; cc: CaptionControl; onHangUp?: () => void }) {
+export default function VideoCall({ call, role, layout = 'panel', cc, onHangUp, extraButton }: { call: CallApi; role: CallRole; layout?: 'panel' | 'full'; cc: CaptionControl; onHangUp?: () => void; extraButton?: ReactNode }) {
   const full = layout === 'full'
   const over = call.state === 'ended' || call.state === 'failed'
   // On a laptop the chat is a side panel that is open from the start; on a phone it is a sheet that opens on demand.
@@ -98,6 +98,7 @@ export default function VideoCall({ call, role, layout = 'panel', cc, onHangUp }
             Chat{unread > 0 && <span className="vc-badge">{unread}</span>}
           </button>
         )}
+        {extraButton}
         <button type="button" className="vc-end" onClick={hangUp} disabled={over && role === 'patient'}>
           {role === 'doctor' ? 'End' : 'Leave'}
         </button>

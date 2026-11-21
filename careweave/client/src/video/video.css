@@ -18,6 +18,9 @@
 .vc-layout .vc-side h3 { margin: 0; font-size: 16px; }
 .vc-layout .vc-side p { margin: 0; }
 .vc-tips { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.7; color: #56655f; }
+/* Connected and the panel closed: the video takes the room, centred. */
+.vc-layout.vc-solo { grid-template-columns: minmax(0, 1fr); }
+.vc-layout.vc-solo > .card { max-width: 1000px; width: 100%; margin: 0 auto; }
 @media (max-width: 1000px) { .vc-layout { grid-template-columns: minmax(0, 1fr); } }
 
 /* ---------- Patient page ---------- */
