@@ -32,6 +32,9 @@ export function DoctorVideoConsult({ notify, onLive }: { notify: (s: string) => 
   const [tab, setTab] = useState<Tab>('details');
   const [seen, setSeen] = useState(0);
   const [summary, setSummary] = useState<Summary>({ loading: false });
+  // Before the patient joins the side panel shows the link; once the call connects it gets out of the way and the Chat button opens it.
+  const [wasConnected, setWasConnected] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
 
   const live = Boolean(started) && !ended;
   useEffect(() => { onLive?.(live); return () => onLive?.(false); }, [live, onLive]);
@@ -46,8 +49,15 @@ export function DoctorVideoConsult({ notify, onLive }: { notify: (s: string) => 
   const call = useCall({ token: started?.id ?? '', role: 'doctor', doctorKey: started?.doctorKey, enabled: Boolean(started) && !ended });
   const cc = useCaptions(call);
   const incoming = call.messages.filter((m) => m.from !== 'doctor').length;
-  const unread = tab === 'chat' ? 0 : Math.max(0, incoming - seen);
+  const showPanel = ended || !wasConnected || panelOpen
+  const unread = showPanel && tab === 'chat' ? 0 : Math.max(0, incoming - seen);
   const open = (t: Tab) => { if (t === 'chat') setSeen(incoming); setTab(t); };
+  if (call.state === 'connected' && !wasConnected) setWasConnected(true);
+  const toggleChat = () => {
+    if (showPanel && tab === 'chat' && !ended && wasConnected) { setPanelOpen(false); return; }
+    open('chat');
+    setPanelOpen(true);
+  };
 
   useEffect(() => {
     api.patients().then((rows) => {
@@ -69,6 +79,8 @@ export function DoctorVideoConsult({ notify, onLive }: { notify: (s: string) => 
       setEnded(false);
       setTab('details');
       setSeen(0);
+      setWasConnected(false);
+      setPanelOpen(false);
       setSummary({ loading: false });
     } catch (e: any) {
       notify(e.message || 'Could not start the consultation');
@@ -157,10 +169,14 @@ export function DoctorVideoConsult({ notify, onLive }: { notify: (s: string) => 
           )}
         </div>
       ) : (
-        <div className="vc-layout">
+        <div className={`vc-layout ${showPanel ? '' : 'vc-solo'}`}>
           <div className="card">
             {!ended ? (
-              <VideoCall call={call} role="doctor" cc={cc} onHangUp={end} />
+              <VideoCall call={call} role="doctor" cc={cc} onHangUp={end} extraButton={
+                <button type="button" className={showPanel && tab === 'chat' ? 'vc-on' : ''} onClick={toggleChat} aria-pressed={showPanel && tab === 'chat'}>
+                  Chat{unread > 0 && <span className="vc-badge">{unread}</span>}
+                </button>
+              } />
             ) : (
               <div className="vc-ended">
                 <b>Consultation ended</b>
@@ -170,7 +186,7 @@ export function DoctorVideoConsult({ notify, onLive }: { notify: (s: string) => 
             )}
           </div>
 
-          <div className="card vc-side">
+          {showPanel && <div className="card vc-side">
             <div className="vc-tabs" role="tablist">
               <button role="tab" aria-selected={tab === 'details'} className={tab === 'details' ? 'on' : ''} onClick={() => open('details')}>Details</button>
               <button role="tab" aria-selected={tab === 'chat'} className={tab === 'chat' ? 'on' : ''} onClick={() => open('chat')} disabled={ended}>
@@ -243,7 +259,7 @@ export function DoctorVideoConsult({ notify, onLive }: { notify: (s: string) => 
                 )}
               </div>
             )}
-          </div>
+          </div>}
         </div>
       )}
     </>
