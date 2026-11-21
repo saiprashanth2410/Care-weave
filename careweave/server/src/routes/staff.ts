@@ -9,6 +9,7 @@ import { generatePassword } from '../services/firebaseUsers.js';
 import { HHMM, hhmmToMinutes, shiftOf } from '../services/slots.js';
 import { rememberDeletedStaff } from '../services/staff.js';
 import { id, now, text } from '../util.js';
+import type { AuthedRequest } from '../middleware.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -67,7 +68,7 @@ export function staffRoutes(ctx: AppCtx) {
     res.json(all.map(view));
   });
 
-  router.post('/staff', admin, async (req: any, res) => {
+  router.post('/staff', admin, async (req: AuthedRequest, res) => {
     const b = req.body || {};
     const name = text(b.name, 80);
     const email = text(b.email, 120).toLowerCase();
@@ -113,7 +114,7 @@ export function staffRoutes(ctx: AppCtx) {
     res.status(201).json({ ...view(u), firebase, ...(temporaryPassword ? { temporaryPassword } : {}) });
   });
 
-  router.patch('/staff/:id', admin, async (req: any, res) => {
+  router.patch('/staff/:id', admin, async (req: AuthedRequest, res) => {
     const u = await ctx.repos.users.byId(String(req.params.id));
     if (!u) return res.status(404).json({ error: 'Staff account not found' });
     const b = req.body || {};
@@ -175,7 +176,7 @@ export function staffRoutes(ctx: AppCtx) {
 
   // Permanent. An account must be disabled first, so it takes two deliberate steps, and nobody deletes their own.
   // The records it touched keep the name that was written on them; only the sign-in and the directory entry go.
-  router.delete('/staff/:id', admin, async (req: any, res) => {
+  router.delete('/staff/:id', admin, async (req: AuthedRequest, res) => {
     const u = await ctx.repos.users.byId(String(req.params.id));
     if (!u) return res.status(404).json({ error: 'Staff account not found' });
     if (u.id === req.user.id) return res.status(400).json({ error: 'You cannot delete your own account' });
@@ -195,7 +196,7 @@ export function staffRoutes(ctx: AppCtx) {
   });
 
   // A link the person opens to choose their own password. Better than passing a password around.
-  router.post('/staff/:id/reset-link', admin, async (req: any, res) => {
+  router.post('/staff/:id/reset-link', admin, async (req: AuthedRequest, res) => {
     const u = await ctx.repos.users.byId(String(req.params.id));
     if (!u) return res.status(404).json({ error: 'Staff account not found' });
     if (!ctx.firebaseUsers.configured) return res.status(400).json({ error: 'Reset links need Firebase account management to be configured' });

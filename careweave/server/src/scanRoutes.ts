@@ -5,13 +5,14 @@ import { extractWithGemini } from './geminiScan.js';
 import { searchMedicines } from './medicines.js';
 import { ScanError } from './scanSchema.js';
 import { readAiConfig } from './services/aiConfig.js';
+import type { AuthedRequest } from './middleware.js';
 
 export type ScanCtx = {
   app: IRouter;
   roles: (...allowed: string[]) => any;
   uploadLimit: any;
   text: (v: any, max?: number) => string;
-  audit: (req: any, action: string, entity: string, entityId: string, detail?: string) => Promise<void>;
+  audit: (req: AuthedRequest, action: string, entity: string, entityId: string, detail?: string) => Promise<void>;
   repos: () => Repos;
 };
 
@@ -19,7 +20,7 @@ export type ScanCtx = {
 export function registerScanRoutes({ app, roles, uploadLimit, text, audit, repos }: ScanCtx) {
   const scanCache = new Map<string, unknown>(); // identical uploads reuse the result instead of spending quota
 
-  app.post('/lab/extract', roles('lab'), uploadLimit, async (req: any, res) => {
+  app.post('/lab/extract', roles('lab'), uploadLimit, async (req: AuthedRequest, res) => {
     const ai = await readAiConfig(repos());
     if (!ai.features.scan) return res.status(503).json({ error: 'Report scanning is switched off. Ask the administrator to turn it on.' });
     const geminiKey = ai.key;
@@ -46,7 +47,7 @@ export function registerScanRoutes({ app, roles, uploadLimit, text, audit, repos
     }
   });
 
-  app.get('/medicines/search', roles('doctor'), async (req: any, res) => {
+  app.get('/medicines/search', roles('doctor'), async (req: AuthedRequest, res) => {
     try {
       res.json(await searchMedicines(String(req.query.q ?? ''), 15, repos().mode === 'mongo'));
     } catch (err: any) {

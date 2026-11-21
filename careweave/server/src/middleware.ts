@@ -1,11 +1,18 @@
+import type { NextFunction, Request, Response } from 'express';
 import { ConflictError, type Repos } from './repo/index.js';
+
+/** A request that has passed the sign-in check: `user` is the signed-in staff member. */
+export type SessionUser = { id: string; role: string; name?: string; [field: string]: any };
+export type AuthedRequest = Request & { user: SessionUser };
+/** A request on a route that may or may not be signed in (sign-in, public pages, limiters). */
+export type MaybeAuthedRequest = Request & { user?: SessionUser };
 
 /**
  * Fixed-window limiter. The count is kept in the database (one atomic upsert per request), so every server instance shares it
  * and a restart does not reset it. If the database cannot be reached the request is refused with 503 (fail closed).
  */
-export function rateLimit(repos: () => Repos, name: string, windowMs: number, max: number, keyOf: (req: any) => string) {
-  return async (req: any, res: any, next: any) => {
+export function rateLimit(repos: () => Repos, name: string, windowMs: number, max: number, keyOf: (req: MaybeAuthedRequest) => string) {
+  return async (req: Request, res: Response, next: NextFunction) => {
     let hit;
     try {
       hit = await repos().rateLimits.hit(`${name}:${keyOf(req)}`, windowMs);
@@ -23,8 +30,8 @@ export function rateLimit(repos: () => Repos, name: string, windowMs: number, ma
 }
 
 export function roles(...allowed: string[]) {
-  return (req: any, res: any, next: any) => {
-    if (!allowed.includes(req.user.role)) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!allowed.includes((req as AuthedRequest).user.role)) {
       return res.status(403).json({ error: 'This action is not permitted for your role' });
     }
     next();
@@ -45,7 +52,7 @@ export function expectedVersion(req: any, current: any): number {
   return Number(sent);
 }
 
-export function errorHandler(err: any, _req: any, res: any, _next: any) {
+export function errorHandler(err: any, _req: any, res: Response, _next: NextFunction) {
   if (err instanceof ConflictError) return res.status(409).json({ error: CONFLICT_MESSAGE });
   if (err?.type === 'entity.parse.failed') return res.status(400).json({ error: 'Request body is not valid JSON' });
   if (err?.type === 'entity.too.large') return res.status(413).json({ error: 'Request body is too large' });

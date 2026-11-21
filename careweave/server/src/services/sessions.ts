@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import type { Repos } from '../repo/index.js';
+import type { MaybeAuthedRequest } from '../middleware.js';
 
 export const SESSION_MS = 8 * 60 * 60 * 1000;
 
@@ -17,7 +18,7 @@ export const COOKIE = 'cw_session';
 /** Browser clients send this header on every request; for a state-changing request it is the CSRF guard (see `auth` in app.ts). */
 export const BROWSER_HEADER = 'x-cw-session';
 
-function cookieOf(req: any, name: string) {
+function cookieOf(req: MaybeAuthedRequest, name: string) {
   for (const part of String(req.headers.cookie || '').split(';')) {
     const i = part.indexOf('=');
     if (i > 0 && part.slice(0, i).trim() === name) return decodeURIComponent(part.slice(i + 1).trim());
@@ -26,13 +27,13 @@ function cookieOf(req: any, name: string) {
 }
 
 /** The token on a request and where it came from. A Bearer header wins over the cookie. */
-export function credentialOf(req: any): { token: string; via: 'bearer' | 'cookie' | null } {
+export function credentialOf(req: MaybeAuthedRequest): { token: string; via: 'bearer' | 'cookie' | null } {
   const bearer = String(req.headers.authorization || '').replace(/^Bearer /, '');
   if (bearer) return { token: bearer, via: 'bearer' };
   const cookie = cookieOf(req, COOKIE);
   return cookie ? { token: cookie, via: 'cookie' } : { token: '', via: null };
 }
-export const tokenOf = (req: any) => credentialOf(req).token;
+export const tokenOf = (req: MaybeAuthedRequest) => credentialOf(req).token;
 
 export function sessionCookie(token: string, secure: boolean, maxAgeMs = SESSION_MS) {
   return `${COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor(maxAgeMs / 1000)}${secure ? '; Secure' : ''}`;
@@ -46,4 +47,4 @@ export async function userForToken(repos: Repos, raw: string) {
   return u && u.active !== false ? u : null;
 }
 
-export const endSession = (repos: Repos, req: any) => repos.sessions.remove(hashToken(tokenOf(req)));
+export const endSession = (repos: Repos, req: MaybeAuthedRequest) => repos.sessions.remove(hashToken(tokenOf(req)));

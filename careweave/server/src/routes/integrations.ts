@@ -4,6 +4,8 @@ import { catchAsyncRoutes } from '../asyncRoutes.js';
 import { MODELS } from '../clinicalSummary.js';
 import { rateLimit } from '../middleware.js';
 import { AiConfigError, aiStatus, changePasscode, readAiConfig, removeKey, revealKey, setKey, setOptions, validKey } from '../services/aiConfig.js';
+import type { AuthedRequest } from '../middleware.js';
+import type { NextFunction, Response } from 'express';
 
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/interactions';
 
@@ -36,21 +38,21 @@ export function integrationRoutes(ctx: AppCtx) {
   const R = () => ctx.repos;
   const admin = [
     roles('admin'),
-    (req: any, res: any, next: any) => ((req.user.permissions || []).includes('staff') ? next() : res.status(403).json({ error: 'Managing integrations needs the staff permission' })),
+    (req: AuthedRequest, res: Response, next: NextFunction) => ((req.user.permissions || []).includes('staff') ? next() : res.status(403).json({ error: 'Managing integrations needs the staff permission' })),
   ];
   const tries = rateLimit(() => ctx.repos, 'ai-config', 10 * 60 * 1000, 30, (r) => r.user?.id || r.ip);
-  const fail = (res: any, e: unknown) => {
+  const fail = (res: Response, e: unknown) => {
     if (e instanceof AiConfigError) return res.status(e.status).json({ error: e.message });
     throw e;
   };
-  const who = (req: any) => `${req.user.name} (${req.user.id})`;
+  const who = (req: AuthedRequest) => `${req.user.name} (${req.user.id})`;
 
   router.get('/integrations/gemini', ...admin, async (_req, res) => {
     res.set('Cache-Control', 'no-store');
     res.json(await aiStatus(R()));
   });
 
-  router.put('/integrations/gemini', ...admin, tries, async (req: any, res) => {
+  router.put('/integrations/gemini', ...admin, tries, async (req: AuthedRequest, res) => {
     try {
       const first = !(await aiStatus(R())).hasPasscode;
       await setKey(R(), who(req), { apiKey: req.body?.apiKey, passcode: req.body?.passcode });
@@ -59,7 +61,7 @@ export function integrationRoutes(ctx: AppCtx) {
     } catch (e) { fail(res, e); }
   });
 
-  router.post('/integrations/gemini/unlock', ...admin, tries, async (req: any, res) => {
+  router.post('/integrations/gemini/unlock', ...admin, tries, async (req: AuthedRequest, res) => {
     try {
       const key = await revealKey(R(), req.body?.passcode);
       await audit(req, 'read', 'integration', 'gemini', 'Unlocked the Gemini API key');
@@ -67,7 +69,7 @@ export function integrationRoutes(ctx: AppCtx) {
     } catch (e) { fail(res, e); }
   });
 
-  router.post('/integrations/gemini/passcode', ...admin, tries, async (req: any, res) => {
+  router.post('/integrations/gemini/passcode', ...admin, tries, async (req: AuthedRequest, res) => {
     try {
       await changePasscode(R(), who(req), { currentPasscode: req.body?.currentPasscode, newPasscode: req.body?.newPasscode });
       await audit(req, 'update', 'integration', 'gemini', 'Changed the passcode that protects the Gemini API key');
@@ -75,7 +77,7 @@ export function integrationRoutes(ctx: AppCtx) {
     } catch (e) { fail(res, e); }
   });
 
-  router.delete('/integrations/gemini', ...admin, tries, async (req: any, res) => {
+  router.delete('/integrations/gemini', ...admin, tries, async (req: AuthedRequest, res) => {
     try {
       await removeKey(R(), req.body?.passcode);
       await audit(req, 'delete', 'integration', 'gemini', 'Removed the Gemini API key');
@@ -83,7 +85,7 @@ export function integrationRoutes(ctx: AppCtx) {
     } catch (e) { fail(res, e); }
   });
 
-  router.patch('/integrations/gemini/options', ...admin, async (req: any, res) => {
+  router.patch('/integrations/gemini/options', ...admin, async (req: AuthedRequest, res) => {
     try {
       const b = req.body ?? {};
       await setOptions(R(), who(req), { scan: b.scan, brief: b.brief, model: b.model });
@@ -94,7 +96,7 @@ export function integrationRoutes(ctx: AppCtx) {
   });
 
   // Tests the key typed in the box, or the saved one when the box is empty.
-  router.post('/integrations/gemini/test', ...admin, tries, async (req: any, res) => {
+  router.post('/integrations/gemini/test', ...admin, tries, async (req: AuthedRequest, res) => {
     const typed = typeof req.body?.apiKey === 'string' ? req.body.apiKey.trim() : '';
     if (typed && !validKey(typed)) return res.json({ ok: false, error: 'That does not look like a Gemini API key.' });
     const cfg = await readAiConfig(R());

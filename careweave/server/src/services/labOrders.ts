@@ -1,4 +1,5 @@
 import { text } from '../util.js';
+import type { AuthedRequest } from '../middleware.js';
 
 export const LAB_STATUSES = ['requested', 'collection_pending', 'collected', 'processing', 'awaiting_verification', 'verified', 'released', 'recollect_required', 'cancelled'];
 export const LAB_NEXT: Record<string, string[]> = {
@@ -35,4 +36,4 @@ export const FILE_TYPES: Record<string, { ext: string; magic: number[] }> = {
 };
 
 export const OPEN_VISIT = (a: any) => !['Cancelled', 'No Show'].includes(a.status);
-export const can = (req: any, permission: string) => (req.user.permissions || []).includes(permission);
+export const can = (req: AuthedRequest, permission: string) => (req.user.permissions || []).includes(permission);

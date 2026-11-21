@@ -11,6 +11,7 @@ import { INACTIVE_STATUSES, WAITING_STATUSES, hhmmToMinutes, labelToMinutes, shi
 import { emitEvent } from '../whatsapp/emitter.js';
 import { isLive } from '../repo/videoConsults.js';
 import { isoToday } from '../util.js';
+import type { AuthedRequest } from '../middleware.js';
 
 /** Which of the unique guards fired: the patient already booked at that time, or the doctor's slot taken. */
 const clashMessage = (err: DuplicateError, patient: string, doctor: string | undefined, date: string, time: string) =>
@@ -33,7 +34,7 @@ export function appointmentRoutes(ctx: AppCtx) {
   const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
   const HHMM_Q = /^([01]\d|2[0-3]):[0-5]\d$/;
   // The browser's own "today" and "now" are passed in: the server may be in another time zone, and "past" means past for the person at the desk.
-  const dayOf = (req: any) => {
+  const dayOf = (req: AuthedRequest) => {
     const today = ISO_DATE.test(String(req.query.today || '')) ? String(req.query.today) : isoToday();
     const date = ISO_DATE.test(String(req.query.date || '')) ? String(req.query.date) : today;
     const now = HHMM_Q.test(String(req.query.now || '')) ? String(req.query.now) : '';
@@ -53,7 +54,7 @@ export function appointmentRoutes(ctx: AppCtx) {
   });
 
   // Live status of every doctor: who is with them now, how many wait, how many were seen, and the next free slot.
-  router.get('/doctors/roster', roles('receptionist'), async (req: any, res) => {
+  router.get('/doctors/roster', roles('receptionist'), async (req: AuthedRequest, res) => {
     const day = dayOf(req);
     const [doctors, rows] = await Promise.all([activeDoctors(), rowsOn(day.date, day.isToday)]);
     const calls = (await ctx.repos.videoConsults.recentForDoctors(doctors.map((u: any) => u.id))).filter((c: any) => isLive(c));
@@ -81,7 +82,7 @@ export function appointmentRoutes(ctx: AppCtx) {
   });
 
   // Who one doctor is with, who is waiting, who is coming, and who they have seen, for a day.
-  router.get('/doctors/:id/day', roles('receptionist'), async (req: any, res) => {
+  router.get('/doctors/:id/day', roles('receptionist'), async (req: AuthedRequest, res) => {
     const u = await ctx.repos.users.byId(String(req.params.id));
     if (!u || u.role !== 'doctor') return res.status(404).json({ error: 'Doctor not found' });
     const day = dayOf(req);
@@ -99,7 +100,7 @@ export function appointmentRoutes(ctx: AppCtx) {
   });
 
   // The slots a doctor can be booked into on a date: free ones can be picked, booked and (today) already-passed ones cannot.
-  router.get('/doctors/:id/slots', roles('receptionist', 'doctor'), async (req: any, res) => {
+  router.get('/doctors/:id/slots', roles('receptionist', 'doctor'), async (req: AuthedRequest, res) => {
     const u = await ctx.repos.users.byId(String(req.params.id));
     if (!u || u.role !== 'doctor' || u.active === false) return res.status(404).json({ error: 'Doctor not found' });
     const day = dayOf(req);
@@ -112,7 +113,7 @@ export function appointmentRoutes(ctx: AppCtx) {
     res.json({ doctor: doctorView(u), date: day.date, slots, nextFree: slots.find((x) => x.state === 'free')?.time || null });
   });
 
-  router.get('/appointments', roles('receptionist', 'doctor'), async (req: any, res) => {
+  router.get('/appointments', roles('receptionist', 'doctor'), async (req: AuthedRequest, res) => {
     const { date, status, patientId } = req.query as any;
     const filter: Record<string, any> = {};
     if (req.user.role === 'doctor') filter.doctorId = req.user.id;
@@ -125,7 +126,7 @@ export function appointmentRoutes(ctx: AppCtx) {
     res.json(rows);
   });
 
-  router.post('/appointments', roles('receptionist', 'doctor'), async (req: any, res) => {
+  router.post('/appointments', roles('receptionist', 'doctor'), async (req: AuthedRequest, res) => {
     const p = await ctx.repos.patients.byRef(String(req.body?.patientId ?? ''));
     if (!p) return res.status(404).json({ error: 'Patient not found' });
     if (req.user.role === 'doctor') {
@@ -165,7 +166,7 @@ export function appointmentRoutes(ctx: AppCtx) {
     res.status(201).json(a);
   });
 
-  router.patch('/appointments/:id', roles('receptionist', 'doctor'), async (req: any, res) => {
+  router.patch('/appointments/:id', roles('receptionist', 'doctor'), async (req: AuthedRequest, res) => {
     const a = await ctx.repos.appointments.byId(req.params.id);
     if (!a) return res.status(404).json({ error: 'Appointment not found' });
     const { status, date, time, reason } = req.body || {};

@@ -13,6 +13,8 @@ import { adminPatientView, ageFromDob, id, now, text } from '../util.js';
 import { linkedPatientIds } from '../services/access.js';
 import { casesFor, chartPoints, doctorLab, importedFor, labsFor, timeline } from '../services/chart.js';
 import { cleanVitals, conflictsWith } from '../services/clinical.js';
+import type { AuthedRequest } from '../middleware.js';
+import type { Response } from 'express';
 
 // Doctor portal API. Every route checks the role here on the server, and patient data is only
 // reachable for a patient the doctor is linked to (an appointment assigned to them, or their own encounter).
@@ -23,7 +25,7 @@ export function doctorRoutes(ctx: AppCtx) {
   const R = () => ctx.repos;
 
   /** Resolve :id to a patient this doctor may use, or answer 404/403 without disclosing anything about the chart. */
-  const patientFor = async (req: any, res: any, value: string) => {
+  const patientFor = async (req: AuthedRequest, res: Response, value: string) => {
     const p = await R().patients.byRef(String(value));
     if (!p) { res.status(404).json({ error: 'Patient not found' }); return null; }
     if (!(await linkedPatientIds(R(), req.user.id)).has(p.id)) {
@@ -36,7 +38,7 @@ export function doctorRoutes(ctx: AppCtx) {
 
   // A walk-in or newly registered patient has no booking yet. A doctor who knows the exact patient ID can open the
   // chart by stating why; that creates a booking in their name, so access is explicit, limited to one patient and audited.
-  router.post('/patients/open', roles('doctor'), async (req: any, res) => {
+  router.post('/patients/open', roles('doctor'), async (req: AuthedRequest, res) => {
     const wanted = text(req.body?.patientId, 40);
     const reason = text(req.body?.reason, 200);
     if (reason.length < 5) return res.status(400).json({ error: 'Give the reason you are opening this chart (at least 5 characters)' });
@@ -54,7 +56,7 @@ export function doctorRoutes(ctx: AppCtx) {
     res.json(adminPatientView(p));
   });
 
-  router.get('/patients/:id/record', roles('doctor'), async (req: any, res) => {
+  router.get('/patients/:id/record', roles('doctor'), async (req: AuthedRequest, res) => {
     const p = await patientFor(req, res, req.params.id);
     if (!p) return;
     await audit(req, 'read', 'patient', p.id, 'Open unified health record');
@@ -79,7 +81,7 @@ export function doctorRoutes(ctx: AppCtx) {
 
   // Pre-consultation brief. One request per doctor every few seconds, so it cannot be used to run up the model quota.
   const lastBrief = new Map<string, number>();
-  router.post('/patients/:id/summary', roles('doctor'), async (req: any, res) => {
+  router.post('/patients/:id/summary', roles('doctor'), async (req: AuthedRequest, res) => {
     const p = await patientFor(req, res, req.params.id);
     if (!p) return;
     const t = Date.now();
@@ -112,7 +114,7 @@ export function doctorRoutes(ctx: AppCtx) {
   });
 
   // ── encounters (SOAP) ─────────────────────────────────────────────────────
-  router.post('/encounters', roles('doctor'), async (req: any, res) => {
+  router.post('/encounters', roles('doctor'), async (req: AuthedRequest, res) => {
     const p = await patientFor(req, res, req.body?.patientId);
     if (!p) return;
     const b = req.body ?? {};
@@ -134,7 +136,7 @@ export function doctorRoutes(ctx: AppCtx) {
     res.status(201).json(saved);
   });
 
-  router.patch('/encounters/:id', roles('doctor'), async (req: any, res) => {
+  router.patch('/encounters/:id', roles('doctor'), async (req: AuthedRequest, res) => {
     const e = await R().encounters.byId(req.params.id);
     if (!e || e.doctorId !== req.user.id) return res.status(404).json({ error: 'Encounter not found' });
     const expected = expectedVersion(req, e);
@@ -146,7 +148,7 @@ export function doctorRoutes(ctx: AppCtx) {
   });
 
   // ── vitals, allergies, problems ───────────────────────────────────────────
-  router.post('/patients/:id/vitals', roles('doctor'), async (req: any, res) => {
+  router.post('/patients/:id/vitals', roles('doctor'), async (req: AuthedRequest, res) => {
     const p = await patientFor(req, res, req.params.id);
     if (!p) return;
     const v = cleanVitals(req.body ?? {});
@@ -157,7 +159,7 @@ export function doctorRoutes(ctx: AppCtx) {
     res.status(201).json(row);
   });
 
-  router.post('/patients/:id/allergies', roles('doctor'), async (req: any, res) => {
+  router.post('/patients/:id/allergies', roles('doctor'), async (req: AuthedRequest, res) => {
     const p = await patientFor(req, res, req.params.id);
     if (!p) return;
     const allergen = text(req.body?.allergen, 120);
@@ -168,7 +170,7 @@ export function doctorRoutes(ctx: AppCtx) {
     res.status(201).json(al);
   });
 
-  router.post('/patients/:id/problems', roles('doctor'), async (req: any, res) => {
+  router.post('/patients/:id/problems', roles('doctor'), async (req: AuthedRequest, res) => {
     const p = await patientFor(req, res, req.params.id);
     if (!p) return;
     const name = text(req.body?.name, 160);
@@ -180,13 +182,13 @@ export function doctorRoutes(ctx: AppCtx) {
   });
 
   // ── referrals and care plans ──────────────────────────────────────────────
-  const mine = async (req: any) => [...(await linkedPatientIds(R(), req.user.id))];
+  const mine = async (req: AuthedRequest) => [...(await linkedPatientIds(R(), req.user.id))];
 
-  router.get('/referrals', roles('doctor'), async (req: any, res) => {
+  router.get('/referrals', roles('doctor'), async (req: AuthedRequest, res) => {
     await audit(req, 'read', 'referral', 'directory');
     res.json(await R().referrals.newestFirst({ patientId: { $in: await mine(req) } }));
   });
-  router.post('/referrals', roles('doctor'), async (req: any, res) => {
+  router.post('/referrals', roles('doctor'), async (req: AuthedRequest, res) => {
     const p = await patientFor(req, res, req.body?.patientId);
     if (!p) return;
     const reason = text(req.body?.reason, 500);
@@ -200,7 +202,7 @@ export function doctorRoutes(ctx: AppCtx) {
     await audit(req, 'create', 'referral', rf.id, `Referral to ${rf.specialty}`);
     res.status(201).json(rf);
   });
-  router.patch('/referrals/:id', roles('doctor'), async (req: any, res) => {
+  router.patch('/referrals/:id', roles('doctor'), async (req: AuthedRequest, res) => {
     const rf = await R().referrals.byId(req.params.id);
     if (!rf || !(await mine(req)).includes(rf.patientId)) return res.status(404).json({ error: 'Referral not found' });
     if (!['Drafted', 'Sent', 'Scheduled', 'Completed'].includes(req.body?.status)) return res.status(400).json({ error: 'Unknown referral status' });
@@ -209,11 +211,11 @@ export function doctorRoutes(ctx: AppCtx) {
     res.json(saved);
   });
 
-  router.get('/care-plans', roles('doctor'), async (req: any, res) => {
+  router.get('/care-plans', roles('doctor'), async (req: AuthedRequest, res) => {
     await audit(req, 'read', 'care-plan', 'directory');
     res.json(await R().carePlans.newestFirst({ patientId: { $in: await mine(req) } }));
   });
-  router.post('/care-plans', roles('doctor'), async (req: any, res) => {
+  router.post('/care-plans', roles('doctor'), async (req: AuthedRequest, res) => {
     const p = await patientFor(req, res, req.body?.patientId);
     if (!p) return;
     const title = text(req.body?.title, 160);
@@ -227,7 +229,7 @@ export function doctorRoutes(ctx: AppCtx) {
     await audit(req, 'create', 'care-plan', cp.id, 'Care plan started');
     res.status(201).json(cp);
   });
-  router.patch('/care-plans/:id', roles('doctor'), async (req: any, res) => {
+  router.patch('/care-plans/:id', roles('doctor'), async (req: AuthedRequest, res) => {
     const cp = await R().carePlans.byId(req.params.id);
     if (!cp || !(await mine(req)).includes(cp.patientId)) return res.status(404).json({ error: 'Care plan not found' });
     const changes: Record<string, any> = {};
@@ -239,14 +241,14 @@ export function doctorRoutes(ctx: AppCtx) {
   });
 
   // ── lab orders (the laboratory itself works through /api/lab/*) ───────────
-  router.get('/lab-orders', roles('doctor'), async (req: any, res) => {
+  router.get('/lab-orders', roles('doctor'), async (req: AuthedRequest, res) => {
     const linked = [...(await linkedPatientIds(R(), req.user.id))];
     await audit(req, 'read', 'lab-order', 'directory');
     const rows = await R().orders.newestFirst({ status: { $ne: 'cancelled' }, $or: [{ createdBy: req.user.id }, { registeredPatientRef: { $in: linked } }] });
     res.json(rows.map(doctorLab));
   });
 
-  router.post('/lab-orders', roles('doctor'), async (req: any, res) => {
+  router.post('/lab-orders', roles('doctor'), async (req: AuthedRequest, res) => {
     const p = await patientFor(req, res, req.body?.patientId);
     if (!p) return;
     const testName = text(req.body?.testName, 120);
@@ -273,7 +275,7 @@ export function doctorRoutes(ctx: AppCtx) {
   });
 
   // A doctor may withdraw an order the lab has not started on. Everything else is the laboratory's call.
-  router.patch('/lab-orders/:id/status', roles('doctor'), async (req: any, res) => {
+  router.patch('/lab-orders/:id/status', roles('doctor'), async (req: AuthedRequest, res) => {
     const o = await R().orders.byId(req.params.id);
     if (!o || o.createdBy !== req.user.id) return res.status(404).json({ error: 'Lab order not found' });
     if (!['requested', 'collection_pending'].includes(o.status)) return res.status(409).json({ error: 'The laboratory has already started this order' });
@@ -301,12 +303,12 @@ export function doctorRoutes(ctx: AppCtx) {
     });
 
   /** A medicine of the prescription being written, shaped like a saved one so the duplicate check can read it. */
-  const pendingRx = (req: any, r: any, i: number) => ({
+  const pendingRx = (req: AuthedRequest, r: any, i: number) => ({
     id: `pending-${i}`, medicine: text(r?.medicine, 120), dosage: text(r?.dosage, 80), frequency: text(r?.frequency, 80), duration: text(r?.duration, 60),
     status: 'Active', date: now(), source: 'CareWeave Clinic', prescribingClinician: req.user.name,
   });
 
-  router.post('/encounters/validate-prescription', roles('doctor'), async (req: any, res) => {
+  router.post('/encounters/validate-prescription', roles('doctor'), async (req: AuthedRequest, res) => {
     const p = await patientFor(req, res, req.body?.patientId);
     if (!p) return;
     const medicine = text(req.body?.medicine, 200);
@@ -316,7 +318,7 @@ export function doctorRoutes(ctx: AppCtx) {
     res.json({ alerts, blocking: alerts.some((a) => a.severity === 'HIGH_COLLISION') });
   });
 
-  const rxRecord = (p: any, enc: any, req: any, r: any, allergy: any, high: any[], ov: any) => ({
+  const rxRecord = (p: any, enc: any, req: AuthedRequest, r: any, allergy: any, high: any[], ov: any) => ({
     id: id('rx'), patientId: p.id, encounterId: enc.id, medicine: r.medicine, dosage: r.dosage, route: text(r.route, 40), frequency: r.frequency,
     duration: text(r.duration, 60), instructions: text(r.instructions, 500), refills: Math.max(0, Math.min(12, Number(r.refills) || 0)),
     ...(r.diagnosis ? { diagnosis: text(r.diagnosis, 200) } : {}), ...(r.notes ? { notes: text(r.notes, 500) } : {}),
@@ -325,7 +327,7 @@ export function doctorRoutes(ctx: AppCtx) {
     duplicateOverride: high.length ? { reason: text(ov.overrideReason, 500), acknowledgedRisks: true, molecules: high.flatMap((x: any) => x.matchedMolecules), conflictsWith: high.map((x: any) => x.conflictingDrug.name) } : undefined,
   });
 
-  router.post('/prescriptions', roles('doctor'), async (req: any, res) => {
+  router.post('/prescriptions', roles('doctor'), async (req: AuthedRequest, res) => {
     const p = await patientFor(req, res, req.body?.patientId);
     if (!p) return;
     const b = req.body ?? {};
@@ -362,7 +364,7 @@ export function doctorRoutes(ctx: AppCtx) {
 
   // One prescription with several medicines. Every medicine is checked first (allergy, and duplicate therapy against what the patient
   // already takes AND against the other medicines in this prescription); if any needs the doctor's decision nothing is saved.
-  router.post('/prescriptions/batch', roles('doctor'), async (req: any, res) => {
+  router.post('/prescriptions/batch', roles('doctor'), async (req: AuthedRequest, res) => {
     const p = await patientFor(req, res, req.body?.patientId);
     if (!p) return;
     const b = req.body ?? {};
@@ -418,7 +420,7 @@ export function doctorRoutes(ctx: AppCtx) {
     res.status(201).json(saved);
   });
 
-  router.patch('/prescriptions/:id', roles('doctor'), async (req: any, res) => {
+  router.patch('/prescriptions/:id', roles('doctor'), async (req: AuthedRequest, res) => {
     const r = await R().prescriptions.byId(req.params.id);
     if (!r || r.prescribingClinician !== req.user.name) return res.status(404).json({ error: 'Prescription not found' });
     const expected = expectedVersion(req, r);
@@ -468,7 +470,7 @@ export function doctorRoutes(ctx: AppCtx) {
     return { ok: { facility, kind, content, eventDate: ed || '', sourceRecordId: text(raw?.sourceRecordId, 80), documentRef: text(raw?.documentRef, 160), who } };
   };
 
-  router.post('/external-records/import', roles('doctor'), async (req: any, res) => {
+  router.post('/external-records/import', roles('doctor'), async (req: AuthedRequest, res) => {
     const list = Array.isArray(req.body?.records) ? req.body.records : [req.body];
     if (list.length > 200) return res.status(400).json({ error: 'Import at most 200 records at a time' });
     const out: any[] = [];
@@ -505,12 +507,12 @@ export function doctorRoutes(ctx: AppCtx) {
     res.status(out.length && failed === out.length ? 400 : 201).json({ results: out, imported: out.length - failed, rejected: failed, ...(out[0]?.record ? { record: out[0].record, case: out[0].cases?.[0] } : { error: out[0]?.error }) });
   });
 
-  router.get('/reconciliation/cases', roles('doctor'), async (req: any, res) => {
+  router.get('/reconciliation/cases', roles('doctor'), async (req: AuthedRequest, res) => {
     await audit(req, 'read', 'reconciliation', 'queue');
     res.json(await casesFor(R(), req.user.id));
   });
 
-  router.patch('/reconciliation/cases/:id', roles('doctor'), async (req: any, res) => {
+  router.patch('/reconciliation/cases/:id', roles('doctor'), async (req: AuthedRequest, res) => {
     const k = (await casesFor(R(), req.user.id)).find((x: any) => x.id === req.params.id);
     if (!k) return res.status(404).json({ error: 'Review case not found' });
     const decision = req.body?.decision;

@@ -4,12 +4,13 @@ import { getAnalyticsEngineStatus } from './client.js';
 import { getAnalyticsOverview } from './queries.js';
 import { forceFullNextSync, overviewSnapshot, runAnalyticsSync, syncStatus } from '../services/analytics.js';
 import { generateSampleHistory } from './sampleHistory.js';
+import type { AuthedRequest } from '../middleware.js';
 
 interface AnalyticsCtx {
   app: IRouter;
   repos: () => Repos;
   roles: (...allowed: string[]) => any;
-  audit: (req: any, action: string, entity: string, entityId: string, detail: string) => Promise<void>;
+  audit: (req: AuthedRequest, action: string, entity: string, entityId: string, detail: string) => Promise<void>;
   sampleAllowed: boolean;
 }
 
@@ -53,7 +54,7 @@ export function registerExasolAnalyticsRoutes({ app, repos, roles, audit, sample
    * Adds or removes a reproducible, clearly synthetic 30-day history (visits, lab orders, prescriptions) for the analytics only.
    * It is kept apart from the records the portals show.
    */
-  app.post('/analytics/sample-history', roles('receptionist', 'doctor', 'lab'), async (req: any, res: Response) => {
+  app.post('/analytics/sample-history', roles('receptionist', 'doctor', 'lab'), async (req: AuthedRequest, res: Response) => {
     if (!sampleAllowed) return res.status(403).json({ error: 'Sample data is switched off on this server' });
     const history = repos().syntheticHistory;
     if (req.body?.remove === true) {
@@ -77,7 +78,7 @@ export function registerExasolAnalyticsRoutes({ app, repos, roles, audit, sample
 
   app.get('/analytics/sync-status', roles('receptionist', 'doctor', 'lab'), async (_req: Request, res: Response) => res.json(await syncStatus(repos())));
 
-  app.post('/analytics/sync', roles('receptionist', 'doctor', 'lab'), async (req: any, res: Response) => {
+  app.post('/analytics/sync', roles('receptionist', 'doctor', 'lab'), async (req: AuthedRequest, res: Response) => {
     try {
       const result = await runAnalyticsSync(repos(), { full: req.body?.full === true });
       if (result.busy) return res.status(409).json(result);

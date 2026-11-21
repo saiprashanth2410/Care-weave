@@ -12,6 +12,7 @@ import { linkedPatientIds } from '../services/access.js';
 import { FILE_TYPES, LAB_EDITABLE, LAB_NEXT, LAB_STATUSES, OPEN_VISIT, can, cleanResults, resultsSignature } from '../services/labOrders.js';
 import { emitEvent } from '../whatsapp/emitter.js';
 import { ScannerUnavailable, open, scanFile, seal } from '../attachmentSecurity.js';
+import type { AuthedRequest } from '../middleware.js';
 
 /** Requests that carry a base64 file. They are the only ones allowed a large JSON body; see index.ts. */
 export const UPLOAD_ROUTES = [/^\/api\/lab\/extract$/, /^\/api\/lab\/orders\/[^/]+\/attachments$/];
@@ -21,13 +22,13 @@ export function labRoutes(ctx: AppCtx) {
   catchAsyncRoutes(router);
   const { roles, audit } = ctx;
 
-  router.get('/lab/orders', roles('lab'), async (req: any, res) => {
+  router.get('/lab/orders', roles('lab'), async (req: AuthedRequest, res) => {
     const rows = await ctx.repos.orders.newestFirst();
     await audit(req, 'view', 'labOrder', 'list', `${rows.length} orders`);
     res.json({ data: rows });
   });
 
-  router.get('/lab/orders/:id', roles('lab'), async (req: any, res) => {
+  router.get('/lab/orders/:id', roles('lab'), async (req: AuthedRequest, res) => {
     const o = await ctx.repos.orders.byId(req.params.id);
     if (!o) return res.status(404).json({ error: 'Order not found' });
     await audit(req, 'view', 'labOrder', o.id);
@@ -35,7 +36,7 @@ export function labRoutes(ctx: AppCtx) {
   });
 
   // The lab sees only what it needs to order a test: identifier, name, age and visit slots. No contact details, no visit reasons.
-  router.get('/lab/patients', roles('lab'), async (req: any, res) => {
+  router.get('/lab/patients', roles('lab'), async (req: AuthedRequest, res) => {
     const q = text(req.query.query, 60);
     if (q.length < 2) return res.json({ data: [] });
     const found = await ctx.repos.patients.lookup(q, 8);
@@ -53,7 +54,7 @@ export function labRoutes(ctx: AppCtx) {
     res.json({ data: rows });
   });
 
-  router.post('/lab/orders', roles('lab'), async (req: any, res) => {
+  router.post('/lab/orders', roles('lab'), async (req: AuthedRequest, res) => {
     const b = req.body || {};
     const testName = text(b.testName);
     const orderingDoctor = text(b.orderingDoctor);
@@ -110,7 +111,7 @@ export function labRoutes(ctx: AppCtx) {
     res.status(201).json({ data: o });
   });
 
-  router.patch('/lab/orders/:id', roles('lab'), async (req: any, res) => {
+  router.patch('/lab/orders/:id', roles('lab'), async (req: AuthedRequest, res) => {
     const before = await ctx.repos.orders.byId(req.params.id);
     if (!before) return res.status(404).json({ error: 'Order not found' });
     const expected = expectedVersion(req, before);
@@ -234,7 +235,7 @@ export function labRoutes(ctx: AppCtx) {
   });
 
   // ── Report files ────────────────────────────────────────────────────────────
-  router.post('/lab/orders/:id/attachments', roles('lab'), ctx.limits.upload, async (req: any, res) => {
+  router.post('/lab/orders/:id/attachments', roles('lab'), ctx.limits.upload, async (req: AuthedRequest, res) => {
     const o = await ctx.repos.orders.byId(req.params.id);
     if (!o) return res.status(404).json({ error: 'Order not found' });
     if (o.status === 'cancelled') return res.status(409).json({ error: 'This order was cancelled' });
@@ -278,7 +279,7 @@ export function labRoutes(ctx: AppCtx) {
   });
 
   // Files are served only to signed-in lab and doctor users, never from a public folder.
-  router.get('/lab/orders/:id/attachments/:attId', roles('lab', 'doctor'), async (req: any, res) => {
+  router.get('/lab/orders/:id/attachments/:attId', roles('lab', 'doctor'), async (req: AuthedRequest, res) => {
     const o = await ctx.repos.orders.byId(req.params.id);
     const meta = o?.attachments?.find((a: any) => a.id === req.params.attId);
     if (!meta) return res.status(404).json({ error: 'File not found' });

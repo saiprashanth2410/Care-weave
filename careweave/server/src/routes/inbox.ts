@@ -3,6 +3,7 @@ import type { AppCtx } from '../context.js';
 import { catchAsyncRoutes } from '../asyncRoutes.js';
 import { rateLimit } from '../middleware.js';
 import { id, now, text } from '../util.js';
+import type { AuthedRequest } from '../middleware.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const STATUSES = ['new', 'read', 'resolved'] as const;
@@ -20,7 +21,7 @@ export function supportPublicRoutes(ctx: AppCtx) {
   const perAddress = rateLimit(() => ctx.repos, 'support-email', 30 * 60 * 1000, 3, (r) => String(r.body?.email || '').trim().toLowerCase());
   const overall = rateLimit(() => ctx.repos, 'support-all', 60 * 60 * 1000, 120, () => 'all');
 
-  router.post('/support/request', overall, perAddress, async (req: any, res) => {
+  router.post('/support/request', overall, perAddress, async (req: AuthedRequest, res) => {
     const email = text(req.body?.email, 120).toLowerCase();
     const message = text(req.body?.message, 1000);
     if (!EMAIL.test(email)) return res.status(400).json({ error: 'Enter a valid email address' });
@@ -51,7 +52,7 @@ export function inboxRoutes(ctx: AppCtx) {
   const admin = roles('admin');
   const perUser = rateLimit(() => ctx.repos, 'support-issue', 60 * 60 * 1000, 10, (r) => String(r.user?.id || r.ip));
 
-  router.post('/support/issue', perUser, async (req: any, res) => {
+  router.post('/support/issue', perUser, async (req: AuthedRequest, res) => {
     const subject = text(req.body?.subject, 120);
     const message = text(req.body?.message, 2000);
     if (message.length < 5) return res.status(400).json({ error: 'Describe the problem in a few words' });
@@ -73,7 +74,7 @@ export function inboxRoutes(ctx: AppCtx) {
     });
   };
 
-  router.get('/inbox', admin, async (req: any, res) => {
+  router.get('/inbox', admin, async (req: AuthedRequest, res) => {
     const status = String(req.query.status || 'all');
     const filter = status === 'all' ? {} : status === 'open' ? { status: { $in: ['new', 'read'] } } : STATUSES.includes(status as any) ? { status } : {};
     const [items, nNew, nRead, nResolved] = await Promise.all([
@@ -90,7 +91,7 @@ export function inboxRoutes(ctx: AppCtx) {
     res.json({ new: await ctx.repos.inbox.count({ status: 'new' }) });
   });
 
-  router.patch('/inbox/:id', admin, async (req: any, res) => {
+  router.patch('/inbox/:id', admin, async (req: AuthedRequest, res) => {
     const m = await ctx.repos.inbox.byId(String(req.params.id));
     if (!m) return res.status(404).json({ error: 'Message not found' });
     const b = req.body || {};
@@ -112,7 +113,7 @@ export function inboxRoutes(ctx: AppCtx) {
     res.json((await withStaff([saved]))[0]);
   });
 
-  router.delete('/inbox/:id', admin, async (req: any, res) => {
+  router.delete('/inbox/:id', admin, async (req: AuthedRequest, res) => {
     const m = await ctx.repos.inbox.byId(String(req.params.id));
     if (!m) return res.status(404).json({ error: 'Message not found' });
     await ctx.repos.inbox.remove({ id: m.id });

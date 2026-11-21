@@ -4,6 +4,8 @@ import type { AppCtx } from '../context.js';
 import { ConflictError } from '../repo/index.js';
 import { catchAsyncRoutes } from '../asyncRoutes.js';
 import { BROWSER_HEADER, clearedCookie, endSession, sessionCookie, startSession } from '../services/sessions.js';
+import type { AuthedRequest, MaybeAuthedRequest } from '../middleware.js';
+import type { Response } from 'express';
 
 const DISABLED = 'This account has been disabled. Ask an administrator.';
 
@@ -32,9 +34,9 @@ export function authRoutes(ctx: AppCtx) {
   // email is not proof of who someone is. Turn this off only after disabling sign-up in Firebase.
   const requireVerifiedEmail = process.env.FIREBASE_REQUIRE_VERIFIED_EMAIL !== 'false';
 
-  const secure = (req: any) => ctx.config.isProd || req.secure || req.get('x-forwarded-proto') === 'https';
+  const secure = (req: MaybeAuthedRequest) => ctx.config.isProd || req.secure || req.get('x-forwarded-proto') === 'https';
 
-  async function signIn(u: any, how: string, req: any, res: any) {
+  async function signIn(u: any, how: string, req: MaybeAuthedRequest, res: Response) {
     const token = await startSession(ctx.repos, u.id);
     await ctx.audit({ user: u }, 'login', how, u.id, `Successful ${u.role} sign-in`);
     // The browser app asks for a cookie and never receives the token in the response body. Other clients still get the token.
@@ -113,7 +115,7 @@ export function sessionRoutes(ctx: AppCtx) {
     res.json({ ok: true });
   });
 
-  router.get('/me', (req: any, res) =>
+  router.get('/me', (req: AuthedRequest, res) =>
     res.json({
       id: req.user.id,
       name: req.user.name,

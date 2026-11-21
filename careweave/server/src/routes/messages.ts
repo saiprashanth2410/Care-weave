@@ -5,6 +5,7 @@ import { rateLimit } from '../middleware.js';
 import { convIdOf } from '../repo/messages.js';
 import { parseImageDataUrl } from '../services/imageData.js';
 import { id, now } from '../util.js';
+import type { AuthedRequest } from '../middleware.js';
 
 const MAX_TEXT = 2000;
 const STAFF_ROLES = ['receptionist', 'doctor', 'lab', 'admin'];
@@ -25,15 +26,15 @@ export function messageRoutes(ctx: AppCtx) {
   const people = async () => (await R().users.find({})).filter((u: any) => STAFF_ROLES.includes(u.role) && u.active !== false);
   const preview = (m: any) => (m.text ? String(m.text).slice(0, 90) : m.imageId ? '📷 Photo' : '');
 
-  router.get('/messages/contacts', staff, async (req: any, res) => {
+  router.get('/messages/contacts', staff, async (req: AuthedRequest, res) => {
     res.json((await people()).filter((u: any) => u.id !== req.user.id).map(view).sort((a: any, b: any) => a.name.localeCompare(b.name)));
   });
 
-  router.get('/messages/unread', staff, async (req: any, res) => {
+  router.get('/messages/unread', staff, async (req: AuthedRequest, res) => {
     res.json({ count: await R().messages.unreadFor(req.user.id) });
   });
 
-  router.get('/messages/conversations', staff, async (req: any, res) => {
+  router.get('/messages/conversations', staff, async (req: AuthedRequest, res) => {
     const me = req.user.id;
     const [msgs, all] = await Promise.all([R().messages.involving(me), people()]);
     const byId = new Map(all.map((u: any) => [u.id, u]));
@@ -50,7 +51,7 @@ export function messageRoutes(ctx: AppCtx) {
       .sort((a, b) => b.last.at - a.last.at));
   });
 
-  router.get('/messages/with/:userId', staff, async (req: any, res) => {
+  router.get('/messages/with/:userId', staff, async (req: AuthedRequest, res) => {
     const other = (await people()).find((u: any) => u.id === req.params.userId);
     if (!other || other.id === req.user.id) return res.status(404).json({ error: 'Person not found' });
     const rows = (await R().messages.thread(convIdOf(req.user.id, other.id))).reverse();
@@ -62,7 +63,7 @@ export function messageRoutes(ctx: AppCtx) {
     });
   });
 
-  router.post('/messages/with/:userId', staff, sendLimit, async (req: any, res) => {
+  router.post('/messages/with/:userId', staff, sendLimit, async (req: AuthedRequest, res) => {
     const other = (await people()).find((u: any) => u.id === req.params.userId);
     if (!other || other.id === req.user.id) return res.status(404).json({ error: 'Person not found' });
     const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
@@ -84,7 +85,7 @@ export function messageRoutes(ctx: AppCtx) {
   });
 
   // A photo can be opened only by the two people in the conversation it was sent in.
-  router.get('/messages/image/:imageId', staff, async (req: any, res) => {
+  router.get('/messages/image/:imageId', staff, async (req: AuthedRequest, res) => {
     const img = await R().messageImages.byId(String(req.params.imageId));
     if (!img || !(img.ownerIds || []).includes(req.user.id)) return res.status(404).json({ error: 'Photo not found' });
     res.set({ 'Content-Type': img.mime, 'Cache-Control': 'private, max-age=3600', 'X-Content-Type-Options': 'nosniff' });
