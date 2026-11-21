@@ -6,6 +6,9 @@ export type Interaction = { drugA: string; drugB: string; riskDescription: strin
 type Rule = { a: string[]; b: string[]; risk: string };
 
 const NSAIDS = ['ibuprofen', 'diclofenac', 'naproxen', 'ketorolac', 'aceclofenac', 'etoricoxib', 'nimesulide', 'piroxicam', 'indomethacin', 'celecoxib'];
+// Modern oral anticoagulants (DOACs/NOACs) carry the same bleeding danger as warfarin with NSAIDs, aspirin and antiplatelets.
+const NOACS = ['apixaban', 'rivaroxaban', 'dabigatran', 'edoxaban'];
+const ANTICOAGULANTS = ['warfarin', ...NOACS];
 const SSRIS = ['fluoxetine', 'sertraline', 'paroxetine', 'citalopram', 'escitalopram'];
 const ACE_ARB = ['lisinopril', 'enalapril', 'ramipril', 'perindopril', 'losartan', 'telmisartan', 'valsartan', 'olmesartan'];
 const BENZOS = ['diazepam', 'alprazolam', 'lorazepam', 'clonazepam'];
@@ -17,8 +20,10 @@ const AZOLES_MACROLIDES = ['clarithromycin', 'itraconazole', 'ketoconazole', 'er
 
 const RULES: Rule[] = [
   // Bleeding
-  { a: ['warfarin'], b: ['aspirin', ...NSAIDS], risk: 'An NSAID or aspirin with the anticoagulant causes GI mucosal injury and platelet inhibition, multiplying bleeding risk 3-5x; intracranial and gastrointestinal haemorrhage are the main dangers.' },
+  { a: ANTICOAGULANTS, b: ['aspirin', ...NSAIDS], risk: 'An NSAID or aspirin with the anticoagulant causes GI mucosal injury and platelet inhibition, multiplying bleeding risk 3-5x; intracranial and gastrointestinal haemorrhage are the main dangers.' },
   { a: ['warfarin'], b: ['clopidogrel', 'ciprofloxacin', 'fluconazole', 'metronidazole', 'amiodarone', 'azithromycin'], risk: 'Warfarin clearance or effect is altered, raising the INR and the risk of serious bleeding. Monitor INR closely or choose another agent.' },
+  { a: NOACS, b: ['clopidogrel', ...SSRIS], risk: 'Bleeding risk rises when an oral anticoagulant is combined with an antiplatelet or an SSRI; use only with a clear indication and monitor for bleeding.' },
+  { a: NOACS, b: ['ketoconazole', 'itraconazole', 'clarithromycin', 'amiodarone', 'verapamil', 'rifampicin', 'carbamazepine', 'phenytoin'], risk: 'These drugs change P-glycoprotein or CYP3A4 handling and push the anticoagulant level up (bleeding) or down (stroke and clot risk). Avoid the combination or adjust the plan.' },
   { a: ['aspirin'], b: ['clopidogrel'], risk: 'Dual antiplatelet therapy is sometimes intended, but it raises major bleeding risk; confirm the indication and duration.' },
   { a: [...SSRIS], b: ['aspirin', ...NSAIDS], risk: 'SSRIs impair platelet function; with an NSAID or aspirin the risk of upper GI bleeding rises sharply.' },
   { a: ['clopidogrel'], b: ['omeprazole', 'esomeprazole'], risk: 'Omeprazole and esomeprazole reduce the antiplatelet bioactivation of clopidogrel via CYP2C19 inhibition, raising the risk of ischaemic events and stent thrombosis.' },

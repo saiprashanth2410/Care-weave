@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { referenceRangeFor } from '../referenceRanges'
 import { amendResults, attachReport, getLabOrders, openReportFile, recordTestResults, templateFor } from '../api'
 import AIScannerModal from '../components/AIScannerModal'
 import StatusBadge from '../components/StatusBadge'
@@ -31,7 +32,7 @@ export default function Results() {
       // Find matching template or generate default parameters
       const template = templateFor(order.testName)
       if (template) {
-        setResults(template.params.map((p) => ({ ...p })))
+        setResults(template.params.map((p) => ({ ...p, referenceRange: referenceRangeFor(p.parameter, p.referenceRange, order.patientAge, order.patientGender) })))
       } else {
         setResults([
           { parameter: order.testName, value: '', unit: '', referenceRange: 'Clinical correlation required' },

@@ -39,11 +39,14 @@ const BRANDS: Record<string, string[]> = {
   clavam: ['amoxicillin', 'clavulanic acid'], mox: ['amoxicillin'], novamox: ['amoxicillin'],
   calpol: ['paracetamol'], dolo: ['paracetamol'], crocin: ['paracetamol'], panadol: ['paracetamol'], tylenol: ['paracetamol'],
   ultracet: ['tramadol', 'paracetamol'], combiflam: ['ibuprofen', 'paracetamol'], brufen: ['ibuprofen'], voveran: ['diclofenac'],
+  eliquis: ['apixaban'], xarelto: ['rivaroxaban'], pradaxa: ['dabigatran'], lixiana: ['edoxaban'], savaysa: ['edoxaban'],
+  coumadin: ['warfarin'], lanoxin: ['digoxin'], cordarone: ['amiodarone'], pacerone: ['amiodarone'], ecosprin: ['aspirin'], disprin: ['aspirin'],
   glycomet: ['metformin'], glucophage: ['metformin'], lipitor: ['atorvastatin'], norvasc: ['amlodipine'], eltroxin: ['levothyroxine'],
 };
 
 const CLASSES: Record<string, string[]> = {
   'NSAID': ['ibuprofen', 'diclofenac', 'naproxen', 'ketorolac', 'aceclofenac', 'etoricoxib', 'nimesulide', 'piroxicam', 'mefenamic acid', 'indomethacin', 'celecoxib', 'aspirin'],
+  'anticoagulant': ['warfarin', 'apixaban', 'rivaroxaban', 'dabigatran', 'edoxaban'],
   'penicillin antibiotic': ['amoxicillin', 'ampicillin', 'piperacillin', 'cloxacillin', 'flucloxacillin', 'penicillin', 'benzylpenicillin'],
   'cephalosporin antibiotic': ['cefpodoxime', 'cefixime', 'cefuroxime', 'ceftriaxone', 'cefalexin', 'cephalexin', 'cefadroxil', 'cefotaxime'],
   'statin': ['atorvastatin', 'rosuvastatin', 'simvastatin', 'pravastatin'],
@@ -68,6 +71,7 @@ const RISK: Record<string, string> = {
 };
 const CLASS_RISK: Record<string, string> = {
   'NSAID': 'Two NSAIDs together raise the risk of acute kidney injury and gastrointestinal bleeding with no added benefit.',
+  'anticoagulant': 'Two anticoagulants together multiply the risk of serious bleeding; one is normally stopped before the other starts.',
   'penicillin antibiotic': 'Two penicillin-class antibiotics overlap in spectrum and add to antibiotic toxicity.',
   'opioid analgesic': 'Two opioids together raise the risk of respiratory depression and sedation.',
 };

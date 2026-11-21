@@ -1,8 +1,23 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Activity, Check, FileText, CheckCircle2, Pencil } from '../icons';
 import { api } from '../api';
 import type { Patient } from '../types';
 import { PageHeader } from '../components';
+
+type Draft = { chiefComplaint: string; subjective: string; objective: string; assessment: string; plan: string; diagnosis: string };
+const EMPTY: Draft = { chiefComplaint: '', subjective: '', objective: '', assessment: '', plan: '', diagnosis: '' };
+const draftKey = (patientId: string) => `cw:soap-draft:${patientId}`;
+// The typed note is kept per patient in this browser until it is saved, so a refused save (for example a 409 because the chart changed
+// under the doctor) or an accidental reload never costs the doctor what they wrote.
+const loadDraft = (patientId: string): Draft => {
+  try { return { ...EMPTY, ...JSON.parse(localStorage.getItem(draftKey(patientId)) || '{}') }; } catch { return EMPTY; }
+};
+const storeDraft = (patientId: string, draft: Draft) => {
+  try {
+    if (Object.values(draft).some((v) => v.trim())) localStorage.setItem(draftKey(patientId), JSON.stringify(draft));
+    else localStorage.removeItem(draftKey(patientId));
+  } catch { /* storage is optional */ }
+};
 
 export function DoctorConsultations({
   notify,
@@ -32,13 +47,26 @@ export function DoctorConsultations({
   const [tempF, setTempF] = useState('98.6');
   const [spo2, setSpo2] = useState('99');
   const [busy, setBusy] = useState(false);
+  const [conflict, setConflict] = useState(false);
+  const openedWith = useRef(preSelectedPatient);
+
+  const applyDraft = (d: Draft) => {
+    setChiefComplaint(d.chiefComplaint); setSubjective(d.subjective); setObjective(d.objective);
+    setAssessment(d.assessment); setPlan(d.plan); setDiagnosis(d.diagnosis);
+  };
+  const selectPatient = (p: Patient) => { setSelectedPatient(p); setConflict(false); applyDraft(loadDraft(p.id)); };
 
   useEffect(() => {
     api.patients().then(res => {
       setPatients(res);
-      if (res.length > 0) setSelectedPatient(cur => cur ?? res[0]);
+      const start = openedWith.current ?? res[0];
+      if (start) selectPatient(start);
     }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (selectedPatient) storeDraft(selectedPatient.id, { chiefComplaint, subjective, objective, assessment, plan, diagnosis });
+  }, [selectedPatient, chiefComplaint, subjective, objective, assessment, plan, diagnosis]);
 
   const applyTemplate = (tmpl: string) => {
     setTemplate(tmpl);
@@ -77,6 +105,7 @@ export function DoctorConsultations({
     e.preventDefault();
     if (!selectedPatient) return;
     setBusy(true);
+    setConflict(false);
     try {
       const fullNotes = `CHIEF COMPLAINT:\n${chiefComplaint}\n\nSUBJECTIVE:\n${subjective}\n\nOBJECTIVE:\n${objective}\n\nASSESSMENT:\n${assessment}\n\nPLAN:\n${plan}`;
       await api.createEncounter({
@@ -99,7 +128,9 @@ export function DoctorConsultations({
       notify('SOAP Consultation recorded directly to patient timeline');
       applyTemplate('general');
     } catch (e) {
-      notify((e as Error).message);
+      // Nothing typed is cleared on a failed save. A conflict means the chart changed meanwhile: the note stays, and Save can be pressed again.
+      if ((e as { conflict?: boolean }).conflict) setConflict(true);
+      else notify((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -121,7 +152,7 @@ export function DoctorConsultations({
               value={selectedPatient?.id || ''}
               onChange={e => {
                 const found = patients.find(p => p.id === e.target.value);
-                if (found) setSelectedPatient(found);
+                if (found) selectPatient(found);
               }}
               style={{ minWidth: 260 }}
             >
@@ -279,6 +310,11 @@ export function DoctorConsultations({
           </div>
         </div>
 
+        {conflict && (
+          <p role="alert" className="muted" style={{ margin: '0 0 12px', padding: '10px 12px', border: '1px solid var(--amber, #c98a00)', borderRadius: 6 }}>
+            This patient's chart was changed by someone else while you were writing. <b>Your note is still here, nothing was lost.</b> Press Sign &amp; Complete Encounter again to save it.
+          </p>
+        )}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
           <button type="button" className="secondary" onClick={() => applyTemplate('general')}>
             Clear Form
