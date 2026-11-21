@@ -35,7 +35,7 @@ const RULES: Rule[] = [
   { a: [...ACE_ARB], b: [...NSAIDS], risk: 'An NSAID blunts the antihypertensive effect and, with an ACE inhibitor or ARB, raises the risk of acute kidney injury and hyperkalaemia.' },
   { a: ['metoprolol', 'atenolol', 'propranolol', 'bisoprolol'], b: ['verapamil', 'diltiazem'], risk: 'Beta-blocker with a non-dihydropyridine calcium-channel blocker causes severe bradycardia, AV block and heart failure.' },
   { a: ['amiodarone'], b: ['simvastatin', 'atorvastatin'], risk: 'Raised statin exposure increases the risk of myopathy and rhabdomyolysis.' },
-  { a: [...QT.filter((d) => d !== 'amiodarone')], b: ['amiodarone'], risk: 'Two QT-prolonging drugs together risk torsades de pointes and sudden cardiac death.' },
+  { a: QT.filter((d) => d !== 'amiodarone'), b: ['amiodarone'], risk: 'Two QT-prolonging drugs together risk torsades de pointes and sudden cardiac death.' },
   { a: ['azithromycin', 'clarithromycin', 'ondansetron'], b: ['haloperidol', 'levofloxacin', 'moxifloxacin'], risk: 'Two QT-prolonging drugs together risk torsades de pointes and sudden cardiac death.' },
   // Statin / enzyme inhibitors
   { a: STATINS_CYP3A4, b: AZOLES_MACROLIDES, risk: 'CYP3A4 inhibition raises statin levels several-fold, risking myopathy and rhabdomyolysis.' },

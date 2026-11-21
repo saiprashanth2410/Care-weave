@@ -50,7 +50,7 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
   // The video consultation stays mounted once opened, so going to another page of the portal does not end the call.
   const [videoMounted, setVideoMounted] = useState(false);
   const [inCall, setInCall] = useState(false);
-  useEffect(() => { if (section === 'video') setVideoMounted(true); }, [section]);
+  if (section === 'video' && !videoMounted) setVideoMounted(true);
   useEffect(() => { api.cases().then(c => setOpenCases(c.length)).catch(() => setOpenCases(0)); }, [refresh]);
 
   // Doctor Quick Action Modal Triggers

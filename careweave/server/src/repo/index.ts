@@ -23,7 +23,6 @@ import { videoConsultsRepo, videoConsultsIndexes, videoSignalsRepo, videoSignals
 import { liveEventsRepo, liveEventsIndexes } from './liveEvents.js';
 import { metaRepo, metaIndexes } from './meta.js';
 import { MongoStore } from './mongo.js';
-import { LocalStore } from './local.js';
 import type { Store } from './store.js';
 
 export { ConflictError, DuplicateError, type Store, type FileStore } from './store.js';

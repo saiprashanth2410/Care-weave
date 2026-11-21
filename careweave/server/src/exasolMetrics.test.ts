@@ -97,7 +97,7 @@ test('with Exasol unreachable the overview says so, and invents nothing for an e
     assert.equal(o.summary.avgLabTatMinutes, null);
     assert.equal(o.summary.topPrescribedMedicine, null);
     assert.ok(o.queries.every((q) => q.engine === 'application-store'));
-  } finally { prev === undefined ? delete process.env.EXASOL_PORT : (process.env.EXASOL_PORT = prev); }
+  } finally { if (prev === undefined) delete process.env.EXASOL_PORT; else process.env.EXASOL_PORT = prev; }
 });
 
 import { analyticsInput, generateSampleHistory } from './exasol/sampleHistory.js';

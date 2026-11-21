@@ -98,5 +98,5 @@ export async function searchMedicines(q: string, limit = 15, useMongo = true) {
     memory ||= readAll();
     hits = (await memory).filter((m) => m.search.includes(term));
   }
-  return hits.sort((a, b) => rank(a) - rank(b) || a.name.length - b.name.length).slice(0, limit).map(({ search, ...m }) => m);
+  return hits.sort((a, b) => rank(a) - rank(b) || a.name.length - b.name.length).slice(0, limit).map((m) => { const { search: _search, ...rest } = m; return rest; });
 }

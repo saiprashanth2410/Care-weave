@@ -31,7 +31,7 @@ function fakeExasol(opts: { up?: boolean } = {}) {
         for (const t of tuples) rows[lastTable].add(t.split(', ')[0]);
         return [];
       }
-      if (/WHERE .* IN \(/.test(sql) && /^SELECT COUNT/.test(sql)) return [{ n: lastBatch }];
+      if (/WHERE .* IN \(/.test(sql) && sql.startsWith('SELECT COUNT')) return [{ n: lastBatch }];
       if (/FROM DUAL/.test(sql)) return [{ v: merged.FACT_PATIENT_VISITS ?? 0, l: merged.FACT_LAB_ORDERS_TAT ?? 0, p: merged.FACT_PHARMACY_PRESCRIPTIONS ?? 0 }];
       return [];
     },
@@ -98,12 +98,12 @@ test('a full sync removes Exasol rows whose source is gone; an incremental one n
   await repos.appointments.insertMany([appt(1), appt(2)]);
   const x = fakeExasol();
   await runAnalyticsSync(repos, { port: x.port });
-  assert.ok(x.calls.some((c) => /^DELETE FROM FACT_PATIENT_VISITS WHERE VISIT_ID NOT IN/.test(c)), 'full sync prunes');
+  assert.ok(x.calls.some((c) => c.startsWith('DELETE FROM FACT_PATIENT_VISITS WHERE VISIT_ID NOT IN')), 'full sync prunes');
   const before = x.calls.length;
   await new Promise((r) => setTimeout(r, 20));
   await repos.appointments.update(await repos.appointments.byId('a-00001'), { reason: 'x' });
   await runAnalyticsSync(repos, { port: x.port });
-  assert.ok(!x.calls.slice(before).some((c) => /^DELETE/.test(c)), 'incremental does not delete');
+  assert.ok(!x.calls.slice(before).some((c) => c.startsWith('DELETE')), 'incremental does not delete');
 });
 
 test('two syncs at once: one runs, the other is told it is busy', async () => {

@@ -230,8 +230,8 @@ test('on a deployed system, leftover demo accounts are switched off (not deleted
     const session = await srv.login('reception');
     await ensureStaff(srv.repos, { demo: false });
     const all = await srv.repos.users.find({});
-    const demo = all.filter((u: any) => /@careweave\.test$/.test(u.email));
-    const real = all.filter((u: any) => /@careweave\.com$/.test(u.email));
+    const demo = all.filter((u: any) => u.email.endsWith('@careweave.test'));
+    const real = all.filter((u: any) => u.email.endsWith('@careweave.com'));
     assert.ok(demo.length >= 5 && demo.every((u: any) => u.active === false), 'every demo account is switched off');
     assert.ok(real.length >= 4 && real.every((u: any) => u.active !== false), 'real accounts are untouched');
     assert.equal((await srv.call('POST', '/api/auth/login', { body: { email: 'doctor@careweave.test', password: 'demo123' } })).status, 403);

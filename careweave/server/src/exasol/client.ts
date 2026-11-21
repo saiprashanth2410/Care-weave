@@ -86,7 +86,7 @@ export async function pingExasol(): Promise<boolean> {
       ),
     ]);
     return Boolean(result);
-  } catch (err: any) {
+  } catch {
     activeDriver = null;
     return false;
   }

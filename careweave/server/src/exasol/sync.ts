@@ -17,7 +17,7 @@ export type SyncKind = 'appointments' | 'labOrders' | 'prescriptions' | 'synthet
 export interface SyncSource { pages(kind: SyncKind, since?: string): AsyncIterable<any[]> }
 
 // SQL literals. Exasol does not treat a backslash as an escape, so only the quote is doubled.
-const str = (v: unknown, max = 256) => (v === null || v === undefined ? 'CAST(NULL AS VARCHAR(1))' : `'${String(v).replace(/\u0000/g, '').slice(0, max).replace(/'/g, "''")}'`);
+const str = (v: unknown, max = 256) => (v === null || v === undefined ? 'CAST(NULL AS VARCHAR(1))' : `'${String(v).replaceAll('\u0000', '').slice(0, max).replace(/'/g, "''")}'`);
 const num = (v: number | null) => (v === null || !Number.isFinite(v) ? 'CAST(NULL AS DECIMAL(10,1))' : String(v));
 const int = (v: number | null) => (v === null || !Number.isFinite(v) ? 'CAST(NULL AS INT)' : String(Math.round(v)));
 const date = (v: string) => `CAST('${v}' AS DATE)`;

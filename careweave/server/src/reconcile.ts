@@ -38,7 +38,7 @@ function levenshtein(a: string, b: string) {
 function nameRelation(a: string, b: string): 'exact' | 'similar' | 'none' {
   const x = normName(a), y = normName(b);
   if (!x || !y) return 'none';
-  if (x === y || [...x.split(' ')].sort().join(' ') === [...y.split(' ')].sort().join(' ')) return 'exact';
+  if (x === y || x.split(' ').sort().join(' ') === y.split(' ').sort().join(' ')) return 'exact';
   const ratio = 1 - levenshtein(x, y) / Math.max(x.length, y.length);
   return ratio >= 0.85 ? 'similar' : 'none';
 }

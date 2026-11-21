@@ -32,7 +32,7 @@ function clamdScan(buf: Buffer, host: string, port: number): Promise<{ clean: bo
     sock.on('data', (d) => { out += d.toString(); });
     sock.on('end', () => {
       const reply = out.replace(/\0/g, '').trim();
-      if (/OK$/.test(reply)) return resolve({ clean: true });
+      if (reply.endsWith('OK')) return resolve({ clean: true });
       const found = reply.match(/stream:\s*(.+?)\s+FOUND$/);
       if (found) return resolve({ clean: false, signature: found[1] });
       reject(new ScannerUnavailable(`the virus scanner gave an unexpected reply: ${reply.slice(0, 80)}`));
