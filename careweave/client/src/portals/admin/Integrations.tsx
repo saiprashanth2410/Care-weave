@@ -87,7 +87,7 @@ export function Integrations({ notify }: { notify: (s: string) => void }) {
           <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">Get a key from Google AI Studio</a>
         </div>
         <div className="ig-box">
-          <input id="gemini-key" autoComplete="off" spellCheck={false} placeholder="AIzaSy…" readOnly={locked}
+          <input id="gemini-key" autoComplete="off" spellCheck={false} placeholder="Paste your key (AIza… or AQ.…)" readOnly={locked}
             type={locked || reveal ? 'text' : 'password'}
             value={locked ? (st.configured ? MASK : '') : draft}
             onChange={e => { setDraft(e.target.value); setTest(null); }} />

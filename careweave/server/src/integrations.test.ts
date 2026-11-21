@@ -140,3 +140,13 @@ test('integrations: a test with a malformed key or no key at all is answered wit
     assert.match(none.json.error, /no key to test/i);
   } finally { await srv.close(); }
 });
+
+test('integrations: both Google key formats are accepted (AIza… and the newer AQ.…), and obvious junk is still refused', async () => {
+  const { validKey } = await import('./services/aiConfig.js');
+  assert.equal(validKey(['AIza', 'SyTestKeyForCareWeave1234567890abcd'].join('')), true);
+  assert.equal(validKey(['AQ.', 'Ab8RN6JAmTestKeyForCareWeave0123456789xyz'].join('')), true, 'the AQ. format has a dot');
+  assert.equal(validKey('  ' + ['AQ.', 'Ab8RN6JAmTestKeyForCareWeave0123456789xyz'].join('') + '\n'), true, 'surrounding spaces from a paste are ignored');
+  for (const bad of ['', 'short', 'has spaces inside the key value here', 'quote"inside.the.key.value.here.123', '<script>alert(1)</script>', 'x'.repeat(201), null, undefined, 12345]) {
+    assert.equal(validKey(bad as any), false, String(bad));
+  }
+});
