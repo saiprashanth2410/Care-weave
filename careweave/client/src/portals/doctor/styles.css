@@ -201,3 +201,5 @@
   .dx .card{padding:18px}
   .dx .page-header h1{font-size:25px}
 }
+.dx .call-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; padding: 12px 16px; background: #e1f2e9; border: 1px solid #a8d8bf; border-radius: 4px; color: #175c3a; font-size: 14px; }
+.dx .nav-count.live-call { background: #a3341f; color: #fff; font-weight: 800; }

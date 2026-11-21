@@ -320,3 +320,64 @@ test('video translation: a busy AI (HTTP 503) is retried, so a caption still get
     await srv.close();
   }
 });
+
+test('video relay: the call gets STUN always, and a TURN relay when one is configured by static values or a Metered account', async () => {
+  const { forgetIceServers } = await import('./services/iceServers.js');
+  const realFetch = globalThis.fetch;
+  const keep = { ...process.env };
+  const { srv, patient, start } = await setup();
+  try {
+    const c = (await start(patient.id)).json;
+    const ice = async () => (await srv.call('GET', `/api/video/public/${c.id}/ice`)).json;
+    assert.equal((await srv.call('GET', '/api/video/public/not-a-token/ice')).status, 404);
+
+    for (const k of ['METERED_DOMAIN', 'METERED_API_KEY', 'TURN_URLS', 'TURN_USERNAME', 'TURN_CREDENTIAL']) delete process.env[k];
+    forgetIceServers();
+    const none = await ice();
+    assert.equal(none.relay, false);
+    assert.ok(none.iceServers[0].urls.every((u: string) => u.startsWith('stun:')));
+    assert.equal(none.iceServers.length, 1);
+
+    Object.assign(process.env, { TURN_URLS: 'turn:relay.example.com:80, turns:relay.example.com:443?transport=tcp', TURN_USERNAME: 'u', TURN_CREDENTIAL: 'p' });
+    const fixed = await ice();
+    assert.equal(fixed.relay, true);
+    assert.deepEqual(fixed.iceServers[1], { urls: ['turn:relay.example.com:80', 'turns:relay.example.com:443?transport=tcp'], username: 'u', credential: 'p' });
+
+    // Metered: credentials are fetched, cached, and a bad host name is never called
+    for (const k of ['TURN_URLS', 'TURN_USERNAME', 'TURN_CREDENTIAL']) delete process.env[k];
+    Object.assign(process.env, { METERED_DOMAIN: 'demo.metered.live', METERED_API_KEY: 'abc123' });
+    let fetched: string[] = [];
+    globalThis.fetch = (async (url: any, init: any) => {
+      if (!String(url).includes('metered')) return realFetch(url, init);
+      fetched.push(String(url));
+      return new Response(JSON.stringify([{ urls: 'stun:stun.relay.metered.ca:80' }, { urls: 'turn:global.relay.metered.ca:80', username: 'mu', credential: 'mc' }, { urls: 'javascript:alert(1)', username: 'x', credential: 'y' }]), { status: 200 });
+    }) as typeof fetch;
+    forgetIceServers();
+    const metered = await ice();
+    assert.equal(metered.relay, true);
+    assert.equal(fetched.length, 1);
+    assert.match(fetched[0], /^https:\/\/demo\.metered\.live\/api\/v1\/turn\/credentials\?apiKey=abc123$/);
+    assert.deepEqual(metered.iceServers.slice(1), [{ urls: ['turn:global.relay.metered.ca:80'], username: 'mu', credential: 'mc' }]);
+    await ice();
+    assert.equal(fetched.length, 1, 'served from the cache the second time');
+
+    process.env.METERED_DOMAIN = 'evil.com/path?x=';
+    forgetIceServers(); fetched = [];
+    const evil = await ice();
+    assert.equal(fetched.length, 0);
+    assert.equal(evil.relay, false);
+
+    // Metered down: the call still gets STUN instead of an error
+    process.env.METERED_DOMAIN = 'demo.metered.live';
+    globalThis.fetch = (async (url: any, init: any) => (String(url).includes('metered') ? new Response('nope', { status: 500 }) : realFetch(url, init))) as typeof fetch;
+    forgetIceServers();
+    const down = await ice();
+    assert.equal(down.relay, false);
+    assert.equal(down.iceServers.length, 1);
+  } finally {
+    globalThis.fetch = realFetch;
+    process.env = keep;
+    forgetIceServers();
+    await srv.close();
+  }
+});

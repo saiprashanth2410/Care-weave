@@ -15,6 +15,13 @@ export type CallState = 'starting' | 'waiting' | 'connecting' | 'connected' | 'e
 export type Caption = { id: string; from: CallRole; text: string; at: number; translated?: string; translationError?: 'ai-off' | 'failed' }
 export type ChatMsg = { id: string; from: CallRole; text: string; at: number; image?: string }
 export type CallApi = ReturnType<typeof useCall>
+/** What the network is doing, shown when a call is slow to connect so a failure can be understood instead of guessed. */
+export type CallDiag = { ice: string; relay: boolean; local: Record<'host' | 'srflx' | 'relay', number>; remote: Record<'host' | 'srflx' | 'relay', number> }
+const emptyCounts = () => ({ host: 0, srflx: 0, relay: 0 })
+const kindOf = (candidate?: string): 'host' | 'srflx' | 'relay' => {
+  const t = candidate?.match(/ typ (host|srflx|prflx|relay)/)?.[1]
+  return t === 'relay' ? 'relay' : t === 'srflx' || t === 'prflx' ? 'srflx' : 'host'
+}
 
 type Signal = { id: string; at: number; type: 'ready' | 'offer' | 'answer' | 'ice' | 'bye' | 'caption' | 'chat' | 'lang'; data: any }
 
@@ -53,6 +60,7 @@ export function useCall(opts: { token: string; role: CallRole; doctorKey?: strin
   const [captions, setCaptions] = useState<Caption[]>([])
   const [messages, setMessages] = useState<ChatMsg[]>([])
   const [peerLang, setPeerLang] = useState('')
+  const [diag, setDiag] = useState<CallDiag>({ ice: 'new', relay: false, local: emptyCounts(), remote: emptyCounts() })
   const localRef = useRef<MediaStream | null>(null)
   const sendRef = useRef<(type: Signal['type'], data: unknown) => Promise<void>>(async () => {})
 
@@ -81,11 +89,37 @@ export function useCall(opts: { token: string; role: CallRole; doctorKey?: strin
       } catch { /* the next poll or retry carries on */ }
     }
     sendRef.current = send
+    // A doctor who closes the tab or leaves the site should not leave the patient waiting: tell them the call is over.
+    const onHide = () => {
+      if (role !== 'doctor' || !doctorKey) return
+      try { navigator.sendBeacon(`${base}/signal`, new Blob([JSON.stringify({ role, key: doctorKey, type: 'bye', data: null })], { type: 'application/json' })) } catch { /* nothing more can be done while the page is closing */ }
+    }
+    window.addEventListener('pagehide', onHide)
+
+    // The network helpers come from the server, which adds a relay when the administrator has set one up. If it cannot be reached,
+    // the built-in public STUN servers (and any relay set at build time) are used.
+    let ice: RTCIceServer[] = iceServers()
+    let relay = false
+    const counts = { local: emptyCounts(), remote: emptyCounts() }
+    const publishDiag = () => { if (alive) setDiag({ ice: pc?.iceConnectionState ?? 'new', relay, local: { ...counts.local }, remote: { ...counts.remote } }) }
+    const loadIce = async () => {
+      try {
+        const res = await fetch(`${base}/ice`)
+        if (!res.ok) return
+        const body = (await res.json()) as { iceServers?: RTCIceServer[]; relay?: boolean }
+        if (Array.isArray(body.iceServers) && body.iceServers.length) { ice = body.iceServers; relay = Boolean(body.relay) }
+      } catch { /* keep the built-in list */ }
+    }
+    const noPath = () => relay
+      ? 'The two devices could not connect, even through the relay. Check the internet connection on both sides and press Try again.'
+      : 'The two devices could not find a network path to each other. This often happens between different countries or on strict Wi-Fi. Try mobile data on one side, or ask the clinic administrator to enable the video relay server.'
 
     const newPeer = () => {
       pc?.close()
       pending = []
-      const peer = new RTCPeerConnection({ iceServers: iceServers() })
+      counts.local = emptyCounts()
+      counts.remote = emptyCounts()
+      const peer = new RTCPeerConnection({ iceServers: ice })
       pc = peer
       localRef.current?.getTracks().forEach((t) => peer.addTrack(t, localRef.current!))
       const remote = new MediaStream()
@@ -93,7 +127,13 @@ export function useCall(opts: { token: string; role: CallRole; doctorKey?: strin
         e.streams[0]?.getTracks().forEach((t) => { if (!remote.getTracks().includes(t)) remote.addTrack(t) })
         if (alive) setRemoteStream(new MediaStream(remote.getTracks()))
       }
-      peer.onicecandidate = (e) => { if (e.candidate) void send('ice', { session, candidate: e.candidate.toJSON() }) }
+      peer.onicecandidate = (e) => {
+        if (!e.candidate) return
+        counts.local[kindOf(e.candidate.candidate)] += 1
+        publishDiag()
+        void send('ice', { session, candidate: e.candidate.toJSON() })
+      }
+      peer.oniceconnectionstatechange = publishDiag
       peer.onconnectionstatechange = () => {
         if (!alive) return
         if (peer.connectionState === 'connected') {
@@ -103,7 +143,7 @@ export function useCall(opts: { token: string; role: CallRole; doctorKey?: strin
           setState('connected')
         } else if (peer.connectionState === 'failed') {
           setState('failed')
-          setError('The two devices could not connect directly. Try the same Wi-Fi or switch one side to mobile data.')
+          setError(noPath())
         }
       }
       return peer
@@ -149,6 +189,8 @@ export function useCall(opts: { token: string; role: CallRole; doctorKey?: strin
           await pc.setRemoteDescription({ type: 'answer', sdp: s.data.sdp })
           await flushIce()
         } else if (s.type === 'ice' && s.data?.session === session) {
+          counts.remote[kindOf(s.data.candidate?.candidate)] += 1
+          publishDiag()
           pending.push(s.data.candidate)
           await flushIce()
         }
@@ -162,6 +204,8 @@ export function useCall(opts: { token: string; role: CallRole; doctorKey?: strin
           await pc.setLocalDescription(answer)
           await send('answer', { session: mySession, sdp: answer.sdp })
         } else if (s.type === 'ice' && s.data?.session === mySession) {
+          counts.remote[kindOf(s.data.candidate?.candidate)] += 1
+          publishDiag()
           pending.push(s.data.candidate)
           await flushIce()
         }
@@ -199,6 +243,8 @@ export function useCall(opts: { token: string; role: CallRole; doctorKey?: strin
         localRef.current = stream
         setLocalStream(stream)
         setCamOn(stream.getVideoTracks().length > 0)
+        await loadIce()
+        if (!alive) return
         setState('waiting')
         if (role === 'patient') {
           session = mySession
@@ -217,7 +263,9 @@ export function useCall(opts: { token: string; role: CallRole; doctorKey?: strin
           if (!alive) return
           setState((s) => {
             if (s === 'connected' || s === 'ended') return s
-            setError(role === 'patient' ? 'The doctor has not joined yet. Keep this page open.' : 'The patient has not opened the link yet.')
+            // Still "connecting" after this long means both sides are here but no network path was found.
+            if (s === 'connecting') setError(noPath())
+            else setError(role === 'patient' ? 'The doctor has not joined yet. Keep this page open.' : 'The patient has not opened the link yet.')
             return s
           })
         }, GIVE_UP_MS)
@@ -227,6 +275,7 @@ export function useCall(opts: { token: string; role: CallRole; doctorKey?: strin
     })()
 
     return () => {
+      window.removeEventListener('pagehide', onHide)
       alive = false
       clearInterval(readyTimer)
       clearTimeout(pollTimer)
@@ -271,5 +320,5 @@ export function useCall(opts: { token: string; role: CallRole; doctorKey?: strin
     return sendRef.current('chat', { text: t, image })
   }, [role])
 
-  return { state, error, retry, localStream, remoteStream, micOn, camOn, toggleMic, toggleCam, sendBye, sendCaption, sendLang, peerLang, captions, sendChat, messages }
+  return { state, error, retry, diag, localStream, remoteStream, micOn, camOn, toggleMic, toggleCam, sendBye, sendCaption, sendLang, peerLang, captions, sendChat, messages }
 }

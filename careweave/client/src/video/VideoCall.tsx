@@ -22,7 +22,7 @@ function Video({ stream, muted, className, label }: { stream: MediaStream | null
 
 import { LANGUAGE_NAME } from './useSpeech'
 
-export type CaptionControl = { on: boolean; toggle: () => void; supported: boolean; lang?: string; peerLang?: string; translating?: boolean }
+export type CaptionControl = { on: boolean; toggle: () => void; supported: boolean; lang?: string; peerLang?: string; translating?: boolean; problem?: string }
 
 /**
  * The call screen: the other person large, yourself small, live captions, and mute / camera / captions / hang up.
@@ -54,6 +54,11 @@ export default function VideoCall({ call, role, layout = 'panel', cc, onHangUp }
             {call.error && <p className="vc-error">{call.error}</p>}
             {call.state === 'failed' && /blocked/i.test(call.error) && (
               <p className="vc-error">To allow it: tap the camera or lock icon next to the web address, choose Allow for camera and microphone, then press Try again.</p>
+            )}
+            {(call.state === 'connecting' || (call.state === 'failed' && call.diag.ice !== 'new')) && (
+              <p className="vc-diag" aria-label="Network check">
+                Network check: {call.diag.ice}. Your device found {call.diag.local.host} local, {call.diag.local.srflx} direct and {call.diag.local.relay} relay routes; the other side sent {call.diag.remote.host + call.diag.remote.srflx + call.diag.remote.relay}. {call.diag.relay ? 'A relay server is available.' : 'No relay server is configured.'}
+              </p>
             )}
             {call.state === 'failed' && <button type="button" className="vc-retry" onClick={call.retry}>Try again</button>}
           </div>
@@ -100,6 +105,7 @@ export default function VideoCall({ call, role, layout = 'panel', cc, onHangUp }
           You speak {LANGUAGE_NAME[cc.lang] || cc.lang}. {cc.peerLang === cc.lang ? 'The other person speaks the same language.' : cc.translating ? `Captions are translated from ${LANGUAGE_NAME[cc.peerLang] || cc.peerLang}.` : `They speak ${LANGUAGE_NAME[cc.peerLang] || cc.peerLang} (translation is off).`}
         </p>
       )}
+      {cc.on && cc.supported && cc.problem && <p className="vc-hint">Captions stopped: {cc.problem}. The call is not affected; press CC twice to try again, or use Chat.</p>}
       {!cc.supported && <p className="vc-hint">Live captions are not available in this browser (they need Chrome or Edge). Use Chat to type to each other.</p>}
       {full && chatOpen && (
         <div className="vc-sheet">

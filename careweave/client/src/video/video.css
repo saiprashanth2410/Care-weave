@@ -106,3 +106,5 @@
 .vc-langline { padding-top: 0; }
 .vc-check { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
 .vc-check input { width: 18px; height: 18px; }
+
+.vc-diag { margin: 4px 0 0; max-width: 460px; font-size: 11px; line-height: 1.5; color: #b8c4bf; }

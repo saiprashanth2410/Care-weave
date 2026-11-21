@@ -4,7 +4,7 @@ import VideoCall from './VideoCall'
 import type { CallApi } from './useCall'
 
 const call = (over: Partial<CallApi> = {}): CallApi => ({
-  state: 'connected', error: '', retry: vi.fn(), localStream: null, remoteStream: null, micOn: true, camOn: true,
+  state: 'connected', error: '', retry: vi.fn(), diag: { ice: 'checking', relay: false, local: { host: 2, srflx: 1, relay: 0 }, remote: { host: 1, srflx: 0, relay: 0 } }, localStream: null, remoteStream: null, micOn: true, camOn: true,
   toggleMic: vi.fn(), toggleCam: vi.fn(), sendBye: vi.fn(), sendCaption: vi.fn(), captions: [], sendChat: vi.fn(), messages: [], ...over
 } as CallApi)
 
@@ -36,5 +36,19 @@ describe('VideoCall', () => {
     render(<VideoCall call={call()} role="doctor" cc={cc()} />)
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
     expect(screen.queryByText(/not available in this browser/i)).toBeNull()
+  })
+
+  it('shows a network check while connecting, so a slow call can be understood', () => {
+    render(<VideoCall call={call({ state: 'connecting' })} role="patient" layout="full" cc={cc()} />)
+    const line = screen.getByLabelText('Network check').textContent || ''
+    expect(line).toMatch(/checking/)
+    expect(line).toMatch(/2 local, 1 direct and 0 relay/)
+    expect(line).toMatch(/No relay server is configured/)
+  })
+
+  it('says captions stopped, and that the call is not affected', () => {
+    render(<VideoCall call={call()} role="doctor" cc={cc({ problem: "the browser's speech service could not be reached from this network" })} />)
+    expect(screen.getByText(/Captions stopped: the browser's speech service/)).toBeTruthy()
+    expect(screen.getByText(/The call is not affected/)).toBeTruthy()
   })
 })

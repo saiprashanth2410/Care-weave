@@ -26,19 +26,34 @@ const ctor = (): RecognitionCtor | undefined =>
 /** Chrome and Edge (desktop and Android) can turn speech into text; Firefox and most iPhone browsers cannot. */
 export const speechSupported = () => Boolean(ctor())
 
+/** Why captions stopped, in words a person can act on. The call itself is never affected. */
+export const SPEECH_PROBLEM: Record<string, string> = {
+  'not-allowed': 'the browser did not allow speech recognition (microphone permission)',
+  'service-not-allowed': 'the browser did not allow speech recognition',
+  'audio-capture': 'the microphone could not be used for captions',
+  'language-not-supported': 'this browser cannot recognise the chosen language',
+  network: "the browser's speech service could not be reached from this network",
+  'restart-loop': 'speech recognition kept stopping'
+}
+const FATAL = new Set(['not-allowed', 'service-not-allowed', 'audio-capture', 'language-not-supported', 'network'])
+
 /**
- * Listens to this device's microphone and hands each finished sentence to `onFinal`. It restarts itself when the browser stops
- * listening after a pause, and stops for good if the permission is refused.
+ * Listens to this device's microphone and hands each finished sentence to `onFinal`. It restarts itself after a pause in speech, but
+ * gives up (and says why through `onProblem`) on a real error or if it keeps stopping, so a failing caption service can never loop
+ * and slow the call down.
  */
-export function useSpeech({ enabled, lang, onFinal }: { enabled: boolean; lang: string; onFinal: (text: string) => void }) {
+export function useSpeech({ enabled, lang, onFinal, onProblem }: { enabled: boolean; lang: string; onFinal: (text: string) => void; onProblem?: (code: string) => void }) {
   const finalRef = useRef(onFinal)
-  useEffect(() => { finalRef.current = onFinal }, [onFinal])
+  const problemRef = useRef(onProblem)
+  useEffect(() => { finalRef.current = onFinal; problemRef.current = onProblem }, [onFinal, onProblem])
 
   useEffect(() => {
     const Ctor = ctor()
     if (!enabled || !Ctor) return
     const rec = new Ctor()
     let stopped = false
+    let restarts: number[] = []
+    let timer: ReturnType<typeof setTimeout> | undefined
     rec.lang = lang
     rec.continuous = true
     rec.interimResults = false
@@ -50,9 +65,17 @@ export function useSpeech({ enabled, lang, onFinal }: { enabled: boolean; lang: 
         }
       }
     }
-    rec.onend = () => { if (!stopped) try { rec.start() } catch { /* already starting */ } }
-    rec.onerror = (e) => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') stopped = true }
+    const giveUp = (code: string) => { stopped = true; problemRef.current?.(code) }
+    rec.onerror = (e) => { if (FATAL.has(e.error)) giveUp(e.error) } // "no-speech" and "aborted" are normal pauses
+    rec.onend = () => {
+      if (stopped) return
+      const now = Date.now()
+      restarts = restarts.filter((t) => now - t < 10_000)
+      if (restarts.length >= 6) return giveUp('restart-loop')
+      restarts.push(now)
+      timer = setTimeout(() => { if (!stopped) try { rec.start() } catch { /* already starting */ } }, 250)
+    }
     try { rec.start() } catch { /* the browser refused to start; captions stay off */ }
-    return () => { stopped = true; try { rec.abort() } catch { /* already stopped */ } }
+    return () => { stopped = true; clearTimeout(timer); try { rec.abort() } catch { /* already stopped */ } }
   }, [enabled, lang])
 }
