@@ -329,8 +329,14 @@ cd careweave/server && npm run test:exasol
 # 4. Exasol scale benchmark (needs Exasol; see "Scale benchmark" above)
 cd careweave/server && npm run demo:scale
 
-# 5. Client tests (82)
+# 5. Client tests (89)
 cd careweave/client && npm test
+
+# 6. Browser tests of the video call and messaging (real Chrome, API and client running; see careweave/e2e/README.md)
+npm run e2e
+
+# Lint, type-check and all unit tests in one command (also what CI runs)
+npm run check
 #    The server suite has about 200 tests, including the video call signalling, translation (with a stubbed AI), relay configuration, messaging and WhatsApp registration.
 ```
 

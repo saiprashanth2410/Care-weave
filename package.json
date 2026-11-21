@@ -18,7 +18,8 @@
     "check-db": "cd careweave/server && npm run check-db",
     "typecheck": "cd careweave/server && npx tsc --noEmit && cd ../client && npx tsc -b",
     "test": "cd careweave/server && npm test && cd ../client && npm test",
-    "check": "npm run lint && npm run typecheck && npm test"
+    "check": "npm run lint && npm run typecheck && npm test",
+    "e2e": "cd careweave/e2e && npm install && npm test"
   },
   "dependencies": {
     "@exasol/exasol-driver-ts": "^0.8.1",

@@ -1,0 +1,12 @@
+{
+  "name": "careweave-e2e",
+  "private": true,
+  "type": "module",
+  "description": "Browser tests for the video consultation and staff messaging, run against a local server and client",
+  "scripts": {
+    "test": "node video-call.mjs && node walk-in.mjs && node doctor-chat-button.mjs && node call-survives-navigation.mjs && node patient-layout.mjs && node staff-messaging.mjs"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^25.18.1"
+  }
+}
