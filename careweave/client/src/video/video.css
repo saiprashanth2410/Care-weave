@@ -101,3 +101,8 @@
 .vc-mode { display: inline-flex; border: 1px solid #c3cac2; border-radius: 6px; overflow: hidden; margin-bottom: 14px; }
 .vc-mode button { min-height: 38px; padding: 0 16px; border: 0; background: #fff; color: #56655f; font-weight: 700; font-size: 13px; cursor: pointer; }
 .vc-mode button.on { background: #0c6b6d; color: #fff; }
+
+.vc-orig { display: block; margin-top: 1px; font-size: 11px; opacity: .75; font-style: italic; }
+.vc-langline { padding-top: 0; }
+.vc-check { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.vc-check input { width: 18px; height: 18px; }

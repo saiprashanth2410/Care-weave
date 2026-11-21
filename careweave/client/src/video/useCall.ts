@@ -12,11 +12,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 export type CallRole = 'doctor' | 'patient'
 export type CallState = 'starting' | 'waiting' | 'connecting' | 'connected' | 'ended' | 'failed'
-export type Caption = { id: string; from: CallRole; text: string; at: number }
+export type Caption = { id: string; from: CallRole; text: string; at: number; translated?: string; translationError?: 'ai-off' | 'failed' }
 export type ChatMsg = { id: string; from: CallRole; text: string; at: number; image?: string }
 export type CallApi = ReturnType<typeof useCall>
 
-type Signal = { id: string; at: number; type: 'ready' | 'offer' | 'answer' | 'ice' | 'bye' | 'caption' | 'chat'; data: any }
+type Signal = { id: string; at: number; type: 'ready' | 'offer' | 'answer' | 'ice' | 'bye' | 'caption' | 'chat' | 'lang'; data: any }
 
 const POLL_MS = 1000 // once connected: only chat and captions travel this way
 const SETUP_POLL_MS = 350 // while the call is being set up, poll fast so the handshake does not feel like a freeze
@@ -52,6 +52,7 @@ export function useCall(opts: { token: string; role: CallRole; doctorKey?: strin
   const [camOn, setCamOn] = useState(true)
   const [captions, setCaptions] = useState<Caption[]>([])
   const [messages, setMessages] = useState<ChatMsg[]>([])
+  const [peerLang, setPeerLang] = useState('')
   const localRef = useRef<MediaStream | null>(null)
   const sendRef = useRef<(type: Signal['type'], data: unknown) => Promise<void>>(async () => {})
 
@@ -123,9 +124,15 @@ export function useCall(opts: { token: string; role: CallRole; doctorKey?: strin
         if (text || image) setMessages((m) => [...m.slice(-199), { id: s.id, from: role === 'doctor' ? 'patient' : 'doctor', text, at: s.at, image }])
         return
       }
+      if (s.type === 'lang') {
+        if (typeof s.data?.lang === 'string') setPeerLang(s.data.lang)
+        return
+      }
       if (s.type === 'caption') {
         const text = String(s.data?.text || '').slice(0, 400)
-        if (text) setCaptions((c) => [...c.slice(-19), { id: s.id, from: role === 'doctor' ? 'patient' : 'doctor', text, at: s.at }])
+        const translated = typeof s.data?.translated === 'string' ? s.data.translated.slice(0, 800) : undefined
+        const translationError = s.data?.translationError === 'ai-off' || s.data?.translationError === 'failed' ? s.data.translationError : undefined
+        if (text) setCaptions((c) => [...c.slice(-19), { id: s.id, from: role === 'doctor' ? 'patient' : 'doctor', text, at: s.at, translated, translationError }])
         return
       }
       if (role === 'doctor') {
@@ -247,12 +254,15 @@ export function useCall(opts: { token: string; role: CallRole; doctorKey?: strin
 
   /** Tells the other side the call is over. Safe to call more than once. */
   const sendBye = useCallback(() => sendRef.current('bye', null), [])
-  const sendCaption = useCallback((text: string) => {
+  /** Shares one spoken sentence. `lang` is the language it was spoken in; `to` asks the server to translate it for the other side. */
+  const sendCaption = useCallback((text: string, opts?: { lang?: string; to?: string }) => {
     const t = text.trim().slice(0, 400)
     if (!t) return Promise.resolve()
     setCaptions((c) => [...c.slice(-19), { id: `me-${Date.now()}-${Math.random()}`, from: role, text: t, at: Date.now() }])
-    return sendRef.current('caption', { text: t })
+    return sendRef.current('caption', { text: t, lang: opts?.lang, to: opts?.to })
   }, [role])
+  /** Tells the other side which language this person speaks, so their captions can be translated for them. */
+  const sendLang = useCallback((lang: string) => sendRef.current('lang', { lang }), [])
   /** Types a chat message: shown at once on this side and sent to the other. */
   const sendChat = useCallback((text: string, image?: string) => {
     const t = text.trim().slice(0, 1000)
@@ -261,5 +271,5 @@ export function useCall(opts: { token: string; role: CallRole; doctorKey?: strin
     return sendRef.current('chat', { text: t, image })
   }, [role])
 
-  return { state, error, retry, localStream, remoteStream, micOn, camOn, toggleMic, toggleCam, sendBye, sendCaption, captions, sendChat, messages }
+  return { state, error, retry, localStream, remoteStream, micOn, camOn, toggleMic, toggleCam, sendBye, sendCaption, sendLang, peerLang, captions, sendChat, messages }
 }

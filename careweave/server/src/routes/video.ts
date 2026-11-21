@@ -3,7 +3,8 @@ import { Router } from 'express';
 import type { AppCtx } from '../context.js';
 import { catchAsyncRoutes } from '../asyncRoutes.js';
 import { linkedPatientIds } from '../services/access.js';
-import { MAX_SIGNALS_PER_CONSULT, SIGNAL_TYPES } from '../repo/videoConsults.js';
+import { CALL_LANGUAGES, MAX_SIGNALS_PER_CONSULT, SIGNAL_TYPES } from '../repo/videoConsults.js';
+import { translateSentence } from '../services/translate.js';
 import { sendWhatsAppText } from '../whatsapp/emitter.js';
 import { parseImageDataUrl } from '../services/imageData.js';
 import { ask, MODELS } from '../clinicalSummary.js';
@@ -15,6 +16,8 @@ const MAX_SIGNAL_BYTES = 24_000; // a session description is about 5 to 10 KB
 const MAX_TEXT = 1000; // one chat message or caption line
 const MAX_PHOTO_SIGNAL_BYTES = 640_000; // a chat message that carries one photo
 const MAX_PHOTOS_PER_CONSULT = 15;
+const MAX_TRANSLATIONS_PER_CONSULT = 400;
+const isLang = (v: unknown) => (CALL_LANGUAGES as readonly string[]).includes(String(v));
 const MAX_TRANSCRIPT_CHARS = 12_000;
 const SUMMARY_PROMPT = `You are helping a doctor write notes after a video consultation. Below is the transcript: typed chat and speech-to-text, in English, Tamil or Hindi, and it may contain recognition mistakes.
 Write a short clinical summary in plain text with these headings, one or two lines each: Reason for consultation; Symptoms and history reported; Advice and plan from the doctor; Medicines mentioned; Follow-up.
@@ -57,11 +60,14 @@ export function videoPublicRoutes(ctx: AppCtx) {
   router.post('/video/public/:token/signal', async (req, res) => {
     const r = await open(req.params.token);
     if ('error' in r) return res.status(r.status).json({ error: r.error });
-    const { role, key, type, data } = req.body || {};
+    const { role, key, type } = req.body || {};
+    let data = req.body?.data;
     if (role !== 'doctor' && role !== 'patient') return res.status(400).json({ error: 'role must be doctor or patient' });
     if (role === 'doctor' && !sameSecret(key, r.consult.doctorKey)) return res.status(403).json({ error: 'Not allowed' });
     if (!(SIGNAL_TYPES as readonly string[]).includes(type)) return res.status(400).json({ error: 'Unknown signal type' });
     let hasImage = false;
+    if (type === 'lang' && !isLang(data?.lang)) return res.status(400).json({ error: 'Unsupported language' });
+    if (type === 'caption' && ((data?.lang !== undefined && !isLang(data.lang)) || (data?.to !== undefined && !isLang(data.to)))) return res.status(400).json({ error: 'Unsupported language' });
     if (type === 'chat' || type === 'caption') {
       const t = typeof data?.text === 'string' ? data.text.trim() : '';
       if (t.length > MAX_TEXT) return res.status(413).json({ error: 'Message too long' });
@@ -72,11 +78,18 @@ export function videoPublicRoutes(ctx: AppCtx) {
       }
       if (!t && !hasImage) return res.status(400).json({ error: 'text is required' });
     }
+    // A caption spoken in one language for someone who reads another is translated here, before the other side polls for it.
+    let translated = false;
+    if (type === 'caption' && data?.lang && data?.to && data.lang !== data.to && (await R().videoSignals.translationCount(r.consult.id)) < MAX_TRANSLATIONS_PER_CONSULT) {
+      const t = await translateSentence(R(), String(data.text).trim(), data.lang, data.to);
+      data = { ...data, text: String(data.text).trim(), ...(t.text ? { translated: t.text } : { translationError: t.error }) };
+      translated = Boolean(t.text);
+    }
     const payload = JSON.stringify(data ?? null);
     if (payload.length > (hasImage ? MAX_PHOTO_SIGNAL_BYTES : MAX_SIGNAL_BYTES)) return res.status(413).json({ error: 'Signal too large' });
     if (hasImage && (await R().videoSignals.photoCount(r.consult.id)) >= MAX_PHOTOS_PER_CONSULT) return res.status(429).json({ error: 'Too many photos in this call' });
     if ((await R().videoSignals.count(r.consult.id)) >= MAX_SIGNALS_PER_CONSULT) return res.status(429).json({ error: 'Too many signals for this call' });
-    await R().videoSignals.insert({ id: id('sig'), consultId: r.consult.id, from: role, type, data: payload, at: Date.now(), hasImage });
+    await R().videoSignals.insert({ id: id('sig'), consultId: r.consult.id, from: role, type, data: payload, at: Date.now(), hasImage, translated });
     res.status(201).json({ ok: true });
   });
 
@@ -152,7 +165,14 @@ export function videoStaffRoutes(ctx: AppCtx) {
 
   const transcriptOf = async (consultId: string) => {
     const rows = await R().videoSignals.transcript(consultId);
-    return rows.map((r: any) => ({ from: r.from as 'doctor' | 'patient', kind: r.type as 'chat' | 'caption', text: String(JSON.parse(r.data)?.text || '') || (r.hasImage ? '(shared a photo)' : ''), at: r.at as number })).filter((l: any) => l.text);
+    return rows.map((r: any) => {
+      const d = JSON.parse(r.data) || {};
+      return {
+        from: r.from as 'doctor' | 'patient', kind: r.type as 'chat' | 'caption', at: r.at as number,
+        text: String(d.text || '') || (r.hasImage ? '(shared a photo)' : ''),
+        translated: typeof d.translated === 'string' ? d.translated : undefined,
+      };
+    }).filter((l: any) => l.text);
   };
 
   router.get('/video/consults/:id/transcript', roles('doctor'), async (req: any, res) => {
@@ -167,7 +187,7 @@ export function videoStaffRoutes(ctx: AppCtx) {
     if (!c) return;
     const lines = await transcriptOf(c.id);
     if (!lines.length) return res.status(400).json({ error: 'Nothing to summarise yet: no chat messages or captions were recorded in this call.' });
-    const text = lines.map((l: any) => `${l.from === 'doctor' ? 'Doctor' : 'Patient'}: ${l.text}`).join('\n').slice(-MAX_TRANSCRIPT_CHARS);
+    const text = lines.map((l: any) => `${l.from === 'doctor' ? 'Doctor' : 'Patient'}: ${l.text}${l.translated ? ` [translation: ${l.translated}]` : ''}`).join('\n').slice(-MAX_TRANSCRIPT_CHARS);
     const ai = await readAiConfig(R());
     if (!ai.key || !ai.features.brief) return res.json({ summary: null, reason: 'ai-off', lines });
     for (const model of [ai.model, ...MODELS].filter(Boolean) as string[]) {

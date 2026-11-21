@@ -6,7 +6,7 @@ import VideoCall from '@/video/VideoCall';
 import ChatPanel from '@/video/ChatPanel';
 import { useCall } from '@/video/useCall';
 import { useCaptions } from '@/video/useCaptions';
-import { CAPTION_LANGUAGES } from '@/video/useSpeech';
+import { CAPTION_LANGUAGES, LANGUAGE_NAME } from '@/video/useSpeech';
 
 type Started = { id: string; doctorKey: string; expiresAt: string; patientName: string; hasPhone: boolean };
 type Line = { from: 'doctor' | 'patient'; kind: 'chat' | 'caption'; text: string; at: number };
@@ -188,6 +188,17 @@ export function DoctorVideoConsult({ notify }: { notify: (s: string) => void }) 
                         {CAPTION_LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
                       </select>
                     </label>
+                    <label className="vc-check">
+                      <input type="checkbox" checked={cc.translate} onChange={(e) => cc.setTranslate(e.target.checked)} />
+                      <span>Translate what I say for the patient</span>
+                    </label>
+                    <p className="muted" role="status">
+                      {cc.peerLang
+                        ? cc.peerLang === cc.lang
+                          ? `The patient speaks ${LANGUAGE_NAME[cc.peerLang] || cc.peerLang}, the same as you.`
+                          : `The patient speaks ${LANGUAGE_NAME[cc.peerLang] || cc.peerLang}. ${cc.translate ? 'Captions are translated both ways by AI.' : 'Translation is off.'}`
+                        : 'Once the patient joins, their language shows here and captions are translated both ways.'}
+                    </p>
                     {!cc.supported && <p className="muted">Captions need Chrome or Edge. Chat and the call itself work in any browser.</p>}
                   </>
                 )}

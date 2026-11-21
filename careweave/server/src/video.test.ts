@@ -231,3 +231,92 @@ test('video: a doctor can start a call with a walk-in who has no record, using o
     assert.ok(JSON.stringify(audit).includes('walk-in'), 'the walk-in call is audited');
   } finally { await srv.close(); }
 });
+
+test('video translation: a caption spoken in one language is translated for the other side with the AI key, and falls back safely', async () => {
+  const { forgetAiConfig } = await import('./services/aiConfig.js');
+  const realFetch = globalThis.fetch;
+  const saved = process.env.GEMINI_API_KEY;
+  const { srv, doctor, patient, start } = await setup();
+  try {
+    const c = (await start(patient.id)).json;
+    const post = (body: object) => srv.call('POST', `/api/video/public/${c.id}/signal`, { body });
+    const poll = async (role: 'doctor' | 'patient') => (await srv.call('GET', `/api/video/public/${c.id}/signals?role=${role}${role === 'doctor' ? `&key=${c.doctorKey}` : ''}&since=0`)).json.signals as any[];
+
+    // languages are validated, and a language announcement reaches the other side
+    assert.equal((await post({ role: 'patient', type: 'lang', data: { lang: 'fr-FR' } })).status, 400);
+    assert.equal((await post({ role: 'patient', type: 'caption', data: { text: 'hi', lang: 'xx', to: 'en-IN' } })).status, 400);
+    assert.equal((await post({ role: 'patient', type: 'lang', data: { lang: 'ta-IN' } })).status, 201);
+    assert.deepEqual((await poll('doctor')).filter((s) => s.type === 'lang').map((s) => s.data), [{ lang: 'ta-IN' }]);
+
+    // no AI key: the original is kept and the other side is told why there is no translation
+    delete process.env.GEMINI_API_KEY; forgetAiConfig();
+    await post({ role: 'patient', type: 'caption', data: { text: 'எனக்கு காய்ச்சல்', lang: 'ta-IN', to: 'en-IN' } });
+    const off = (await poll('doctor')).filter((s) => s.type === 'caption')[0].data;
+    assert.equal(off.text, 'எனக்கு காய்ச்சல்');
+    assert.equal(off.translated, undefined);
+    assert.equal(off.translationError, 'ai-off');
+
+    // with a key: translated, and only the sentence is sent to the AI
+    process.env.GEMINI_API_KEY = ['AIza', 'SyFakeKeyForTheTranslationTest12345678'].join(''); forgetAiConfig();
+    const sent: string[] = [];
+    globalThis.fetch = (async (url: any, init: any) => {
+      if (!String(url).includes('generativelanguage')) return realFetch(url, init);
+      sent.push(String(init.body));
+      return new Response(JSON.stringify({ steps: [{ type: 'model_output', content: [{ text: '"I have fever"' }] }] }), { status: 200 });
+    }) as typeof fetch;
+    await post({ role: 'patient', type: 'caption', data: { text: 'எனக்கு காய்ச்சல்', lang: 'ta-IN', to: 'en-IN' } });
+    const on = (await poll('doctor')).filter((s) => s.type === 'caption')[1].data;
+    assert.equal(on.translated, 'I have fever', 'surrounding quotes are removed');
+    assert.equal(sent.length, 1);
+    assert.match(sent[0], /Tamil sentence into English/);
+    assert.ok(!sent[0].includes('Video Patient') && !sent[0].includes('ANIRBAN'), 'no names reach the AI');
+
+    // same language, or no target: the AI is not called at all
+    await post({ role: 'doctor', key: c.doctorKey, type: 'caption', data: { text: 'Take rest', lang: 'en-IN', to: 'en-IN' } });
+    await post({ role: 'doctor', key: c.doctorKey, type: 'caption', data: { text: 'Drink water' } });
+    assert.equal(sent.length, 1);
+
+    // an AI that fails leaves the original and says so, never an error to the speaker
+    globalThis.fetch = (async (url: any, init: any) => (String(url).includes('generativelanguage') ? new Response('{}', { status: 500 }) : realFetch(url, init))) as typeof fetch;
+    assert.equal((await post({ role: 'patient', type: 'caption', data: { text: 'இருமல்', lang: 'ta-IN', to: 'en-IN' } })).status, 201);
+    const failed = (await poll('doctor')).filter((s) => s.type === 'caption').pop().data;
+    assert.equal(failed.translationError, 'failed');
+
+    // the transcript and summary carry the translation too
+    const lines = (await srv.call('GET', `/api/video/consults/${c.id}/transcript`, { token: doctor })).json.lines;
+    assert.equal(lines.find((l: any) => l.translated)?.translated, 'I have fever');
+  } finally {
+    globalThis.fetch = realFetch;
+    if (saved === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = saved;
+    forgetAiConfig();
+    await srv.close();
+  }
+});
+
+test('video translation: a busy AI (HTTP 503) is retried, so a caption still gets its translation', async () => {
+  const { forgetAiConfig } = await import('./services/aiConfig.js');
+  const realFetch = globalThis.fetch;
+  const saved = process.env.GEMINI_API_KEY;
+  const { srv, patient, start } = await setup();
+  try {
+    const c = (await start(patient.id)).json;
+    process.env.GEMINI_API_KEY = ['AIza', 'SyFakeKeyForTheRetryTest123456789012'].join(''); forgetAiConfig();
+    let calls = 0;
+    globalThis.fetch = (async (url: any, init: any) => {
+      if (!String(url).includes('generativelanguage')) return realFetch(url, init);
+      calls += 1;
+      if (calls <= 4) return new Response('{"error":{"code":"service_unavailable"}}', { status: 503 }); // both models busy, twice
+      return new Response(JSON.stringify({ steps: [{ type: 'model_output', content: [{ text: 'Drink warm water' }] }] }), { status: 200 });
+    }) as typeof fetch;
+    const res = await srv.call('POST', `/api/video/public/${c.id}/signal`, { body: { role: 'patient', type: 'caption', data: { text: 'சூடான தண்ணீர் குடிக்கவும்', lang: 'ta-IN', to: 'en-IN' } } });
+    assert.equal(res.status, 201);
+    const got = (await srv.call('GET', `/api/video/public/${c.id}/signals?role=doctor&key=${c.doctorKey}&since=0`)).json.signals.find((s: any) => s.type === 'caption');
+    assert.equal(got.data.translated, 'Drink warm water');
+    assert.ok(calls >= 5 && calls <= 9, `retried a few times, not endlessly (${calls})`);
+  } finally {
+    globalThis.fetch = realFetch;
+    if (saved === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = saved;
+    forgetAiConfig();
+    await srv.close();
+  }
+});
