@@ -2,7 +2,7 @@ import { Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import SampleScenario from '@/components/SampleScenario'
 import ReportIssue from '@/components/ReportIssue'
-import { clearSession, HOME, type SessionUser } from '@/auth/session'
+import { clearSession, type SessionUser } from '@/auth/session'
 
 const NAV = [
   { to: '/lab/overview', label: 'Overview' },
@@ -22,8 +22,6 @@ export default function LabLayout({ user }: { user: SessionUser }) {
     window.addEventListener('cw:error', onError)
     return () => window.removeEventListener('cw:error', onError)
   }, [])
-  // One step back; if this page was opened directly there is nothing behind it, so go to this role's home.
-  const goBack = () => (window.history.length > 1 ? navigate(-1) : navigate(HOME[user.role] ?? '/login'))
   const signOut = () => {
     clearSession()
     navigate('/login', { replace: true })
@@ -64,7 +62,6 @@ export default function LabLayout({ user }: { user: SessionUser }) {
 
       <header className="sticky top-0 z-30 flex items-center justify-between bg-deep pr-2 text-surface lg:hidden">
         <Brand />
-        <button onClick={goBack} className="ml-auto min-h-11 rounded-sm px-3 text-sm font-semibold hover:bg-surface/10">&larr; Back</button>
         <button onClick={() => setOpen(true)} className="min-h-11 rounded-sm px-4 text-sm font-semibold hover:bg-surface/10">
           Menu
         </button>
@@ -88,7 +85,6 @@ export default function LabLayout({ user }: { user: SessionUser }) {
       <div className="flex min-w-0 flex-col">
         <div className="hidden items-center justify-between border-b border-rule bg-surface px-8 py-3 lg:flex">
           <p className="flex items-center gap-4 text-xs font-semibold uppercase tracking-wider text-accent-ink">
-            <button type="button" onClick={goBack} className="min-h-8 rounded-sm border border-rule px-3 text-xs font-semibold normal-case tracking-normal text-ink hover:bg-paper">&larr; Back</button>
             Laboratory <SampleScenario className="[&_button]:min-h-8 [&_button]:border [&_button]:border-rule [&_button]:px-2 [&_button]:text-xs [&_button]:normal-case [&_button]:tracking-normal" /> <ReportIssue className="min-h-8 border border-rule px-2 text-xs font-semibold normal-case tracking-normal text-ink hover:bg-paper" /></p>
         </div>
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
