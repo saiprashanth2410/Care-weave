@@ -63,7 +63,7 @@ invent values, and say "not recorded" when something is missing. Plain text, one
 FACTS
 `;
 
-export async function ask(model: string, text: string, key: string): Promise<string | null> {
+export async function ask(model: string, text: string, key: string, timeoutMs = TIMEOUT_MS): Promise<string | null> {
   try {
     const res = await fetch(ENDPOINT, {
       method: 'POST',
@@ -72,7 +72,7 @@ export async function ask(model: string, text: string, key: string): Promise<str
         model, input: [{ type: 'text', text }], store: false,
         ...(model.startsWith('gemma') ? { generation_config: { thinking_level: 'minimal' } } : {}),
       }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) return null;
     const body: any = await res.json();

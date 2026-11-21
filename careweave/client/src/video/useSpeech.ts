@@ -7,6 +7,9 @@ export const CAPTION_LANGUAGES = [
   { code: 'hi-IN', label: 'हिन्दी (Hindi)' }
 ] as const
 
+/** Short names for showing a language to people. */
+export const LANGUAGE_NAME: Record<string, string> = { 'en-IN': 'English', 'ta-IN': 'தமிழ் (Tamil)', 'hi-IN': 'हिन्दी (Hindi)' }
+
 type Recognition = {
   lang: string; continuous: boolean; interimResults: boolean
   onresult: ((e: { resultIndex: number; results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }> }) => void) | null

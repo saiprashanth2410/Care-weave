@@ -53,7 +53,7 @@ export default function VideoConsultPublic() {
             </select>
           </label>
           <button type="button" className="vc-join" onClick={() => setJoined(true)}>Join the video call</button>
-          <p className="vc-note">Your browser will ask to use the camera and microphone. Please allow both. During the call your speech is turned into text captions so the doctor can follow and keep notes. You can switch captions off with the CC button.</p>
+          <p className="vc-note">Your browser will ask to use the camera and microphone. Please allow both. During the call your speech is turned into text captions so the doctor can follow and keep notes. If the doctor speaks another language, an AI translates the captions for you. You can switch captions off with the CC button.</p>
         </div>
       )}
       {info && joined && !left && <PatientCall token={token} lang={lang} onLeft={() => setLeft(true)} />}

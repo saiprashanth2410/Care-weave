@@ -19,7 +19,9 @@ export const videoConsultsRepo = (c: Collection) => ({
   recentForDoctors: (doctorIds: string[]) => (doctorIds.length ? c.find({ doctorId: { $in: doctorIds } }, { sort: { createdAt: -1 }, limit: 100 }) : Promise.resolve([] as any[])),
 });
 
-export const SIGNAL_TYPES = ['ready', 'offer', 'answer', 'ice', 'bye', 'caption', 'chat'] as const;
+export const SIGNAL_TYPES = ['ready', 'offer', 'answer', 'ice', 'bye', 'caption', 'chat', 'lang'] as const;
+/** Languages a call can be spoken in (the codes the browser's speech recognition uses). */
+export const CALL_LANGUAGES = ['en-IN', 'ta-IN', 'hi-IN'] as const;
 export type SignalType = (typeof SIGNAL_TYPES)[number];
 export const MAX_SIGNALS_PER_CONSULT = 3000;
 
@@ -27,6 +29,7 @@ export const videoSignalsRepo = (c: Collection) => ({
   ...baseRepo(c),
   count: (consultId: string) => c.count({ consultId }),
   photoCount: (consultId: string) => c.count({ consultId, hasImage: true }),
+  translationCount: (consultId: string) => c.count({ consultId, translated: true }),
   /** Everything that was said (typed chat and speech-to-text captions) from both sides, oldest first. */
   transcript: (consultId: string) => c.find({ consultId, type: { $in: ['chat', 'caption'] } }, { sort: { at: 1 }, limit: 800 }),
   /** What the other side has said since `since` (milliseconds), oldest first. */

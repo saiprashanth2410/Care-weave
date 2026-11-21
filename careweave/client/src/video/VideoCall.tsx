@@ -20,7 +20,9 @@ function Video({ stream, muted, className, label }: { stream: MediaStream | null
   return <video ref={ref} className={className} autoPlay playsInline muted={muted} aria-label={label} />
 }
 
-export type CaptionControl = { on: boolean; toggle: () => void; supported: boolean }
+import { LANGUAGE_NAME } from './useSpeech'
+
+export type CaptionControl = { on: boolean; toggle: () => void; supported: boolean; lang?: string; peerLang?: string; translating?: boolean }
 
 /**
  * The call screen: the other person large, yourself small, live captions, and mute / camera / captions / hang up.
@@ -58,7 +60,18 @@ export default function VideoCall({ call, role, layout = 'panel', cc, onHangUp }
         )}
         {cc.on && lines.length > 0 && (
           <div className="vc-cc" aria-live="polite" aria-label="Captions">
-            {lines.map((l) => <p key={l.id}><b>{l.from === role ? 'You' : l.from === 'doctor' ? 'Doctor' : 'Patient'}:</b> {l.text}</p>)}
+            {lines.map((l) => {
+              const mine = l.from === role
+              const who = mine ? 'You' : l.from === 'doctor' ? 'Doctor' : 'Patient'
+              // What the other person said is shown in my language when it was translated, with their own words small underneath.
+              return (
+                <p key={l.id}>
+                  <b>{who}:</b> {!mine && l.translated ? l.translated : l.text}
+                  {!mine && l.translated && <small className="vc-orig">{l.text}</small>}
+                  {!mine && l.translationError && <small className="vc-orig">Not translated ({l.translationError === 'ai-off' ? 'translation is switched off by the administrator' : 'the translator did not answer'})</small>}
+                </p>
+              )
+            })}
           </div>
         )}
         <Video stream={call.localStream} muted className={`vc-local ${call.camOn ? '' : 'vc-cam-off'}`} label="Your video" />
@@ -82,6 +95,11 @@ export default function VideoCall({ call, role, layout = 'panel', cc, onHangUp }
           {role === 'doctor' ? 'End' : 'Leave'}
         </button>
       </div>
+      {cc.on && cc.supported && cc.lang && cc.peerLang && (
+        <p className="vc-hint vc-langline">
+          You speak {LANGUAGE_NAME[cc.lang] || cc.lang}. {cc.peerLang === cc.lang ? 'The other person speaks the same language.' : cc.translating ? `Captions are translated from ${LANGUAGE_NAME[cc.peerLang] || cc.peerLang}.` : `They speak ${LANGUAGE_NAME[cc.peerLang] || cc.peerLang} (translation is off).`}
+        </p>
+      )}
       {!cc.supported && <p className="vc-hint">Live captions are not available in this browser (they need Chrome or Edge). Use Chat to type to each other.</p>}
       {full && chatOpen && (
         <div className="vc-sheet">
