@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
-  ArrowLeft,
   Clock,
   Database,
   Flame,
@@ -78,7 +76,6 @@ const fmt = (v: number | null | undefined, unit = '') => (v === null || v === un
 const DEPT_COLORS = ['#0c6b6d', '#56655f', '#7d5200', '#a3341f', '#3a4a44'];
 
 export default function AnalyticsApp() {
-  const navigate = useNavigate();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -157,13 +154,6 @@ export default function AnalyticsApp() {
       <header className="sticky top-0 z-30 border-b border-rule bg-surface px-6 py-3.5">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate(-1)}
-              className="flex h-9 w-9 items-center justify-center rounded-sm border border-rule bg-paper text-ink-2 transition hover:bg-rule hover:text-ink"
-              title="Return to Hospital Portal"
-           >
-              <ArrowLeft size={16} />
-            </button>
             <img src="/careweave-mark-transparent.png" alt="" className="h-9 w-9 rounded-sm" />
             <div>
               <div className="flex items-center gap-2">
