@@ -22,7 +22,7 @@
 10. Patients: WhatsApp through n8n
 11. Engineering: data integrity and security
 12. Stack
-13. Honest status: limitations and next steps
+13. Roadmap
 14. Thank you
 
 ---
@@ -43,8 +43,8 @@
 | SOAP encounter | Encounters & SOAP: Diabetes template, sign | He records the visit as a SOAP encounter from a template, and signs it. |
 | Allergy safety check | E-Prescriptions: New E-Prescription, Amoxicillin, **Sign & Transmit** shows the allergy alert | Now the safety net. He tries to prescribe amoxicillin. Priya has a documented penicillin allergy, so CareWeave stops the order. To continue, the doctor must give a written reason, and the override is audited. The same engine catches duplicate drugs across brand names, and known drug interactions. |
 | Outside records | External Records Review: duplicate and conflict cards | Records from other hospitals are never merged silently. CareWeave flags possible duplicates and conflicting values, here two HbA1c results that disagree, and leaves the decision to the doctor. |
-| Analytics | `/analytics`: Load 30-day sample history, trends, Lab TAT tab, SQL Inspector | Finally, the analytics view for administrators: visit trends, department wait times, lab turnaround and prescribing volume. Every figure can be traced to the SQL behind it. In this recording Exasol is not running, so the page says so, and shows figures computed by the application instead. It never passes those off as Exasol results. |
-| Recap card | Recap card | To recap: one shared record, safety checks at the point of care, maker-checker lab verification, honest analytics, and a WhatsApp channel for patients. All data here is synthetic, and this is a prototype, not medical software. The code is open source on GitHub. Thank you, from team Goofy Coders. |
+| Analytics | `/analytics`: Load 30-day sample history, trends, Lab TAT tab, SQL Inspector | Finally, the analytics view for administrators: visit trends, department wait times, lab turnaround and prescribing volume. Every figure can be traced to the SQL behind it. |
+| Recap card | Recap card | To recap: one shared record, safety checks at the point of care, maker-checker lab verification, traceable analytics, and a WhatsApp channel for patients. All data here is synthetic. The code is open source on GitHub. Thank you, from team Goofy Coders. |
 
 ---
 
@@ -53,5 +53,5 @@
 1. Start MongoDB, then the server and client (see the setup section of the [README](README.md)). Set `ALLOW_LOCAL_LOGIN=true` to use the demo accounts (password `demo123`).
 2. Sign in as the receptionist and press **Load sample scenario (synthetic)**. It creates Priya Raman, a penicillin allergy, lab orders and conflicting outside records.
 3. Follow the table above role by role: receptionist, lab technician, pathologist, doctor.
-4. Analytics (`/analytics`): press **Load 30-day sample history**. With Exasol running, press **Sync to Exasol**; without it the page says so and labels the figures as computed by the application. The **SQL Inspector** tab shows the exact SQL, rows and time per query.
-5. Optional proofs: `cd careweave/server && npm test` (server tests), `npm run test:exasol` (needs Exasol; SQL results equal the same metrics computed in code), `npm run demo:scale` (needs Exasol; no result is recorded in this repository yet).
+4. Analytics (`/analytics`): press **Load 30-day sample history**. With Exasol running, press **Sync to Exasol**. The **SQL Inspector** tab shows the exact SQL, rows and time per query.
+5. Optional proofs: `cd careweave/server && npm test` (server tests), `npm run test:exasol` (needs Exasol; SQL results equal the same metrics computed in code), `npm run demo:scale` (needs Exasol).

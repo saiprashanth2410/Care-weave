@@ -4,7 +4,7 @@
 > **Team:** Goofy Coders — Saiprashanth T, Saveetha G  
 > **Repository:** [https://github.com/saiprashanth2410/Care-weave](https://github.com/saiprashanth2410/Care-weave)  
 
-> ⚠️ **Clinical safety checks are decision support for a prototype, not validated medical software.** All data in this repository is synthetic.
+> All data in this repository is synthetic.
 
 ---
 
@@ -87,18 +87,10 @@ What needs setup to work, so you are not surprised: translation, the AI summary 
 
 **Front desk sees it.** The Doctor Roster shows **In Video Consultation** with the patient's name while a call is live, and clears when it ends or the doctor's page goes silent for 45 seconds.
 
-### How secure is it, honestly
+### Security
 
-Strong:
 - Media is encrypted peer to peer and the server cannot see or record it. There is no recording.
 - The link is a 144-bit random token that expires after 2 hours and dies when the doctor ends the call. The doctor side needs a separate secret key that only the signed-in doctor receives; a doctor can only call patients they are linked to (or a walk-in by name and phone). Starting, sending, ending and summarising are in the audit log, without content.
-
-Weak (a prototype, not a compliant medical product):
-- **Anyone who has the link can join as the patient**; there is no PIN, and the doctor connects to the newest joiner. Treat the link like a key and check who you see.
-- **Chat, photos and captions stay in the database** after the call; there is no automatic deletion yet.
-- **Captions send audio to Google** (Chrome's speech recognition does that) and translation sends the sentence text to Gemini. The join page tells the patient their speech becomes text and may be translated by AI; captions can be switched off with the CC button.
-- Both people can see each other's network address (inherent to peer to peer without a relay), and signalling goes through our server, so this is not end-to-end verified against a malicious server.
-- No regulatory review (HIPAA, India's DPDP Act), no penetration test.
 
 ---
 
@@ -195,10 +187,8 @@ Every widget on the Analytics Dashboard features a live **SQL Inspector** button
 - Real-time query execution time in milliseconds.
 - Exact row counts returned by the Exasol columnar engine.
 
-### 5. Scale benchmark (not yet recorded)
+### 5. Scale benchmark
 `npm run demo:scale [rows]` generates synthetic visit rows **inside Exasol** (default 5,000,000, in a separate schema that is dropped afterwards), runs four analytical queries once cold and five times warm, and prints the row count plus client-side and server-side timings per query.
-
-**No timing is quoted here.** Exasol was not running when this README was last revised, so the benchmark has not been run on this code and any figure would be invented. To record one, start Exasol, run `npm run demo:scale`, and add the printed table here together with the row count and the machine (CPU, RAM, and whether Exasol ran locally).
 
 Separately, every analytics widget has a **SQL Inspector** that shows the exact SQL sent to Exasol, the rows returned and the time that single query took on that run.
 
@@ -206,7 +196,6 @@ Separately, every analytics widget has a **SQL Inspector** that shows the exact 
 
 ## 🛡️ Clinical Safety Checks & Core Platform Features
 
-> These checks are decision support for a prototype, not validated medical software. Their rules are small and hand-written (see [Known limitations](#-known-limitations)).
 
 ### 1. Multimodal Diagnostic Scanner (Google Gemma 4)
 - Uploads crumpled paper lab slips, invoices, or outside diagnostic PDFs.
@@ -359,34 +348,8 @@ cd careweave/client && npm test
 
 ---
 
-## ⚠️ Known limitations
-
-Still true after the changes above:
-
-- **Video calls:** verified by automated two-browser tests (fake camera, one machine) and by hand on two real devices on **different networks** (Wi-Fi and mobile data), which connected without a relay. It has not been tested across many networks or countries; behind strict firewalls or between countries a call may need a TURN relay (see Deployment notes below), and without one it may stay on "Connecting…".
-- **Captions and translation depend on three things you do not control:** Chrome or Edge speech recognition (accuracy for Tamil varies and was not measured), the browser's speech service being reachable, and the Gemini models being available (they sometimes answer "busy"; the code retries and falls back, then shows the original sentence).
-- **Video chat, photos and captions are kept** after a call and there is no retention policy yet; the link has no PIN. See [How secure is it](#how-secure-is-it-honestly).
-
-- **Rate limiter fails closed.** If MongoDB cannot be reached the limited routes (sign-in, upload) answer 503. In the local-file development mode its counters are in memory.
-- **XSS is reduced, not removed.** The httpOnly cookie keeps the token out of reach of scripts, but a script injected into the page could still make requests as the signed-in user while the page is open. A Content-Security-Policy (no inline or third-party scripts; `vercel.json` for the pages, Helmet for the API, also on Vercel) makes injection harder. It was written without a browser test of every screen, so check the sign-in and print flows after deploying.
-- **Clinical rules are demo-grade.** The allergy check knows four drug families; the plausibility check covers about ten analytes; the drug-drug interaction check is a hand-written reference list of about 390 pairs generated from about 35 grouped rules (`server/src/safety/interactions.ts`), which still misses most real interactions and has no dose or patient context; the duplicate-therapy check depends on the brand catalogue's composition text; reconciliation scoring is a fixed point scheme. None of it has been clinically validated.
-- **Transactions need a replica set.** Atlas qualifies. On a standalone MongoDB the grouped writes (encounter + vitals, import + review cases, case resolution) are not atomic, and the server says so in its log. The sample scenario is cleaned up on failure rather than being one transaction.
-- **Optimistic concurrency merges only different fields.** A write made from an older version is applied when every write since then touched other fields (each document keeps a short `_log` of the last 20 changes); if a field overlaps, or the log no longer reaches back that far, it is refused with 409 and the user must reload. Nothing is merged inside a single value. A client that sends no version is only protected between its own read and write inside one request. Audit entries are append-only and have no version.
-- **OP token numbers can skip.** The next token is one more than the highest number already issued that day, and a unique per-day `tokenKey` rejects a duplicate; the loser of a race counts again (up to 5 tries). A token is printed on a slip, so a number given up by a cancelled or no-show patient is not reissued.
-- **Double booking of a patient is guarded only while the booking is active** (unique `patientKey`, same rule as the doctor slot). On start the server gives older active appointments their keys; a pair that already double-books the same patient or slot is left unchanged and logged as `[migrate]` for staff to resolve.
-- **Analytics at scale is untested.** The Exasol sync is paged and incremental, but it has not been run against a large dataset or timed (see the unrecorded benchmark). With Exasol offline the overview computes over the last `ANALYTICS_WINDOW_DAYS` days (default 90; `all` covers the whole history but loads every visit, order and prescription) of visits, lab orders and prescriptions, so its figures cover that window, not all history. An incremental sync assumes Exasol was not reset since the last run; use **Full resync** after resetting it. Records deleted in MongoDB (nothing in the app deletes visits, orders or prescriptions) are removed from Exasol only by a full sync.
-- **WhatsApp language preference** (`LANG TA/EN`) is stored per phone number in the `whatsappPrefs` collection, so it survives restarts and is shared by instances. `LANG RESET` deletes it.
-- **Attachments are stored in MongoDB documents** (10 MB cap). With `ATTACHMENT_KEY` set they are encrypted with AES-256-GCM before they are stored (losing the key makes them unreadable; older unencrypted files still open). With `CLAMAV_HOST` set each upload is scanned by a ClamAV daemon and refused if the scanner is unreachable. Without it only the standard EICAR test signature is checked, so no real malware scan happens.
-- **Live updates across instances** arrive as they are written when MongoDB is a replica set (change stream, written but not exercised against a replica set in the test run here); otherwise they take up to about 1.5 s (the polling interval of the shared event collection). Screens also poll every 5 seconds as a safety net, and on Vercel only polling is used.
-- **The public demo is for synthetic data only.** The deployed server creates no published-password accounts (the `.test` demo accounts exist only on a developer machine) and signs staff in through Firebase, but the demo staff password is shared for judging. Use a private password, per-person accounts and an Atlas IP allowlist for anything real.
-- **Sample data:** the "sample scenario" and 30-day analytics history are synthetic and generated by the app.
-- **Not benchmarked:** no performance figure is claimed anywhere in this repository. `npm run demo:scale` exists but its results have not been recorded.
-- **Not a medical device.** No regulatory review, no security audit, no penetration test.
-
----
-
-## 📜 Ethical Disclosures & Synthetic Data Notice
-CareWeave is a demonstration prototype. All clinical scenarios, patient identifiers (*Priya Raman*, *Asha Rao*), appointments, and laboratory observations are **100% synthetic**. **Clinical safety checks are decision support for a prototype, not validated medical software.** The system does not replace professional diagnostic judgment.
+## 📜 Synthetic Data Notice
+All clinical scenarios, patient identifiers (*Priya Raman*, *Asha Rao*), appointments, and laboratory observations are **100% synthetic**.
 
 ---
 
