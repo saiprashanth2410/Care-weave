@@ -108,3 +108,15 @@
 .vc-check input { width: 18px; height: 18px; }
 
 .vc-diag { margin: 4px 0 0; max-width: 460px; font-size: 11px; line-height: 1.5; color: #b8c4bf; }
+
+/* The video, buttons and hints sit in one column so a chat panel can sit beside them. */
+.vc-main { display: flex; flex-direction: column; gap: 12px; flex: 1; min-width: 0; min-height: 0; }
+.vc-full .vc-main { gap: 0; }
+
+/* Laptop: the patient's chat is a panel at the right, like the doctor's, instead of covering the video. */
+@media (min-width: 900px) {
+  .vc-page.in-call { padding: 24px; }
+  .vc.vc-full { width: 100%; max-width: 1240px; height: min(86vh, 800px); flex-direction: row; }
+  .vc-full .vc-sheet { position: static; width: 340px; height: auto; flex-shrink: 0; border-radius: 0; box-shadow: none; border-left: 1px solid #e1e5df; padding: 14px 16px 16px; }
+  .vc-full .vc-bar .vc-end { max-width: 160px; }
+}

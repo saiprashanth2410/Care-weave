@@ -32,7 +32,8 @@ export type CaptionControl = { on: boolean; toggle: () => void; supported: boole
 export default function VideoCall({ call, role, layout = 'panel', cc, onHangUp }: { call: CallApi; role: CallRole; layout?: 'panel' | 'full'; cc: CaptionControl; onHangUp?: () => void }) {
   const full = layout === 'full'
   const over = call.state === 'ended' || call.state === 'failed'
-  const [chatOpen, setChatOpen] = useState(false)
+  // On a laptop the chat is a side panel that is open from the start; on a phone it is a sheet that opens on demand.
+  const [chatOpen, setChatOpen] = useState(() => layout === 'full' && typeof window !== 'undefined' && !!window.matchMedia?.('(min-width: 900px)').matches)
   const [seen, setSeen] = useState(0)
   const incoming = call.messages.filter((m) => m.from !== role).length
   const unread = chatOpen ? 0 : Math.max(0, incoming - seen)
@@ -45,7 +46,8 @@ export default function VideoCall({ call, role, layout = 'panel', cc, onHangUp }
   }
 
   return (
-    <div className={`vc ${full ? 'vc-full' : ''}`} data-state={call.state}>
+    <div className={`vc ${full ? 'vc-full' : ''} ${full && chatOpen ? 'chat-open' : ''}`} data-state={call.state}>
+      <div className="vc-main">
       <div className="vc-stage">
         <Video stream={call.remoteStream} className="vc-remote" label={role === 'doctor' ? 'Patient video' : 'Doctor video'} />
         {call.state !== 'connected' && (
@@ -107,6 +109,7 @@ export default function VideoCall({ call, role, layout = 'panel', cc, onHangUp }
       )}
       {cc.on && cc.supported && cc.problem && <p className="vc-hint">Captions stopped: {cc.problem}. The call is not affected; press CC twice to try again, or use Chat.</p>}
       {!cc.supported && <p className="vc-hint">Live captions are not available in this browser (they need Chrome or Edge). Use Chat to type to each other.</p>}
+      </div>
       {full && chatOpen && (
         <div className="vc-sheet">
           <div className="vc-sheet-head"><b>Chat</b><button type="button" onClick={toggleChat} aria-label="Close chat">Close</button></div>
