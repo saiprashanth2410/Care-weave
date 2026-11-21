@@ -27,6 +27,9 @@ In typical community hospitals and diagnostic centers, **Front Desk (OPD)**, **D
 3. **Multimodal AI (Google Gemma 4):** Reads photographed lab reports into structured rows. The output is a draft; a second person with verification permission must sign it off (maker-checker).
 4. **Drug safety checks:** Brand-to-molecule lookup over a 93,911-row brand catalogue, an allergy check against a short hand-written list of drug families (penicillins, sulfonamides, NSAIDs, cephalosporins; anything else is matched by name only), duplicate-molecule detection across brands, and a 12-pair drug-drug interaction list.
 5. **WhatsApp (n8n, Twilio, Meta):** Event pushes (OP token, lab report released, prescription) and two-way keywords. Meta webhook calls are accepted only with a valid `X-Hub-Signature-256`.
+6. **Video consultation with live translation:** the doctor starts a call from the portal, the patient joins from a temporary link on a phone (no account), and English, Tamil and Hindi speech is shown as captions and translated for the other person. See [Video consultation](#-video-consultation-and-live-translation).
+7. **Staff messaging:** one-to-one chat with photos between the front desk and doctors, with unread badges. See [Staff messaging](#-staff-messaging).
+8. **WhatsApp self-registration:** a number that is not on file can only register (name, date of birth, gender); the bot answers nothing else until it has. See [WhatsApp self-registration](#-whatsapp-self-registration).
 
 ---
 
@@ -42,6 +45,74 @@ In typical community hospitals and diagnostic centers, **Front Desk (OPD)**, **D
 | 🤖 **WhatsApp & n8n Specs** | Event-driven notification workflow and two-way bot documentation | [`careweave/n8n/README.md`](careweave/n8n/README.md) |
 
 > 💡 **Quick Start Tip:** Log into the app, switch to **Doctor** or **Front Desk**, and click **"Load sample scenario (synthetic)"** in the top navigation bar. It creates synthetic patient *Priya Raman* with an encounter, penicillin allergy, lab orders, and conflicted external hospital imports ready for instant testing.
+
+---
+
+## 🎯 Try it in 3 minutes
+
+Sign in with the accounts in [Live demo access](#-live-demo-access). Use two browsers (or one normal and one private window) so you can be two people at once.
+
+1. **Front desk** (`reception@careweave.com`): press **Load sample scenario (synthetic)**, then **Check In** the patient *Priya Raman*. A token is issued and the queue updates for everyone.
+2. **Doctor** (`doctor@careweave.com`): open **E-Prescriptions** and prescribe *Amoxicillin* to Priya, who has a documented penicillin allergy. The allergy block stops it and asks for a written reason.
+3. **Doctor** → **Video Consultation** → **Walk-in / phone-in**, type any name, **Start video consult**. Open the link it shows on your phone or in the private window and press **Join**.
+4. **Front desk** → **Doctor Roster & Slots**: the doctor now shows **In Video Consultation** with the patient's name, without a reload.
+5. In the call, open **Chat** and send a photo; then speak (Chrome or Edge) to see captions. Pick Tamil on the patient side and English on the doctor side to see translation (needs the Gemini key, see below).
+6. **Doctor** → **Messages**: write to the front desk. The front desk gets an unread badge at once.
+7. **Administrator** (`admin@careweave.com`) → **Integrations**: the Gemini key vault; **Audit Log**: who did what.
+
+What needs setup to work, so you are not surprised: translation, the AI summary and lab-report scanning need a Gemini key saved in **Integrations** and the **Doctor brief** switch on. The WhatsApp messages need Meta or Twilio credentials (not set on the public demo). A call between two different countries or behind a strict firewall may need a relay (TURN), see below.
+
+---
+
+## 📹 Video consultation and live translation
+
+**What it is.** A doctor starts a call from **Doctor portal → Video Consultation** with a registered patient (one they are linked to through an appointment or encounter) or with a **walk-in / phone-in** person who has no record yet (only a name and an optional phone number are used; no chart is opened). The patient opens `/consult/<token>` on a phone or laptop: no account, no app. **Copy link** or **Send on WhatsApp** (needs Meta or Twilio) gives it to them.
+
+**How the call works.**
+- Video and audio go **browser to browser (WebRTC)**, encrypted with DTLS-SRTP. They never pass through the CareWeave server.
+- The two browsers find each other through small signalling messages kept in MongoDB and polled over HTTPS (about every 0.35 s while connecting, then every second), because a Vercel serverless function cannot hold a socket open.
+- Google's free STUN servers find each browser's public address. When no direct path exists (different countries, strict college or hospital Wi-Fi), a **TURN relay** carries the still-encrypted call: set `METERED_DOMAIN` + `METERED_API_KEY` (free account at metered.ca) or `TURN_URLS` + `TURN_USERNAME` + `TURN_CREDENTIAL` on the server and redeploy; no rebuild. Without a relay, such a call can stay on "Connecting…"; the screen then shows a **Network check** line saying what the network did, and a **Try again** button.
+- The doctor can open other pages of the portal during a call: it keeps running, with a "Video consultation in progress" banner and a **Return to call** button. Closing or reloading the tab asks for confirmation and tells the patient the call is over.
+- **Laptop:** video on the left, chat as a side panel on the right. **Phone:** full-screen video, chat as a bottom sheet.
+
+**Chat with photos.** Text and photos (a prescription, a report, a rash). Photos are shrunk in the browser (about 330 KB), checked on the server (JPEG, PNG or WebP by their real bytes, 450 KB, 15 per call) and shown full size on click.
+
+**Captions and translation.**
+- Each person picks the language they speak: **English, Tamil or Hindi**. The browser's speech recognition (Chrome or Edge) turns speech into text, shown under the video.
+- When the two people speak different languages, the server translates each sentence with the Gemini key the administrator stored (the same key vault as lab scanning) and the other side reads it in their language, with the original words in small italics underneath. Only the sentence is sent to the model: no name, phone or chart.
+- Speed first: the fast model (`gemini-flash-lite-latest`) is tried first, then others, with a short retry, inside a 7 second budget. If the AI is switched off or busy, the original sentence is shown with a note.
+- Not available on iPhone Safari or Firefox (no speech recognition there); chat and the call work everywhere. If captions fail the call is never affected: the screen says why and how to try again.
+
+**AI summary.** In the **Summary** tab the doctor can generate a short note (reason, symptoms, advice, medicines, follow-up) from the chat and captions, during or after the call. Names are not sent to the AI. With no key it shows the plain transcript instead.
+
+**Front desk sees it.** The Doctor Roster shows **In Video Consultation** with the patient's name while a call is live, and clears when it ends or the doctor's page goes silent for 45 seconds.
+
+### How secure is it, honestly
+
+Strong:
+- Media is encrypted peer to peer and the server cannot see or record it. There is no recording.
+- The link is a 144-bit random token that expires after 2 hours and dies when the doctor ends the call. The doctor side needs a separate secret key that only the signed-in doctor receives; a doctor can only call patients they are linked to (or a walk-in by name and phone). Starting, sending, ending and summarising are in the audit log, without content.
+
+Weak (a prototype, not a compliant medical product):
+- **Anyone who has the link can join as the patient**; there is no PIN, and the doctor connects to the newest joiner. Treat the link like a key and check who you see.
+- **Chat, photos and captions stay in the database** after the call; there is no automatic deletion yet.
+- **Captions send audio to Google** (Chrome's speech recognition does that) and translation sends the sentence text to Gemini. The join page tells the patient their speech becomes text and may be translated by AI; captions can be switched off with the CC button.
+- Both people can see each other's network address (inherent to peer to peer without a relay), and signalling goes through our server, so this is not end-to-end verified against a malicious server.
+- No regulatory review (HIPAA, India's DPDP Act), no penetration test.
+
+---
+
+## 💬 Staff messaging
+
+The **Messages** menu in the Doctor and Front Desk portals: people on the left (unread in bold, with a count), the conversation on the right, **New message** to write to anyone on the staff list, text and photos, **Seen** marks, and an unread badge in the menu that updates live. Only the two people in a conversation can read it (administrators cannot), and a photo opens only for those two. The server API already allows all four staff roles; the screen is wired into the Doctor and Front Desk portals.
+
+---
+
+## 📲 WhatsApp self-registration
+
+A crowded front desk cannot type everyone in. A patient scans a QR code that opens WhatsApp and sends "hi". If the number matches no patient, the bot says (in Tamil and English) that it is not registered and that **QUEUE, REPORT and MEDS are locked** until it is. `REGISTER` asks name, date of birth (DD-MM-YYYY) and gender; then it creates the patient (flagged as registered on WhatsApp, identity not yet checked at the desk), replies with the UHID and unlocks the normal menu. A name and birthday that already exist under another number are not duplicated: the patient is sent to the desk. The conversation lives in the database so it survives restarts.
+
+This works through the in-app WhatsApp simulator and through the Meta or Twilio webhook once those are configured (not set on the public demo).
 
 ---
 
@@ -269,8 +340,9 @@ cd careweave/server && npm run test:exasol
 # 4. Exasol scale benchmark (needs Exasol; see "Scale benchmark" above)
 cd careweave/server && npm run demo:scale
 
-# 5. Client tests
+# 5. Client tests (82)
 cd careweave/client && npm test
+#    The server suite has about 200 tests, including the video call signalling, translation (with a stubbed AI), relay configuration, messaging and WhatsApp registration.
 ```
 
 ---
@@ -281,6 +353,8 @@ cd careweave/client && npm test
 - Required: `MONGODB_URI` (the server refuses to start in production without it). Several instances can run at once because sessions and data are in MongoDB.
 - WhatsApp: set `META_APP_SECRET` (Meta app secret, used to verify `X-Hub-Signature-256`; without it production refuses Meta webhook calls), `META_VERIFY_TOKEN` for the one-time handshake, and `WHATSAPP_API_KEY` for n8n and Twilio calls.
 - Optional: set `AI_CONFIG_KEY` (any long random string) to seal the Gemini key stored from the admin portal under your own secret; without it the server derives one from `ATTACHMENT_KEY` or a built-in fallback.
+- Video relay (optional but recommended for calls between different networks): `METERED_DOMAIN` + `METERED_API_KEY`, or `TURN_URLS` + `TURN_USERNAME` + `TURN_CREDENTIAL`. Optional `PUBLIC_APP_URL` fixes the address put in the WhatsApp link.
+- Translation, the AI summary and lab scanning use the Gemini key saved in the admin portal (**Integrations**); keys in the older `AIza…` and the newer `AQ.…` formats are accepted.
 - Lab report attachments (PDF, PNG, JPEG, up to 10 MB) are stored in the MongoDB `files` collection, so every instance serves them and they survive restarts. In the local-file development mode they are written to `server/uploads/store`. Files saved by older versions are still read from `uploads/` on that server's disk if present.
 
 ---
@@ -288,6 +362,10 @@ cd careweave/client && npm test
 ## ⚠️ Known limitations
 
 Still true after the changes above:
+
+- **Video calls:** verified by automated two-browser tests (fake camera, one machine) and by hand on two real devices on **different networks** (Wi-Fi and mobile data), which connected without a relay. It has not been tested across many networks or countries; behind strict firewalls or between countries a call may need a TURN relay (see Deployment notes below), and without one it may stay on "Connecting…".
+- **Captions and translation depend on three things you do not control:** Chrome or Edge speech recognition (accuracy for Tamil varies and was not measured), the browser's speech service being reachable, and the Gemini models being available (they sometimes answer "busy"; the code retries and falls back, then shows the original sentence).
+- **Video chat, photos and captions are kept** after a call and there is no retention policy yet; the link has no PIN. See [How secure is it](#how-secure-is-it-honestly).
 
 - **Rate limiter fails closed.** If MongoDB cannot be reached the limited routes (sign-in, upload) answer 503. In the local-file development mode its counters are in memory.
 - **XSS is reduced, not removed.** The httpOnly cookie keeps the token out of reach of scripts, but a script injected into the page could still make requests as the signed-in user while the page is open. A Content-Security-Policy (no inline or third-party scripts; `vercel.json` for the pages, Helmet for the API, also on Vercel) makes injection harder. It was written without a browser test of every screen, so check the sign-in and print flows after deploying.
