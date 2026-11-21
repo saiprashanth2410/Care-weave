@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { CallApi } from './useCall'
-import { speechSupported, useSpeech } from './useSpeech'
+import { SPEECH_PROBLEM, speechSupported, useSpeech } from './useSpeech'
 
 /**
  * Captions for one side of the call. Each person speaks their own language; the browser turns it into text, and when the other
@@ -10,6 +10,7 @@ export function useCaptions(call: CallApi, initialLang = 'en-IN') {
   const [on, setOn] = useState(true)
   const [lang, setLang] = useState(initialLang)
   const [translate, setTranslate] = useState(true)
+  const [problem, setProblem] = useState('')
   const supported = speechSupported()
   const ready = call.state !== 'starting'
   const { sendLang, peerLang, sendCaption } = call
@@ -18,6 +19,9 @@ export function useCaptions(call: CallApi, initialLang = 'en-IN') {
   useEffect(() => { if (ready) void sendLang(lang) }, [ready, lang, sendLang])
 
   const to = translate && peerLang && peerLang !== lang ? peerLang : undefined
-  useSpeech({ enabled: on && supported && call.micOn && call.state === 'connected', lang, onFinal: (text) => { void sendCaption(text, { lang, to }) } })
-  return { on, toggle: () => setOn((o) => !o), supported, lang, setLang, translate, setTranslate, peerLang, translating: Boolean(to) }
+  useSpeech({ enabled: on && supported && call.micOn && call.state === 'connected', lang, onFinal: (text) => { void sendCaption(text, { lang, to }) }, onProblem: (code) => setProblem(SPEECH_PROBLEM[code] || 'speech recognition stopped') })
+  // Turning captions off and on again is the way to try again after a problem.
+  const toggle = () => { setProblem(''); setOn((o) => !o) }
+  const changeLang = (l: string) => { setProblem(''); setLang(l) }
+  return { on, toggle, problem, supported, lang, setLang: changeLang, translate, setTranslate, peerLang, translating: Boolean(to) }
 }

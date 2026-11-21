@@ -5,6 +5,7 @@ import { catchAsyncRoutes } from '../asyncRoutes.js';
 import { linkedPatientIds } from '../services/access.js';
 import { CALL_LANGUAGES, MAX_SIGNALS_PER_CONSULT, SIGNAL_TYPES } from '../repo/videoConsults.js';
 import { translateSentence } from '../services/translate.js';
+import { iceServers } from '../services/iceServers.js';
 import { sendWhatsAppText } from '../whatsapp/emitter.js';
 import { parseImageDataUrl } from '../services/imageData.js';
 import { ask, MODELS } from '../clinicalSummary.js';
@@ -55,6 +56,14 @@ export function videoPublicRoutes(ctx: AppCtx) {
     if ('error' in r) return res.status(r.status).json({ error: r.error });
     // Only what the patient needs to recognise the call: the doctor's name and their own first name.
     res.json({ doctorName: r.consult.doctorName, patientFirstName: String(r.consult.patientName || '').split(' ')[0], expiresAt: r.consult.expiresAt });
+  });
+
+  // The network helpers for this call, including the relay when the administrator has set one up.
+  router.get('/video/public/:token/ice', async (req, res) => {
+    const r = await open(req.params.token);
+    if ('error' in r) return res.status(r.status).json({ error: r.error });
+    res.set('Cache-Control', 'no-store');
+    res.json(await iceServers());
   });
 
   router.post('/video/public/:token/signal', async (req, res) => {

@@ -47,6 +47,10 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
   });
   const [openCases, setOpenCases] = useState(0);
   const unreadMessages = useUnreadMessages();
+  // The video consultation stays mounted once opened, so going to another page of the portal does not end the call.
+  const [videoMounted, setVideoMounted] = useState(false);
+  const [inCall, setInCall] = useState(false);
+  useEffect(() => { if (section === 'video') setVideoMounted(true); }, [section]);
   useEffect(() => { api.cases().then(c => setOpenCases(c.length)).catch(() => setOpenCases(0)); }, [refresh]);
 
   // Doctor Quick Action Modal Triggers
@@ -96,6 +100,7 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
               <span>{label}</span>
               {navId === 'reconciliation' && openCases > 0 && <span className="nav-count">{openCases}</span>}
               {navId === 'messages' && unreadMessages > 0 && <span className="nav-count">{unreadMessages}</span>}
+              {navId === 'video' && inCall && <span className="nav-count live-call">In call</span>}
             </button>
           ))}
         </nav>
@@ -133,6 +138,7 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
             <ReportIssue className="action-pill" />
             <Link
               to="/analytics"
+              target={inCall ? '_blank' : undefined}
               className="action-pill"
               style={{ textDecoration: 'none', color: '#0c6b6d', borderColor: '#0c6b6d', fontWeight: 600 }}
               title="Exasol Healthcare Analytics Dashboard"
@@ -151,6 +157,19 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
 
         <div className="content">
           {section !== 'overview' && <CriticalBanner items={alerts} onDismiss={id => setAlerts(a => a.filter(x => x.orderId !== id))} />}
+          {inCall && section !== 'video' && (
+            <div className="call-banner" role="status">
+              <span><b>Video consultation in progress.</b> The call is still running in the background.</span>
+              <button type="button" className="primary" onClick={() => setSection('video')}>Return to call</button>
+            </div>
+          )}
+          {videoMounted && (
+            <div style={{ display: section === 'video' ? 'block' : 'none' }}>
+              <PortalBoundary>
+                <DoctorVideoConsult notify={notify} onLive={setInCall} />
+              </PortalBoundary>
+            </div>
+          )}
           <PortalBoundary key={section}>
           {section === 'overview' && (
             <DoctorOverview
@@ -210,8 +229,6 @@ function DoctorWorkspace({ user, onLogout }: { user: User; onLogout: () => void 
               onOpenPatient={handleOpenPatientRecord}
             />
           )}
-
-          {section === 'video' && <DoctorVideoConsult notify={notify} />}
 
           {section === 'messages' && <MessagesPage notify={notify} />}
 

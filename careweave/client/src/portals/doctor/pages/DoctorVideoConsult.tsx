@@ -19,7 +19,7 @@ const NOTES: Record<string, string> = {
 };
 
 /** Start a video consultation with a patient from the doctor portal; the patient joins from a link, no account needed. */
-export function DoctorVideoConsult({ notify }: { notify: (s: string) => void }) {
+export function DoctorVideoConsult({ notify, onLive }: { notify: (s: string) => void; onLive?: (live: boolean) => void }) {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [patientId, setPatientId] = useState('');
   const [walkIn, setWalkIn] = useState(false);
@@ -32,6 +32,16 @@ export function DoctorVideoConsult({ notify }: { notify: (s: string) => void }) 
   const [tab, setTab] = useState<Tab>('details');
   const [seen, setSeen] = useState(0);
   const [summary, setSummary] = useState<Summary>({ loading: false });
+
+  const live = Boolean(started) && !ended;
+  useEffect(() => { onLive?.(live); return () => onLive?.(false); }, [live, onLive]);
+  // Closing or reloading the tab would drop the call: ask first.
+  useEffect(() => {
+    if (!live) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [live]);
 
   const call = useCall({ token: started?.id ?? '', role: 'doctor', doctorKey: started?.doctorKey, enabled: Boolean(started) && !ended });
   const cc = useCaptions(call);
