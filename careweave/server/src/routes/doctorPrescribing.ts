@@ -12,6 +12,10 @@ import type { AuthedRequest } from '../middleware.js';
 import type { Request } from 'express';
 
 // Doctor API: prescriptions, checked for allergy and duplicate therapy before anything is saved.
+/** A repeated molecule or a dangerous drug-drug interaction stops the prescription until the doctor documents why it goes ahead. */
+const STOPS = new Set(['HIGH_COLLISION', 'DRUG_DRUG_INTERACTION']);
+const what = (alerts: { severity: string }[]) => (alerts.some((x) => x.severity === 'DRUG_DRUG_INTERACTION') ? 'Dangerous drug interaction' : 'Duplicate therapy');
+
 export function doctorPrescribingRoutes(ctx: AppCtx, access: DoctorAccess) {
   const router = Router();
   catchAsyncRoutes(router);
@@ -73,14 +77,14 @@ export function doctorPrescribingRoutes(ctx: AppCtx, access: DoctorAccess) {
       return res.status(409).json({ error: `Allergy on record: ${allergy.allergen} (${allergy.severity}). Choose another medicine, or send an override reason of at least 15 characters.` });
     }
     const alerts = await duplicateAlerts(p, medicine, dosage, frequency);
-    const high = alerts.filter((x) => x.severity === 'HIGH_COLLISION');
+    const high = alerts.filter((x) => STOPS.has(x.severity));
     const ov = b.duplicateOverride;
     const overrideOk = !!ov && ov.acknowledgedRisks === true && text(ov.overrideReason, 500).length >= 15;
     const molecules = [...new Set(high.flatMap((x) => x.matchedMolecules))].join(', ');
     if (high.length && !overrideOk) {
-      await audit(req, 'blocked', 'prescription', p.id, `Duplicate therapy: ${medicine} repeats ${molecules} already given as ${high.map((x) => x.conflictingDrug.name).join('; ')}`);
+      await audit(req, 'blocked', 'prescription', p.id, `${what(high)}: ${medicine} repeats ${molecules} already given as ${high.map((x) => x.conflictingDrug.name).join('; ')}`);
       return res.status(409).json({
-        error: `Duplicate therapy: ${molecules} is already being taken. Cancel, or send an override reason of at least 15 characters and acknowledge the risks.`,
+        error: `${what(high)}: ${molecules} is already being taken or interacts with current therapy. Cancel, or send an override reason of at least 15 characters and acknowledge the risks.`,
         code: 'DUPLICATE_THERAPY', alerts, overrideRequired: { overrideReason: 'string (min 15 characters)', acknowledgedRisks: true },
       });
     }
@@ -121,12 +125,12 @@ export function doctorPrescribingRoutes(ctx: AppCtx, access: DoctorAccess) {
         blocked.push({ index: i, kind: 'allergy', error: `Allergy on record: ${allergy.allergen} (${allergy.severity}). Choose another medicine, or give an override reason of at least 15 characters.` });
       }
       const alerts = await duplicateAlerts(p, r.medicine, r.dosage, r.frequency, rows.slice(0, i).map((x: any, j: number) => pendingRx(req, x, j)));
-      const high = alerts.filter((x) => x.severity === 'HIGH_COLLISION');
+      const high = alerts.filter((x) => STOPS.has(x.severity));
       const ov = r.duplicateOverride;
       const overrideOk = !!ov && ov.acknowledgedRisks === true && text(ov.overrideReason, 500).length >= 15;
       if (high.length && !overrideOk) {
         const molecules = [...new Set(high.flatMap((x) => x.matchedMolecules))].join(', ');
-        blocked.push({ index: i, kind: 'duplicate', alerts, error: `Duplicate therapy: ${molecules} is already being taken. Cancel this medicine, or give an override reason of at least 15 characters and acknowledge the risks.` });
+        blocked.push({ index: i, kind: 'duplicate', alerts, error: `${what(high)}: ${molecules} is already being taken or interacts with current therapy. Cancel this medicine, or give an override reason of at least 15 characters and acknowledge the risks.` });
       }
       checks.push({ allergy, high, ov });
     }

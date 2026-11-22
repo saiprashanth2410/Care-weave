@@ -141,3 +141,30 @@ test('batch: the single-medicine route still works, and the audit log records ea
     assert.ok(log.includes('Metformin HCl') && log.includes('Amlodipine Besylate') && log.includes('2 medicine(s) in one prescription'));
   } finally { await srv.close(); }
 });
+
+const eliquis = { medicine: 'Eliquis', dosage: '5 mg', route: 'Oral', frequency: 'Twice daily', duration: '30 days' };
+const brufen = { medicine: 'Brufen', dosage: '400 mg', route: 'Oral', frequency: 'Three times daily', duration: '5 days' };
+
+test('batch: a blood thinner with an NSAID in the same prescription is stopped until the doctor documents why, and nothing is saved', async () => {
+  const { srv, batch, saved } = await setup();
+  try {
+    const r = await batch([eliquis, brufen]);
+    assert.equal(r.status, 409, JSON.stringify(r.json));
+    assert.equal(r.json.code, 'PRESCRIPTION_BLOCKED');
+    const hit = r.json.blocked.find((b: any) => b.index === 1);
+    assert.ok(hit && hit.alerts.some((a: any) => a.severity === 'DRUG_DRUG_INTERACTION'), JSON.stringify(r.json));
+    assert.match(hit.error, /interaction/i);
+    assert.equal((await saved()).length, 0);
+  } finally { await srv.close(); }
+});
+
+test('batch: the interaction can go ahead with a written reason and an acknowledgement, which is audited', async () => {
+  const { srv, batch, saved } = await setup();
+  try {
+    const r = await batch([eliquis, { ...brufen, duplicateOverride: { overrideReason: 'Short course for acute gout flare, GI protection added', acknowledgedRisks: true } }]);
+    assert.equal(r.status, 201, JSON.stringify(r.json));
+    assert.equal((await saved()).length, 2);
+    const audit = (await srv.repos.audit.find({ action: 'override' })) as any[];
+    assert.ok(audit.some((a) => /Short course for acute gout/.test(a.detail)));
+  } finally { await srv.close(); }
+});

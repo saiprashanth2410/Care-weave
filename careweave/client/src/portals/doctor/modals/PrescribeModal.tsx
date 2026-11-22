@@ -76,7 +76,7 @@ export function PrescribeModal({ patient: initPatient, onClose, onSaved }: { pat
     const others = rows.filter(r => r.key !== rowKey && r.medicine.trim()).map(r => ({ medicine: r.medicine, dosage: r.dosage, frequency: r.frequency, duration: r.duration }));
     try {
       const r = await api.validatePrescription({ patientId: selectedPatient.id, medicine, dosage, frequency, alsoPrescribing: others });
-      if (r.alerts.some(a => a.severity === 'HIGH_COLLISION')) { patch(rowKey, { dupAlerts: r.alerts }); setReviewing(rowKey); }
+      if (r.alerts.some(a => a.severity === 'HIGH_COLLISION' || a.severity === 'DRUG_DRUG_INTERACTION')) { patch(rowKey, { dupAlerts: r.alerts }); setReviewing(rowKey); }
     } catch { /* the server checks again when the prescription is signed */ }
   };
 

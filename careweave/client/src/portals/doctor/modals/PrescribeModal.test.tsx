@@ -199,3 +199,23 @@ describe('Prescribe modal: several medicines', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/Document an encounter/)
   })
 })
+
+describe('Prescribe modal: drug-drug interaction', () => {
+  it('a dangerous interaction opens the review (it is no longer ignored) and the order can be cancelled', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.validatePrescription).mockResolvedValue({
+      blocking: false,
+      alerts: [{
+        severity: 'DRUG_DRUG_INTERACTION', matchedMolecules: ['apixaban', 'ibuprofen'],
+        prescribedDrug: { name: 'Brufen', brand: 'Brufen', generic: 'ibuprofen' },
+        conflictingDrug: { name: 'Eliquis', brand: 'Eliquis', generic: 'apixaban', source: 'IN_HOUSE_ENCOUNTER', prescribedDate: '2026-11-20' },
+        clinicalWarning: 'An NSAID with the anticoagulant multiplies bleeding risk.'
+      }]
+    } as never)
+    open()
+    await user.selectOptions(screen.getByLabelText('Add a common medicine'), 'Metformin HCl')
+    expect(await screen.findByText('Critical Drug-Drug Interaction Detected')).toBeInTheDocument()
+    expect(screen.getAllByText(/multiplies bleeding risk/).length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: /Document Override/ })).toBeDisabled()
+  })
+})

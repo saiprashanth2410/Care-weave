@@ -206,7 +206,7 @@ export type Dashboard={
 };
 
 export type CollisionAlert = {
-  severity: 'HIGH_COLLISION' | 'SAME_CLASS_WARNING';
+  severity: 'HIGH_COLLISION' | 'SAME_CLASS_WARNING' | 'DRUG_DRUG_INTERACTION';
   prescribedDrug: { name: string; brand: string; generic: string };
   conflictingDrug: {
     name: string; brand: string; generic: string;
