@@ -1,4 +1,7 @@
 import { GEMINI_PROMPT, Report, ScanError, normalize } from './scanSchema.js';
+import { asError } from './errors.js';
+
+type Step = { type?: string; content?: { text?: string }[] };
 
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/interactions';
 
@@ -27,8 +30,8 @@ async function callModel(model: string, mimeType: string, data: string, key: str
       }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
-  } catch (err: any) {
-    console.log(`[scan] ${model} -> ${err?.name || 'error'} (${mimeType})`);
+  } catch (err) {
+    console.log(`[scan] ${model} -> ${asError(err).name || 'error'} (${mimeType})`);
     return { kind: 'busy' };
   }
   console.log(`[scan] ${model} -> HTTP ${res.status} (${mimeType})`);
@@ -84,10 +87,10 @@ function toReport(raw: string) {
     referralDoctor: str(j.referralDoctor), orderingDoctor: str(j.orderingDoctor), testName: str(j.testName), department: str(j.department),
     priority: j.priority === 'urgent' ? 'urgent' : 'routine',
     impression: str(j.impression),
-    results: (Array.isArray(j.results) ? j.results : []).map((x: any) => ({
+    results: (Array.isArray(j.results) ? j.results : []).map((x: Record<string, any> | null) => ({
       parameter: str(x?.parameter), value: str(x?.value), unit: str(x?.unit),
       referenceRange: str(x?.referenceRange), methodology: str(x?.methodology), subGroup: str(x?.subGroup),
-      flag: ['abnormal', 'critical'].includes(x?.flag) ? x.flag : 'normal', unclear: x?.unclear === true
+      flag: ['abnormal', 'critical'].includes(x?.flag) ? x?.flag : 'normal', unclear: x?.unclear === true
     }))
   });
   if (!parsed.success) throw new ScanError(422, 'The scanner returned something unreadable. Enter the results by hand.');
@@ -114,9 +117,9 @@ export async function extractWithGemini(mimeType: string, data: string, key: str
       if (out.kind === 'rejected') throw new ScanError(422, 'The scanner could not read this file');
       if (out.kind === 'busy') { busy = true; continue; }
       const text = (out.body.steps || [])
-        .filter((step: any) => step.type === 'model_output')
-        .flatMap((step: any) => step.content || [])
-        .map((c: any) => c.text ?? '')
+        .filter((step: Step) => step.type === 'model_output')
+        .flatMap((step: Step) => step.content || [])
+        .map((c: { text?: string }) => c.text ?? '')
         .join('');
       try {
         return { ...toReport(text), model };

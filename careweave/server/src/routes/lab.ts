@@ -12,7 +12,7 @@ import { linkedPatientIds } from '../services/access.js';
 import { FILE_TYPES, LAB_EDITABLE, LAB_NEXT, LAB_STATUSES, OPEN_VISIT, can, cleanResults, resultsSignature } from '../services/labOrders.js';
 import { emitEvent } from '../whatsapp/emitter.js';
 import { ScannerUnavailable, open, scanFile, seal } from '../attachmentSecurity.js';
-import type { AuthedRequest } from '../middleware.js';
+import type { Patient, User } from '../repo/types.js';
 
 /** Requests that carry a base64 file. They are the only ones allowed a large JSON body; see index.ts. */
 export const UPLOAD_ROUTES = [/^\/api\/lab\/extract$/, /^\/api\/lab\/orders\/[^/]+\/attachments$/];
@@ -22,13 +22,13 @@ export function labRoutes(ctx: AppCtx) {
   catchAsyncRoutes(router);
   const { roles, audit } = ctx;
 
-  router.get('/lab/orders', roles('lab'), async (req: AuthedRequest, res) => {
+  router.get('/lab/orders', roles('lab'), async (req, res) => {
     const rows = await ctx.repos.orders.newestFirst();
     await audit(req, 'view', 'labOrder', 'list', `${rows.length} orders`);
     res.json({ data: rows });
   });
 
-  router.get('/lab/orders/:id', roles('lab'), async (req: AuthedRequest, res) => {
+  router.get('/lab/orders/:id', roles('lab'), async (req, res) => {
     const o = await ctx.repos.orders.byId(req.params.id);
     if (!o) return res.status(404).json({ error: 'Order not found' });
     await audit(req, 'view', 'labOrder', o.id);
@@ -36,25 +36,25 @@ export function labRoutes(ctx: AppCtx) {
   });
 
   // The lab sees only what it needs to order a test: identifier, name, age and visit slots. No contact details, no visit reasons.
-  router.get('/lab/patients', roles('lab'), async (req: AuthedRequest, res) => {
+  router.get('/lab/patients', roles('lab'), async (req, res) => {
     const q = text(req.query.query, 60);
     if (q.length < 2) return res.json({ data: [] });
     const found = await ctx.repos.patients.lookup(q, 8);
-    const rows = await Promise.all(found.map(async (p: any) => ({
+    const rows = await Promise.all(found.map(async (p) => ({
       patientId: p.patientId,
       name: p.name,
       ageYears: ageFromDob(p.dob),
       encounters: (await ctx.repos.appointments.forPatient(p.id))
         .filter(OPEN_VISIT)
-        .sort((x: any, y: any) => `${y.date} ${y.time}`.localeCompare(`${x.date} ${x.time}`))
+        .sort((x, y) => `${y.date} ${y.time}`.localeCompare(`${x.date} ${x.time}`))
         .slice(0, 5)
-        .map((a: any) => ({ id: a.id, date: a.date, time: a.time, doctorName: a.doctorName }))
+        .map((a) => ({ id: a.id, date: a.date, time: a.time, doctorName: a.doctorName }))
     })));
     await audit(req, 'search', 'labPatient', 'lookup', `${rows.length} matches`);
     res.json({ data: rows });
   });
 
-  router.post('/lab/orders', roles('lab'), async (req: AuthedRequest, res) => {
+  router.post('/lab/orders', roles('lab'), async (req, res) => {
     const b = req.body || {};
     const testName = text(b.testName);
     const orderingDoctor = text(b.orderingDoctor);
@@ -62,12 +62,12 @@ export function labRoutes(ctx: AppCtx) {
     if (!['M', 'F', 'O'].includes(b.patientGender)) return res.status(400).json({ error: 'Select the patient gender' });
 
     const external = b.external === true;
-    let patient: any = null;
+    let patient: Patient | null = null;
     let encounterId = '';
     if (!external) {
       patient = b.patientId ? await ctx.repos.patients.byRef(String(b.patientId)) : null;
       if (!patient) return res.status(400).json({ error: 'Select a registered patient, or mark this as an external requisition' });
-      const visit = (await ctx.repos.appointments.forPatient(patient.id)).find((a: any) => a.id === b.encounterId && OPEN_VISIT(a));
+      const visit = (await ctx.repos.appointments.forPatient(patient.id)).find((a) => a.id === b.encounterId && OPEN_VISIT(a));
       if (!visit) return res.status(400).json({ error: 'Select one of this patient\'s visits (encounters) for the order' });
       encounterId = visit.id;
     }
@@ -111,7 +111,7 @@ export function labRoutes(ctx: AppCtx) {
     res.status(201).json({ data: o });
   });
 
-  router.patch('/lab/orders/:id', roles('lab'), async (req: AuthedRequest, res) => {
+  router.patch('/lab/orders/:id', roles('lab'), async (req, res) => {
     const before = await ctx.repos.orders.byId(req.params.id);
     if (!before) return res.status(404).json({ error: 'Order not found' });
     const expected = expectedVersion(req, before);
@@ -161,7 +161,7 @@ export function labRoutes(ctx: AppCtx) {
       }
       if (['awaiting_verification', 'verified', 'released'].includes(status)) {
         const have = results ?? o.results;
-        if (!Array.isArray(have) || !have.some((r: any) => text(r?.value))) {
+        if (!Array.isArray(have) || !have.some((r) => text(r?.value))) {
           return res.status(400).json({ error: 'Enter at least one result before sending for verification' });
         }
       }
@@ -210,23 +210,23 @@ export function labRoutes(ctx: AppCtx) {
       amendment ? `${amendment.changes.length} value(s) amended · ${amendment.reason}` : status ? `${status}${o.statusReason ? ' · ' + o.statusReason : ''}` : 'Fields updated');
     if (labReleased) {
       const pt = o.registeredPatientRef ? await ctx.repos.patients.byRef(o.registeredPatientRef) : null;
-      const rs = (o.results || []).filter((r: any) => r.value);
+      const rs = (o.results || []).filter((r) => r.value);
       await emitEvent('LAB_REPORT_RELEASED', {
         patientId: o.patientId, name: o.patientName, phone: pt?.phone, testName: o.testName, pathologist: o.verifiedBy, verifiedAt: o.verifiedAt,
-        criticalCount: rs.filter((r: any) => r.flag === 'critical').length, abnormalCount: rs.filter((r: any) => r.flag === 'abnormal').length,
-        summary: rs.slice(0, 10).map((r: any) => ({ parameter: r.parameter, value: r.value, unit: r.unit, flag: r.flag || 'normal' }))
+        criticalCount: rs.filter((r) => r.flag === 'critical').length, abnormalCount: rs.filter((r) => r.flag === 'abnormal').length,
+        summary: rs.slice(0, 10).map((r) => ({ parameter: r.parameter, value: r.value, unit: r.unit, flag: r.flag || 'normal' }))
       });
       // A critical value cannot wait for the doctor to open the lab page: tell the ordering and linked doctors now.
-      const critical = rs.filter((r: any) => r.flag === 'critical');
+      const critical = rs.filter((r) => r.flag === 'critical');
       if (critical.length) {
-        const doctors: any[] = await ctx.repos.users.byRole('doctor');
+        const doctors: User[] = await ctx.repos.users.byRole('doctor');
         const who = new Set<string>();
         for (const d of doctors) {
           if (d.id === o.createdBy || d.name === o.orderingDoctor || (pt && (await linkedPatientIds(ctx.repos, d.id)).has(pt.id))) who.add(d.id);
         }
         await ctx.live.publish('critical', {
           orderId: o.id, patientName: o.patientName, patientId: o.patientId, testName: o.testName, at: now(),
-          values: critical.slice(0, 6).map((r: any) => ({ parameter: r.parameter, value: r.value, unit: r.unit })),
+          values: critical.slice(0, 6).map((r) => ({ parameter: r.parameter, value: r.value, unit: r.unit })),
         }, [...who]);
         await audit(req, 'alert', 'labOrder', o.id, `Critical value pushed to ${who.size} doctor(s)`);
       }
@@ -235,7 +235,7 @@ export function labRoutes(ctx: AppCtx) {
   });
 
   // ── Report files ────────────────────────────────────────────────────────────
-  router.post('/lab/orders/:id/attachments', roles('lab'), ctx.limits.upload, async (req: AuthedRequest, res) => {
+  router.post('/lab/orders/:id/attachments', roles('lab'), ctx.limits.upload, async (req, res) => {
     const o = await ctx.repos.orders.byId(req.params.id);
     if (!o) return res.status(404).json({ error: 'Order not found' });
     if (o.status === 'cancelled') return res.status(409).json({ error: 'This order was cancelled' });
@@ -279,10 +279,10 @@ export function labRoutes(ctx: AppCtx) {
   });
 
   // Files are served only to signed-in lab and doctor users, never from a public folder.
-  router.get('/lab/orders/:id/attachments/:attId', roles('lab', 'doctor'), async (req: AuthedRequest, res) => {
+  router.get('/lab/orders/:id/attachments/:attId', roles('lab', 'doctor'), async (req, res) => {
     const o = await ctx.repos.orders.byId(req.params.id);
-    const meta = o?.attachments?.find((a: any) => a.id === req.params.attId);
-    if (!meta) return res.status(404).json({ error: 'File not found' });
+    const meta = o?.attachments?.find((a: { id: string }) => a.id === req.params.attId);
+    if (!o || !meta) return res.status(404).json({ error: 'File not found' });
     if (req.user.role === 'doctor' && !(o.registeredPatientRef && (await linkedPatientIds(ctx.repos, req.user.id)).has(o.registeredPatientRef))) {
       return res.status(403).json({ error: 'You are not linked to this patient' });
     }

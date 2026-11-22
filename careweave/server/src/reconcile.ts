@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import type { Patient, ExternalRecord, LabOrder, Prescription } from './repo/types.js';
 
 // Rule-based reconciliation for imported external records.
 // Nothing here deletes or merges anything. It only decides what a human has to review, and why.
@@ -43,9 +44,9 @@ function nameRelation(a: string, b: string): 'exact' | 'similar' | 'none' {
   return ratio >= 0.85 ? 'similar' : 'none';
 }
 
-export type Candidate = { patient: any; score: number; evidence: string[]; conflicts: string[]; identifierMatch: boolean; strong: boolean };
+export type Candidate = { patient: Patient; score: number; evidence: string[]; conflicts: string[]; identifierMatch: boolean; strong: boolean };
 
-export function scoreCandidate(p: any, who: Identity): Candidate {
+export function scoreCandidate(p: Patient, who: Identity): Candidate {
   const evidence: string[] = [];
   const conflicts: string[] = [];
   let score = 0;
@@ -72,7 +73,7 @@ export type MatchResult =
   | { status: 'ambiguous'; candidates: Candidate[] }
   | { status: 'unmatched'; candidates: [] };
 
-export function matchPatient(patients: any[], who: Identity): MatchResult {
+export function matchPatient(patients: Patient[], who: Identity): MatchResult {
   const scored = patients
     .map((p) => scoreCandidate(p, who))
     .filter((c) => c.score >= POLICY.candidateThreshold)
@@ -105,7 +106,7 @@ export type Issue = {
   sideBySide?: { a: { title: string; fields: { label: string; value: string }[] }; b: { title: string; fields: { label: string; value: string }[] } };
 };
 
-export function incompleteIssues(rec: any): Issue[] {
+export function incompleteIssues(rec: ExternalRecord): Issue[] {
   const c = rec.content ?? {};
   const missing: string[] = [];
   if (!clean(rec.eventDate)) missing.push('event date');
@@ -121,7 +122,7 @@ export function incompleteIssues(rec: any): Issue[] {
 }
 
 /** Compare one imported record with what is already on the patient's chart. */
-export function findIssues(rec: any, existingExternal: any[], internalLabs: any[], internalRx: any[]): Issue[] {
+export function findIssues(rec: ExternalRecord, existingExternal: ExternalRecord[], internalLabs: LabOrder[], internalRx: Prescription[]): Issue[] {
   const issues: Issue[] = [...incompleteIssues(rec)];
   const sum = checksum(rec.content);
   const side = (b: any, bTitle: string) => ({
@@ -162,7 +163,7 @@ export function findIssues(rec: any, existingExternal: any[], internalLabs: any[
   if (rec.kind === 'medication') {
     const med = key('medication', rec.content);
     const sameDrug = (m: string) => !!med && !!m && (m.toLowerCase().includes(med) || med.includes(m.toLowerCase()));
-    const compare = (title: string, other: { medicine: string; dosage?: string; frequency?: string; route?: string }) => {
+    const compare = (title: string, other: { medicine?: string; dosage?: string; frequency?: string; route?: string }) => {
       const differs = clean(other.dosage).toLowerCase() !== clean(rec.content?.dosage).toLowerCase() || clean(other.frequency).toLowerCase() !== clean(rec.content?.frequency).toLowerCase();
       issues.push({
         type: differs ? 'conflict' : 'duplicate',
@@ -173,7 +174,7 @@ export function findIssues(rec: any, existingExternal: any[], internalLabs: any[
       });
     };
     for (const rx of internalRx) if (rx.status !== 'Discontinued' && sameDrug(rx.medicine)) compare(`prescription ${rx.id} (${rx.prescribingClinician})`, rx);
-    for (const e of existingExternal) if (e.id !== rec.id && e.kind === 'medication' && e.status !== 'Kept separate' && sameDrug(key('medication', e.content)) && e.checksum !== sum && !(e.facility === rec.facility && e.sourceRecordId === rec.sourceRecordId)) compare(`${e.facility} record ${e.sourceRecordId || e.id}`, e.content);
+    for (const e of existingExternal) if (e.id !== rec.id && e.kind === 'medication' && e.status !== 'Kept separate' && sameDrug(key('medication', e.content)) && e.checksum !== sum && !(e.facility === rec.facility && e.sourceRecordId === rec.sourceRecordId)) compare(`${e.facility} record ${e.sourceRecordId || e.id}`, e.content ?? {});
   }
   return issues;
 }

@@ -18,9 +18,9 @@ export function labelToMinutes(label: string): number | null {
 }
 
 /** A doctor's shift, falling back to the default for anyone who has none set. */
-export const shiftOf = (u: any) => ({
-  start: HHMM.test(u?.shiftStart || '') ? u.shiftStart : DEFAULT_SHIFT.start,
-  end: HHMM.test(u?.shiftEnd || '') ? u.shiftEnd : DEFAULT_SHIFT.end,
+export const shiftOf = (u: Record<string, any> | null | undefined) => ({
+  start: HHMM.test(u?.shiftStart || '') ? (u?.shiftStart as string) : DEFAULT_SHIFT.start,
+  end: HHMM.test(u?.shiftEnd || '') ? (u?.shiftEnd as string) : DEFAULT_SHIFT.end,
 });
 
 /** The slot labels that fall inside a shift. */

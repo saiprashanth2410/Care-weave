@@ -4,7 +4,7 @@ import { isoToday } from '../util.js';
 import { replyTo } from '../whatsapp/messages.js';
 import { unregisteredReply } from './whatsappRegister.js';
 
-const digitsOf = (v: any) => String(v ?? '').replace(/\D/g, '');
+const digitsOf = (v: unknown) => String(v ?? '').replace(/\D/g, '');
 
 /**
  * The records the WhatsApp replies read, limited to what one sender can ask about: the patients matching the phone or UHID,
@@ -18,9 +18,9 @@ export async function whatsappView(repos: Repos, q: { phone?: string; uhid?: str
     uhid ? repos.patients.find({ $or: [{ patientId: exactCI(uhid) }, { id: uhid }] }) : [],
     digitsOf(q.phone).length >= 7 ? repos.patients.byPhone(tail) : [],
   ]);
-  const patients = [...new Map([...byUhid, ...byPhone].map((p: any) => [p.id, p])).values()];
-  const ids = patients.map((p: any) => p.id);
-  const refs = patients.flatMap((p: any) => [p.id, p.patientId]);
+  const patients = [...new Map([...byUhid, ...byPhone].map((p) => [p.id, p])).values()];
+  const ids = patients.map((p) => p.id);
+  const refs = patients.flatMap((p) => [p.id, p.patientId]);
   const [today, theirs, labOrders, prescriptions, doctors] = await Promise.all([
     repos.appointments.onDay(isoToday()),
     repos.appointments.find({ patientId: { $in: ids } }),
@@ -28,8 +28,8 @@ export async function whatsappView(repos: Repos, q: { phone?: string; uhid?: str
     repos.prescriptions.find({ patientId: { $in: ids } }),
     repos.users.byRole('doctor'),
   ]);
-  const appointments = [...new Map([...today, ...theirs].map((a: any) => [a.id, a])).values()];
-  const rooms = Object.fromEntries(doctors.filter((d: any) => d.room).map((d: any) => [d.id, d.room]));
+  const appointments = [...new Map([...today, ...theirs].map((a) => [a.id, a])).values()];
+  const rooms = Object.fromEntries(doctors.filter((d) => d.room).map((d) => [d.id, d.room]));
   return { patients, appointments, labOrders, prescriptions, rooms };
 }
 

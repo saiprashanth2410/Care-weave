@@ -1,5 +1,6 @@
 // Storage contract shared by the MongoDB backend and the local-JSON dev fallback.
 // Repos talk only to this interface, so the same route code runs against either.
+import type { Row } from './types.js';
 
 export class ConflictError extends Error {
   constructor(message = 'Record was changed by someone else, reload and retry') {
@@ -34,21 +35,21 @@ export const VERSIONED = new Set([
   'referrals', 'carePlans', 'vitals', 'externalRecords', 'cases', 'users', 'meta', 'inbox',
 ]);
 
-export interface Collection {
+export interface Collection<T extends Row = Row> {
   readonly name: string;
   readonly versioned: boolean;
-  find(filter?: Filter, opts?: FindOpts): Promise<any[]>;
-  findOne(filter: Filter): Promise<any | null>;
+  find(filter?: Filter, opts?: FindOpts): Promise<T[]>;
+  findOne(filter: Filter): Promise<T | null>;
   count(filter?: Filter): Promise<number>;
   /** Fails with DuplicateError when `id` is taken. A versioned document starts at version 1. */
-  insert(doc: any): Promise<any>;
-  insertMany(docs: any[]): Promise<void>;
+  insert(doc: T): Promise<T>;
+  insertMany(docs: T[]): Promise<void>;
   /**
    * Applies `changes` to `current` (an `undefined` value removes the field) and returns the new document.
    * Versioned collections write `updateOne({ id, version: expected }, { $set, $inc: { version: 1 } })` and throw
    * ConflictError when nothing matched; `expected` defaults to `current.version`.
    */
-  update(current: any, changes: Filter, expected?: number): Promise<any>;
+  update(current: T, changes: Filter, expected?: number): Promise<T>;
   remove(filter: Filter): Promise<number>;
   /**
    * Counts one hit for `key` in a window that starts at the first hit and lasts `windowMs`, as one atomic operation, so
@@ -76,7 +77,7 @@ export interface Store {
   readonly files: FileStore;
   /** 'mongo' = every read and write goes to MongoDB. 'local' = in-process arrays saved to a JSON file (development only). */
   readonly mode: 'mongo' | 'local';
-  collection(name: string): Collection;
+  collection<T extends Row = Row>(name: string): Collection<T>;
   /**
    * Runs `fn` against a view of the store whose writes all commit together or not at all: if `fn` throws, none of them are kept.
    * MongoDB: a multi-document transaction (needs a replica set, which Atlas always is). The local file store restores a snapshot.
@@ -89,7 +90,7 @@ export interface Store {
    * replica set). Resolves to a function that stops watching, and rejects when the database cannot do it; callers then poll instead.
    * Not offered by the local file store.
    */
-  watchInserts?(collection: string, onInsert: (doc: any) => void, onLost: (err: Error) => void): Promise<() => void>;
+  watchInserts?(collection: string, onInsert: (doc: Row) => void, onLost: (err: Error) => void): Promise<() => void>;
   close(): Promise<void>;
 }
 

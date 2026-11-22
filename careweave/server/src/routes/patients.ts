@@ -6,14 +6,13 @@ import { expectedVersion } from '../middleware.js';
 import { DuplicateError } from '../repo/index.js';
 import { adminPatientView, id, now } from '../util.js';
 import { linkedPatientIds } from '../services/access.js';
-import type { AuthedRequest } from '../middleware.js';
 
 export function patientRoutes(ctx: AppCtx) {
   const router = Router();
   catchAsyncRoutes(router);
   const { roles, audit, auditOnce } = ctx;
 
-  router.get('/patients', roles('receptionist', 'doctor'), async (req: AuthedRequest, res) => {
+  router.get('/patients', roles('receptionist', 'doctor'), async (req, res) => {
     const q = String(req.query.query || '').trim();
     const linked = req.user.role === 'doctor' ? [...(await linkedPatientIds(ctx.repos, req.user.id))] : null;
     // Paged so a large directory never goes to the browser in one response.
@@ -25,7 +24,7 @@ export function patientRoutes(ctx: AppCtx) {
     res.json(rows.map(adminPatientView));
   });
 
-  router.post('/patients', roles('receptionist', 'doctor', 'lab'), async (req: AuthedRequest, res) => {
+  router.post('/patients', roles('receptionist', 'doctor', 'lab'), async (req, res) => {
     const { name, dob, phone, email, emergencyContact, _forceCreate, risk, gender } = req.body || {};
     if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'Full name is required' });
     if (typeof dob !== 'string' || !dob) return res.status(400).json({ error: 'Date of birth is required' });
@@ -65,7 +64,7 @@ export function patientRoutes(ctx: AppCtx) {
     res.status(503).json({ error: 'Could not allocate a patient code. Try again.' });
   });
 
-  router.get('/patients/:id/admin', roles('receptionist', 'doctor', 'lab'), async (req: AuthedRequest, res) => {
+  router.get('/patients/:id/admin', roles('receptionist', 'doctor', 'lab'), async (req, res) => {
     const p = await ctx.repos.patients.byRef(req.params.id);
     if (!p) return res.status(404).json({ error: 'Patient not found' });
     await audit(req, 'read', 'patient', p.id, 'Open administrative patient profile');
@@ -73,13 +72,13 @@ export function patientRoutes(ctx: AppCtx) {
       ctx.repos.appointments.forPatient(p.id),
       ctx.repos.orders.find({ $or: [{ registeredPatientRef: p.id }, { patientId: p.patientId }, { patientUhid: p.patientId }] }, { sort: { orderedAt: -1 } }),
     ]);
-    const appointments = appts.map((a: any) => ({
+    const appointments = appts.map((a) => ({
       id: a.id, date: a.date, time: a.time, reason: a.reason, status: a.status, doctorName: a.doctorName, checkedInAt: a.checkedInAt
     }));
     res.json({ ...adminPatientView(p), appointments, labOrders });
   });
 
-  router.patch('/patients/:id', roles('receptionist'), async (req: AuthedRequest, res) => {
+  router.patch('/patients/:id', roles('receptionist'), async (req, res) => {
     const p = await ctx.repos.patients.byRef(req.params.id);
     if (!p) return res.status(404).json({ error: 'Patient not found' });
     const { name, phone, email, emergencyContact } = req.body || {};

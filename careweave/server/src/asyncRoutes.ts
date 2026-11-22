@@ -1,6 +1,6 @@
 import type { IRouter } from 'express';
-import type { AuthedRequest } from './middleware.js';
 import type { NextFunction, Response } from 'express';
+import type { Request } from 'express';
 
 // Express 4 does not catch a rejected async handler: one bad request body would crash the whole process.
 // Wrapping every route handler once makes a throw reach the error middleware instead.
@@ -11,7 +11,7 @@ export function catchAsyncRoutes(app: IRouter) {
       handlers.length === 0
         ? register(path)
         : register(path, ...handlers.map((h) => (typeof h === 'function' && h.length < 4
-            ? (req: AuthedRequest, res: Response, next: NextFunction) => Promise.resolve(h(req, res, next)).catch(next)
+            ? (req: Request, res: Response, next: NextFunction) => Promise.resolve(h(req, res, next)).catch(next)
             : h)));
   }
 }

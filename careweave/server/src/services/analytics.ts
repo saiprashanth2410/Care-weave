@@ -1,4 +1,5 @@
-import type { Repos } from '../repo/index.js';
+import type { Repos, Row } from '../repo/index.js';
+import type { Filter, FindOpts } from '../repo/store.js';
 import { ConflictError, DuplicateError } from '../repo/index.js';
 import { syncDataToExasol, type ExasolPort, type SyncKind, type SyncResult, type SyncSource } from '../exasol/sync.js';
 
@@ -20,7 +21,7 @@ async function* pageThrough(find: (filter: Record<string, any>, opts: { sort: Re
 }
 
 export function pagedSource(repos: Repos): SyncSource {
-  const finders: Record<SyncKind, Repos['appointments']['find']> = {
+  const finders: Record<SyncKind, (filter?: Filter, opts?: FindOpts) => Promise<Row[]>> = {
     appointments: repos.appointments.find, labOrders: repos.orders.find, prescriptions: repos.prescriptions.find, syntheticHistory: repos.syntheticHistory.find,
   };
   return { pages: (kind, since) => pageThrough((f, o) => finders[kind](f, o), since) };
@@ -52,7 +53,7 @@ export async function runAnalyticsSync(repos: Repos, opts: { full?: boolean; por
   } finally {
     const done: Record<string, any> = { lockedUntil: undefined };
     if (result?.success) Object.assign(done, { watermark: startedAt.toISOString(), lastSyncAt: new Date().toISOString(), lastMode: result.mode, lastRows: result.syncedVisits + result.syncedLabOrders + result.syncedPrescriptions });
-    await repos.meta.update(meta, done).catch((e: any) => console.error('Could not record the sync result:', e?.message));
+    await repos.meta.update(meta, done).catch((e) => console.error('Could not record the sync result:', e?.message));
   }
 }
 

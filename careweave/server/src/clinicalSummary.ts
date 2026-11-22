@@ -4,6 +4,8 @@
 // Privacy: the text sent to the model has no name, phone, UHID or address. Only age, sex and clinical facts leave
 // the server, and the request asks the API not to store it.
 
+type Step = { type?: string; content?: { text?: string }[] };
+
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/interactions';
 export const MODELS = ['gemma-4-26b-a4b-it', 'gemini-3.6-flash'];
 const TIMEOUT_MS = 20_000;
@@ -76,7 +78,7 @@ export async function ask(model: string, text: string, key: string, timeoutMs = 
     });
     if (!res.ok) return null;
     const body: any = await res.json();
-    const out = (body.steps || []).filter((s: any) => s.type === 'model_output').flatMap((s: any) => s.content || []).map((c: any) => c.text ?? '').join('').trim();
+    const out = (body.steps || []).filter((s: Step) => s.type === 'model_output').flatMap((s: Step) => s.content || []).map((c: { text?: string }) => c.text ?? '').join('').trim();
     return out || null;
   } catch {
     return null;

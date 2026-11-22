@@ -1,15 +1,16 @@
 import type { Collection, Filter, FindOpts, IndexSpec } from './store.js';
+import type { Row } from './types.js';
 
 /** What every collection offers; each module adds the queries its callers need. */
-export function baseRepo(c: Collection) {
+export function baseRepo<T extends Row = Row>(c: Collection<T>) {
   return {
     find: (filter?: Filter, opts?: FindOpts) => c.find(filter, opts),
     findOne: (filter: Filter) => c.findOne(filter),
     byId: (id: string) => c.findOne({ id }),
     count: (filter?: Filter) => c.count(filter),
-    insert: (doc: any) => c.insert(doc),
-    insertMany: (docs: any[]) => c.insertMany(docs),
-    update: (current: any, changes: Filter, expected?: number) => c.update(current, changes, expected),
+    insert: (doc: T) => c.insert(doc),
+    insertMany: (docs: T[]) => c.insertMany(docs),
+    update: (current: T, changes: Filter, expected?: number) => c.update(current, changes, expected),
     remove: (filter: Filter) => c.remove(filter),
   };
 }

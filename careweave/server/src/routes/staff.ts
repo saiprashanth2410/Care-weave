@@ -9,19 +9,20 @@ import { generatePassword } from '../services/firebaseUsers.js';
 import { HHMM, hhmmToMinutes, shiftOf } from '../services/slots.js';
 import { rememberDeletedStaff } from '../services/staff.js';
 import { id, now, text } from '../util.js';
-import type { AuthedRequest } from '../middleware.js';
+import { asError } from '../errors.js';
+import type { User } from '../repo/types.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** What an administrator may see of an account. Never the password hash. */
-const view = (u: any) => ({
+const view = (u: User) => ({
   id: u.id, name: u.name, email: u.email, role: u.role, facility: u.facility || '', permissions: u.permissions || [],
   active: u.active !== false, localLogin: !!u.passwordHash, firebaseLinked: !!u.firebaseUid, version: u.version,
   room: u.room || '', shiftStart: shiftOf(u).start, shiftEnd: shiftOf(u).end,
 });
 
 /** Room and working hours (doctors). Returns the cleaned fields, or an error message. */
-function cleanDesk(b: any, current?: { shiftStart?: string; shiftEnd?: string }): { fields: Record<string, string> } | { error: string } {
+function cleanDesk(b: any, current?: Record<string, any>): { fields: Record<string, string> } | { error: string } {
   const fields: Record<string, string> = {};
   if (b.room !== undefined) fields.room = text(b.room, 30);
   for (const k of ['shiftStart', 'shiftEnd'] as const) {
@@ -68,14 +69,14 @@ export function staffRoutes(ctx: AppCtx) {
     res.json(all.map(view));
   });
 
-  router.post('/staff', admin, async (req: AuthedRequest, res) => {
+  router.post('/staff', admin, async (req, res) => {
     const b = req.body || {};
     const name = text(b.name, 80);
     const email = text(b.email, 120).toLowerCase();
     if (name.length < 2) return res.status(400).json({ error: 'Enter the staff member\'s name' });
     if (!EMAIL.test(email)) return res.status(400).json({ error: 'Enter a valid email address' });
     if (!isRole(b.role)) return res.status(400).json({ error: `Role must be one of: ${ROLES.join(', ')}` });
-    const permissions = b.permissions === undefined ? DEFAULT_PERMISSIONS[b.role] : cleanPermissions(b.role, b.permissions);
+    const permissions = b.permissions === undefined ? DEFAULT_PERMISSIONS[b.role as StaffRole] : cleanPermissions(b.role, b.permissions);
     if (!permissions) return res.status(400).json({ error: 'Permissions must be a list' });
     const password = typeof b.password === 'string' ? b.password : '';
     if (password && password.length < 8) return res.status(400).json({ error: 'A password needs at least 8 characters' });
@@ -92,8 +93,8 @@ export function staffRoutes(ctx: AppCtx) {
         const made = await fb.create({ email, name, password: firebasePassword });
         firebase = made.existed ? 'existing' : 'created';
         if (!made.existed && !password) temporaryPassword = firebasePassword;
-      } catch (err: any) {
-        console.error('Firebase account creation failed:', err?.code || err?.message);
+      } catch (err) {
+        console.error('Firebase account creation failed:', asError(err).code || asError(err).message);
         return res.status(502).json({ error: 'Could not create the Firebase sign-in account. Nothing was saved. Check the server\'s Firebase credentials.' });
       }
     }
@@ -114,7 +115,7 @@ export function staffRoutes(ctx: AppCtx) {
     res.status(201).json({ ...view(u), firebase, ...(temporaryPassword ? { temporaryPassword } : {}) });
   });
 
-  router.patch('/staff/:id', admin, async (req: AuthedRequest, res) => {
+  router.patch('/staff/:id', admin, async (req, res) => {
     const u = await ctx.repos.users.byId(String(req.params.id));
     if (!u) return res.status(404).json({ error: 'Staff account not found' });
     const b = req.body || {};
@@ -167,7 +168,7 @@ export function staffRoutes(ctx: AppCtx) {
     }
     const saved = await ctx.repos.users.update(u, changes, expectedVersion(req, u));
     // Firebase is told too, but the staff record is what the server checks on every request, so a failure here does not leave access open.
-    if (changes.active !== undefined) await ctx.firebaseUsers.setDisabled(u.email, !changes.active).catch((e: any) => console.error('Firebase disable failed:', e?.code || e?.message));
+    if (changes.active !== undefined) await ctx.firebaseUsers.setDisabled(u.email, !changes.active).catch((e) => console.error('Firebase disable failed:', e?.code || e?.message));
     // A disabled account must stop working at once, not when its session happens to expire.
     if (changes.active === false) await ctx.repos.sessions.removeForUser(u.id);
     await audit(req, 'update', 'staff', u.id, `${u.email}: ${said.join('; ') || 'details updated'}`);
@@ -176,7 +177,7 @@ export function staffRoutes(ctx: AppCtx) {
 
   // Permanent. An account must be disabled first, so it takes two deliberate steps, and nobody deletes their own.
   // The records it touched keep the name that was written on them; only the sign-in and the directory entry go.
-  router.delete('/staff/:id', admin, async (req: AuthedRequest, res) => {
+  router.delete('/staff/:id', admin, async (req, res) => {
     const u = await ctx.repos.users.byId(String(req.params.id));
     if (!u) return res.status(404).json({ error: 'Staff account not found' });
     if (u.id === req.user.id) return res.status(400).json({ error: 'You cannot delete your own account' });
@@ -186,7 +187,7 @@ export function staffRoutes(ctx: AppCtx) {
     await rememberDeletedStaff(ctx.repos, u.email);
     let firebase: 'removed' | 'not-configured' | 'failed' = 'not-configured';
     if (ctx.firebaseUsers.configured) {
-      firebase = await ctx.firebaseUsers.remove(u.email).then(() => 'removed' as const).catch((e: any) => {
+      firebase = await ctx.firebaseUsers.remove(u.email).then(() => 'removed' as const).catch((e) => {
         console.error('Firebase delete failed:', e?.code || e?.message);
         return 'failed' as const; // the person cannot sign in anyway: the server only lets in people in the staff directory
       });
@@ -196,7 +197,7 @@ export function staffRoutes(ctx: AppCtx) {
   });
 
   // A link the person opens to choose their own password. Better than passing a password around.
-  router.post('/staff/:id/reset-link', admin, async (req: AuthedRequest, res) => {
+  router.post('/staff/:id/reset-link', admin, async (req, res) => {
     const u = await ctx.repos.users.byId(String(req.params.id));
     if (!u) return res.status(404).json({ error: 'Staff account not found' });
     if (!ctx.firebaseUsers.configured) return res.status(400).json({ error: 'Reset links need Firebase account management to be configured' });

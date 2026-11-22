@@ -4,13 +4,13 @@ import { getAnalyticsEngineStatus } from './client.js';
 import { getAnalyticsOverview } from './queries.js';
 import { forceFullNextSync, overviewSnapshot, runAnalyticsSync, syncStatus } from '../services/analytics.js';
 import { generateSampleHistory } from './sampleHistory.js';
-import type { AuthedRequest } from '../middleware.js';
+import { asError } from '../errors.js';
 
 interface AnalyticsCtx {
   app: IRouter;
   repos: () => Repos;
   roles: (...allowed: string[]) => any;
-  audit: (req: AuthedRequest, action: string, entity: string, entityId: string, detail: string) => Promise<void>;
+  audit: (req: Request, action: string, entity: string, entityId: string, detail: string) => Promise<void>;
   sampleAllowed: boolean;
 }
 
@@ -22,11 +22,11 @@ export function registerExasolAnalyticsRoutes({ app, repos, roles, audit, sample
     try {
       const status = await getAnalyticsEngineStatus();
       res.json(status);
-    } catch (err: any) {
+    } catch (err) {
       res.status(500).json({
         connected: false,
         engine: 'Application Store (Exasol offline)',
-        error: err?.message || 'Health check error',
+        error: asError(err).message || 'Health check error',
       });
     }
   });
@@ -41,7 +41,7 @@ export function registerExasolAnalyticsRoutes({ app, repos, roles, audit, sample
       const overview = await getAnalyticsOverview(snapshot);
       // The window applies to the figures computed here; when Exasol answers, its tables hold all history.
       res.json({ ...overview, fallbackWindowDays: snapshot.windowDays });
-    } catch (err: any) {
+    } catch (err) {
       console.error('[Analytics Overview Error]:', err);
       res.status(500).json({ error: 'Failed to generate healthcare analytics overview' });
     }
@@ -54,7 +54,7 @@ export function registerExasolAnalyticsRoutes({ app, repos, roles, audit, sample
    * Adds or removes a reproducible, clearly synthetic 30-day history (visits, lab orders, prescriptions) for the analytics only.
    * It is kept apart from the records the portals show.
    */
-  app.post('/analytics/sample-history', roles('receptionist', 'doctor', 'lab'), async (req: AuthedRequest, res: Response) => {
+  app.post('/analytics/sample-history', roles('receptionist', 'doctor', 'lab'), async (req, res: Response) => {
     if (!sampleAllowed) return res.status(403).json({ error: 'Sample data is switched off on this server' });
     const history = repos().syntheticHistory;
     if (req.body?.remove === true) {
@@ -78,7 +78,7 @@ export function registerExasolAnalyticsRoutes({ app, repos, roles, audit, sample
 
   app.get('/analytics/sync-status', roles('receptionist', 'doctor', 'lab'), async (_req: Request, res: Response) => res.json(await syncStatus(repos())));
 
-  app.post('/analytics/sync', roles('receptionist', 'doctor', 'lab'), async (req: AuthedRequest, res: Response) => {
+  app.post('/analytics/sync', roles('receptionist', 'doctor', 'lab'), async (req, res: Response) => {
     try {
       const result = await runAnalyticsSync(repos(), { full: req.body?.full === true });
       if (result.busy) return res.status(409).json(result);
@@ -93,8 +93,8 @@ export function registerExasolAnalyticsRoutes({ app, repos, roles, audit, sample
       );
       // A failed sync is an error response, so the client cannot mistake it for a success.
       res.status(result.success ? 200 : 502).json(result);
-    } catch (err: any) {
-      res.status(500).json({ error: err?.message || 'Sync pipeline failed' });
+    } catch (err) {
+      res.status(500).json({ error: asError(err).message || 'Sync pipeline failed' });
     }
   });
 }

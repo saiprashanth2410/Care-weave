@@ -1,5 +1,6 @@
 import { baseRepo, idIndex } from './base.js';
 import type { Collection, IndexSpec } from './store.js';
+import type { LabOrder } from './types.js';
 
 // Lab orders. The collection is named "labOrders"; `orders` is what the rest of the code calls it.
 export const ordersIndexes: IndexSpec[] = [
@@ -11,7 +12,7 @@ export const ordersIndexes: IndexSpec[] = [
   { keys: { updatedAt: 1 } },
 ];
 
-export const ordersRepo = (c: Collection) => ({
+export const ordersRepo = (c: Collection<LabOrder>) => ({
   ...baseRepo(c),
   newestFirst: (filter?: Record<string, any>) => c.find(filter, { sort: { orderedAt: -1 } }),
   /** Orders that belong to a registered patient: linked by reference, or by the patient code on a non-external order. */

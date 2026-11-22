@@ -2,6 +2,7 @@ import { queryExasol, getAnalyticsEngineStatus } from './client.js';
 import { deriveLabOrders, deriveRx, deriveVisits } from './derive.js';
 import * as fallback from './metrics.js';
 import { analyticsInput } from './sampleHistory.js';
+import { asError } from '../errors.js';
 import type {
   AnalyticsOverviewResponse, DailyVisitMetric, DataQuality, DepartmentWorkloadMetric, ExecutedQuery, LabStageMetric, LabTatMetric, PharmacyConsumptionMetric,
 } from './types.js';
@@ -9,7 +10,7 @@ import type {
 type Metrics = Pick<AnalyticsOverviewResponse, 'visitsTrend' | 'departmentWorkload' | 'labTat' | 'labStages' | 'pharmacyConsumption' | 'dataQuality'>;
 
 const n = (v: any): number | null => (v === null || v === undefined || v === '' ? null : Number(v));
-const n0 = (v: any) => Number(v ?? 0);
+const n0 = (v: unknown) => Number(v ?? 0);
 
 /** The analytical SQL. Exposed so the SQL Inspector shows exactly what runs, not a copy that can drift. */
 export const SQL = {
@@ -145,8 +146,8 @@ export async function getAnalyticsOverview(db: any): Promise<AnalyticsOverviewRe
       const r = await runExasol();
       metrics = r.metrics; queries = r.queries;
       source = { live: true, engine: status.engine };
-    } catch (err: any) {
-      source = { live: false, engine: 'Application Store (Exasol offline)', fallbackReason: `Exasol is connected but a query failed (${err?.message || err}). Press Sync to Exasol to create or refresh the tables.` };
+    } catch (err) {
+      source = { live: false, engine: 'Application Store (Exasol offline)', fallbackReason: `Exasol is connected but a query failed (${asError(err).message || err}). Press Sync to Exasol to create or refresh the tables.` };
     }
   }
 

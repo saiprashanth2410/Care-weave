@@ -25,7 +25,6 @@ import { firebaseUsersFromEnv, type FirebaseUsers } from './services/firebaseUse
 import { whatsappPublicRoutes, whatsappSimulatorRoutes } from './whatsapp/routes.js';
 import { videoPublicRoutes, videoStaffRoutes } from './routes/video.js';
 import { messageRoutes } from './routes/messages.js';
-import type { AuthedRequest } from './middleware.js';
 import type { NextFunction, Response } from 'express';
 
 export type CreateAppOptions = { repos: Repos | (() => Repos); config?: Partial<AppConfig>; live?: LiveHub; firebaseUsers?: FirebaseUsers };
@@ -51,7 +50,7 @@ export function createApp(opts: CreateAppOptions) {
     audit, auditOnce, roles, config,
     firebaseUsers: opts.firebaseUsers ?? firebaseUsersFromEnv(),
     live: opts.live ?? new LiveHub(getRepos),
-    async auth(req: AuthedRequest, res: Response, next: NextFunction) {
+    async auth(req, res: Response, next: NextFunction) {
       const { token, via } = credentialOf(req);
       const u = await userForToken(getRepos(), token);
       if (!u) return res.status(401).json({ error: 'Authentication required' });

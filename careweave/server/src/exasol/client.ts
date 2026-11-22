@@ -1,6 +1,7 @@
 import { ExasolDriver } from '@exasol/exasol-driver-ts';
 import WebSocket from 'ws';
 import type { ExasolConfig, ExasolConnectionStatus } from './types.js';
+import { asError } from '../errors.js';
 
 let activeDriver: ExasolDriver | null = null;
 let lastSyncTimestamp: string | null = null;
@@ -122,8 +123,8 @@ export async function queryExasol<T = any>(sql: string, timeoutMs = 8000): Promi
       for (const [k, v] of Object.entries(row)) obj[k.toLowerCase()] = v;
       return obj as T;
     });
-  } catch (err: any) {
-    console.warn(`[Exasol Query Error]: ${err?.message || err}`);
+  } catch (err) {
+    console.warn(`[Exasol Query Error]: ${asError(err).message || err}`);
     throw err;
   }
 }

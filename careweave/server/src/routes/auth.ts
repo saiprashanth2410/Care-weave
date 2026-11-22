@@ -4,8 +4,10 @@ import type { AppCtx } from '../context.js';
 import { ConflictError } from '../repo/index.js';
 import { catchAsyncRoutes } from '../asyncRoutes.js';
 import { BROWSER_HEADER, clearedCookie, endSession, sessionCookie, startSession } from '../services/sessions.js';
-import type { AuthedRequest, MaybeAuthedRequest } from '../middleware.js';
+import type { MaybeAuthedRequest } from '../middleware.js';
 import type { Response } from 'express';
+import { asError } from '../errors.js';
+import type { Request } from 'express';
 
 const DISABLED = 'This account has been disabled. Ask an administrator.';
 
@@ -34,7 +36,7 @@ export function authRoutes(ctx: AppCtx) {
   // email is not proof of who someone is. Turn this off only after disabling sign-up in Firebase.
   const requireVerifiedEmail = process.env.FIREBASE_REQUIRE_VERIFIED_EMAIL !== 'false';
 
-  const secure = (req: MaybeAuthedRequest) => ctx.config.isProd || req.secure || req.get('x-forwarded-proto') === 'https';
+  const secure = (req: Request) => ctx.config.isProd || req.secure || req.get('x-forwarded-proto') === 'https';
 
   async function signIn(u: any, how: string, req: MaybeAuthedRequest, res: Response) {
     const token = await startSession(ctx.repos, u.id);
@@ -68,9 +70,9 @@ export function authRoutes(ctx: AppCtx) {
       try {
         // verifyIdToken checks the signature, issuer, audience and expiry. A token that fails is never trusted.
         decoded = await firebaseAuth.verifyIdToken(idToken);
-      } catch (err: any) {
+      } catch (err) {
         // The browser only sees a generic message; the reason (expired token, wrong project, module failed to load) goes to the server log.
-        console.error('Firebase ID token verification failed:', err?.code || err?.name, String(err?.message || err).slice(0, 300));
+        console.error('Firebase ID token verification failed:', asError(err).code || asError(err).name, String(asError(err).message || err).slice(0, 300));
         return res.status(401).json({ error: 'Your sign-in could not be verified. Sign in again.' });
       }
       const uid = String(decoded.uid || '');
@@ -115,7 +117,7 @@ export function sessionRoutes(ctx: AppCtx) {
     res.json({ ok: true });
   });
 
-  router.get('/me', (req: AuthedRequest, res) =>
+  router.get('/me', (req, res) =>
     res.json({
       id: req.user.id,
       name: req.user.name,

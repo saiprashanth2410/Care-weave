@@ -1,4 +1,5 @@
 import type { Collection, IndexSpec } from './store.js';
+import type { Row } from './types.js';
 
 // One document per sign-in: { tokenHash, userId, expiresAt }. Only the SHA-256 of the token is stored. MongoDB removes the
 // document itself once expiresAt has passed (TTL index); the read also checks expiresAt, because the TTL sweep runs only about
@@ -6,7 +7,7 @@ import type { Collection, IndexSpec } from './store.js';
 export const sessionsIndexes: IndexSpec[] = [{ keys: { tokenHash: 1 }, unique: true }, { keys: { expiresAt: 1 }, expireAfterSeconds: 0 }];
 
 export const sessionsRepo = (c: Collection) => ({
-  create: (tokenHash: string, userId: string, expiresAt: Date) => c.insert({ tokenHash, userId, expiresAt }),
+  create: (tokenHash: string, userId: string, expiresAt: Date) => c.insert({ tokenHash, userId, expiresAt } as unknown as Row),
   async find(tokenHash: string) {
     const s = await c.findOne({ tokenHash });
     return s && new Date(s.expiresAt).getTime() > Date.now() ? s : null;

@@ -1,6 +1,7 @@
 import type { Repos } from '../repo/index.js';
 import { isToday } from '../util.js';
 import { linkedPatientIds } from './access.js';
+import type { LabOrder, LabResult } from '../repo/types.js';
 
 // Shapes the stored records into what the doctor screens show. These are pure functions of the records passed in.
 
@@ -15,7 +16,7 @@ export const STATUS_FOR_DOCTOR: Record<string, string> = {
   released: 'Released to Doctor'
 };
 
-const num = (v: any) => {
+const num = (v: unknown) => {
   const n = Number.parseFloat(String(v).replace(/,/g, ''));
   return Number.isFinite(n) ? n : null;
 };
@@ -24,7 +25,7 @@ const num = (v: any) => {
 const IMPORT_OK = ['Imported', 'Linked (reviewed)'];
 
 /** Our multi-analyte order -> the shape the doctor screens expect. */
-export const doctorLab = (o: any) => {
+export const doctorLab = (o: LabOrder) => {
   const released = ['verified', 'released'].includes(o.status);
   const params: any[] = o.results ?? [];
   const flagged = params.filter((r) => r.flag && r.flag !== 'normal');
@@ -66,10 +67,10 @@ export const doctorLab = (o: any) => {
 };
 
 /** The orders that belong to a patient, cancelled ones left out. */
-export const labsFor = async (repos: Repos, p: any) => (await repos.orders.forPatient(p)).filter((o: any) => o.status !== 'cancelled');
+export const labsFor = async (repos: Repos, p: any) => (await repos.orders.forPatient(p)).filter((o) => o.status !== 'cancelled');
 
 /** Outside records linked to a patient, apart from the ones that never found a patient. */
-export const importedFor = async (repos: Repos, p: any) => (await repos.externalRecords.find({ patientId: p.id })).filter((r: any) => r.status !== 'Unmatched');
+export const importedFor = async (repos: Repos, p: any) => (await repos.externalRecords.find({ patientId: p.id })).filter((r) => r.status !== 'Unmatched');
 
 export function chartPoints(labs: any[], imported: any[]) {
   const points: any[] = [];
@@ -90,7 +91,7 @@ export function chartPoints(labs: any[], imported: any[]) {
   return points.sort((a, b) => String(a.date).localeCompare(String(b.date)));
 }
 
-export const summarize = (r: any) => {
+export const summarize = (r: Record<string, any>) => {
   const x = r.content ?? {};
   return r.kind === 'lab' ? `${x.testName ?? 'Test'}: ${x.value ?? '?'} ${x.units ?? ''}`.trim() + ` · ${r.status}`
     : r.kind === 'medication' ? `${x.medicine ?? 'Medicine'} ${x.dosage ?? ''} ${x.frequency ?? ''}`.replace(/\s+/g, ' ').trim() + ` · ${r.status}`
@@ -103,7 +104,7 @@ export function timeline(d: { encounters: any[]; labs: any[]; prescriptions: any
     ev.push({ id: e.id, type: 'Consultation', date: e.date, title: e.diagnosis || 'Clinical consultation', detail: e.notes || e.assessment || 'Encounter recorded in CareWeave.', source: e.source || 'CareWeave Clinic', reference: e.id, imported: false });
   for (const o of d.labs) {
     const l = doctorLab(o);
-    const flagged = (o.results ?? []).filter((r: any) => r.flag && r.flag !== 'normal').map((r: any) => r.parameter);
+    const flagged = (o.results ?? []).filter((r: LabResult) => r.flag && r.flag !== 'normal').map((r: LabResult) => r.parameter);
     ev.push({
       id: o.id, type: 'Lab result', date: o.observedAt ?? o.orderedAt, title: o.testName,
       detail: l.result ? `${l.result.value}${l.result.units ? ' ' + l.result.units : ''}${flagged.length ? ` · flagged: ${flagged.join(', ')}` : ''}${l.amended ? ` · amended ${l.amended}x` : ''}` : 'Ordered. Values are shown after laboratory verification.',
@@ -135,23 +136,23 @@ export async function doctorDashboard(repos: Repos, user: any) {
     casesFor(repos, user.id, linked),
     repos.audit.recent(10, user.id),
   ]);
-  const today = mine.filter((a: any) => isToday(a.date));
+  const today = mine.filter((a) => isToday(a.date));
   const labs = orders.map(doctorLab);
   return {
     stats: {
       patients: linked.size,
       appointments: today.length,
-      waiting: mine.filter((a: any) => ['Waiting', 'Checked In'].includes(a.status)).length,
-      checkedIn: mine.filter((a: any) => a.status === 'Checked In').length,
-      completed: today.filter((a: any) => a.status === 'Completed').length,
-      released: labs.filter((l: any) => l.status === 'Released to Doctor').length,
-      awaitingVerification: labs.filter((l: any) => l.status === 'Awaiting Verification').length,
+      waiting: mine.filter((a) => ['Waiting', 'Checked In'].includes(a.status)).length,
+      checkedIn: mine.filter((a) => a.status === 'Checked In').length,
+      completed: today.filter((a) => a.status === 'Completed').length,
+      released: labs.filter((l) => l.status === 'Released to Doctor').length,
+      awaitingVerification: labs.filter((l) => l.status === 'Awaiting Verification').length,
       openCases: cases.length
     },
     // Verified in the last 3 days with a critical value: stays on the screen until it ages out, even if the live alert was missed.
-    criticalLabs: labs.filter((l: any) => l.result?.parameters?.some((x: any) => x.flag === 'critical') && Date.now() - Date.parse(l.result.verifiedAt || l.requestedAt) < 3 * 86400000)
-      .map((l: any) => ({ orderId: l.orderId, patientName: l.patientName, testName: l.testName, verifiedAt: l.result.verifiedAt, values: l.result.parameters.filter((x: any) => x.flag === 'critical').map((x: any) => ({ parameter: x.parameter, value: x.value, unit: x.unit })) })),
-    appointments: today.sort((a: any, b: any) => String(a.time).localeCompare(String(b.time))),
+    criticalLabs: labs.filter((l) => l.result?.parameters?.some((x) => x.flag === 'critical') && Date.now() - Date.parse(l.result!.verifiedAt || l.requestedAt) < 3 * 86400000)
+      .map((l) => ({ orderId: l.orderId, patientName: l.patientName, testName: l.testName, verifiedAt: l.result!.verifiedAt, values: l.result!.parameters.filter((x) => x.flag === 'critical').map((x) => ({ parameter: x.parameter, value: x.value, unit: x.unit })) })),
+    appointments: today.sort((a, b) => String(a.time).localeCompare(String(b.time))),
     labOrders: labs.slice(0, 60),
     cases,
     recent

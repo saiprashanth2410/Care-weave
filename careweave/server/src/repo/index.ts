@@ -24,39 +24,41 @@ import { liveEventsRepo, liveEventsIndexes } from './liveEvents.js';
 import { metaRepo, metaIndexes } from './meta.js';
 import { MongoStore } from './mongo.js';
 import type { Store } from './store.js';
+import type { Row, User, Patient, Appointment, LabOrder, Encounter, Prescription, AuditEntry, LiveEventRow, Vital, Referral, CarePlan, ExternalRecord, ReconCase, Message, VideoConsult, InboxItem } from './types.js';
+export type * from './types.js';
 
 export { ConflictError, DuplicateError, type Store, type FileStore } from './store.js';
 export { LocalStore } from './local.js';
 
 function collections(store: Store) {
-  const c = (name: string) => store.collection(name);
+  const c = <T extends Row = Row>(name: string) => store.collection<T>(name);
   return {
     mode: store.mode,
     store,
-    users: usersRepo(c('users')),
-    patients: patientsRepo(c('patients')),
-    appointments: appointmentsRepo(c('appointments')),
-    orders: ordersRepo(c('labOrders')),
-    encounters: encountersRepo(c('encounters')),
-    prescriptions: prescriptionsRepo(c('prescriptions')),
-    audit: auditRepo(c('auditLogs')),
+    users: usersRepo(c<User>('users')),
+    patients: patientsRepo(c<Patient>('patients')),
+    appointments: appointmentsRepo(c<Appointment>('appointments')),
+    orders: ordersRepo(c<LabOrder>('labOrders')),
+    encounters: encountersRepo(c<Encounter>('encounters')),
+    prescriptions: prescriptionsRepo(c<Prescription>('prescriptions')),
+    audit: auditRepo(c<AuditEntry>('auditLogs')),
     sessions: sessionsRepo(c('sessions')),
     rateLimits: rateLimitsRepo(c('rateLimits')),
-    vitals: vitalsRepo(c('vitals')),
-    referrals: referralsRepo(c('referrals')),
-    carePlans: carePlansRepo(c('carePlans')),
-    externalRecords: externalRecordsRepo(c('externalRecords')),
-    cases: casesRepo(c('cases')),
+    vitals: vitalsRepo(c<Vital>('vitals')),
+    referrals: referralsRepo(c<Referral>('referrals')),
+    carePlans: carePlansRepo(c<CarePlan>('carePlans')),
+    externalRecords: externalRecordsRepo(c<ExternalRecord>('externalRecords')),
+    cases: casesRepo(c<ReconCase>('cases')),
     syntheticHistory: syntheticHistoryRepo(c('syntheticHistory')),
     whatsappPrefs: whatsappPrefsRepo(c('whatsappPrefs')),
     whatsappSignups: whatsappSignupsRepo(c('whatsappSignups')),
-    messages: messagesRepo(c('messages')),
+    messages: messagesRepo(c<Message>('messages')),
     messageImages: messageImagesRepo(c('messageImages')),
-    videoConsults: videoConsultsRepo(c('videoConsults')),
+    videoConsults: videoConsultsRepo(c<VideoConsult>('videoConsults')),
     videoSignals: videoSignalsRepo(c('videoSignals')),
-    liveEvents: liveEventsRepo(c('liveEvents')),
+    liveEvents: liveEventsRepo(c<LiveEventRow>('liveEvents')),
     meta: metaRepo(c('meta')),
-    inbox: inboxRepo(c('inbox')),
+    inbox: inboxRepo(c<InboxItem>('inbox')),
   };
 }
 export type Repos = ReturnType<typeof collections> & {

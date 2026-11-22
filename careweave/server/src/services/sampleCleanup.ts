@@ -9,11 +9,11 @@ export const SAMPLE_EMAIL = 'sample.patient@example.test';
  * carries the sample name and e-mail and was never flagged `sample` (the flag is set as the last step of a successful run).
  */
 export async function removeUnfinishedSample(repos: Repos) {
-  const stray = (await repos.patients.find({ name: SAMPLE_NAME, email: SAMPLE_EMAIL })).filter((p: any) => !p.sample);
+  const stray = (await repos.patients.find({ name: SAMPLE_NAME, email: SAMPLE_EMAIL })).filter((p) => !p.sample);
   for (const p of stray) {
     const records = await repos.externalRecords.find({ patientId: p.id });
     await repos.transaction(async (tx) => {
-      if (records.length) await tx.cases.remove({ recordId: { $in: records.map((r: any) => r.id) } });
+      if (records.length) await tx.cases.remove({ recordId: { $in: records.map((r) => r.id) } });
       await tx.cases.remove({ patientId: p.id });
       await tx.externalRecords.remove({ patientId: p.id });
       await tx.orders.remove({ registeredPatientRef: p.id });

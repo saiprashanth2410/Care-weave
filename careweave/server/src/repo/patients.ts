@@ -1,5 +1,6 @@
 import { baseRepo, containsCI, exactCI, idIndex, phoneLike } from './base.js';
 import type { Collection, IndexSpec } from './store.js';
+import type { Patient } from './types.js';
 
 export const patientsIndexes: IndexSpec[] = [
   idIndex,
@@ -9,7 +10,7 @@ export const patientsIndexes: IndexSpec[] = [
   { keys: { createdAt: -1 } },
 ];
 
-export const patientsRepo = (c: Collection) => ({
+export const patientsRepo = (c: Collection<Patient>) => ({
   ...baseRepo(c),
   /** By internal id or by the patient code printed on the card. */
   byRef: (value: string) => c.findOne({ $or: [{ id: value }, { patientId: value }] }),

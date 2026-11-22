@@ -43,7 +43,7 @@ export function firebaseUsersFromEnv(): FirebaseUsers {
     const [{ cert, getApps, initializeApp }, { getAuth }] = await Promise.all([import('firebase-admin/app'), import('firebase-admin/auth')]);
     return getAuth(getApps()[0] ?? initializeApp({ credential: cert(key), projectId: key.project_id || process.env.FIREBASE_PROJECT_ID }));
   };
-  const find = async (email: string) => (await auth()).getUserByEmail(email).catch((e: any) => (e?.code === 'auth/user-not-found' ? null : Promise.reject(e)));
+  const find = async (email: string) => (await auth()).getUserByEmail(email).catch((e) => (e?.code === 'auth/user-not-found' ? null : Promise.reject(e)));
   return {
     configured: true,
     async create({ email, name, password }) {

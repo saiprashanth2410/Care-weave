@@ -10,6 +10,7 @@ import { readStartupStamp, startupStamp, writeStartupStamp } from './services/st
 import { backfillAppointmentKeys } from './services/backfill.js';
 import { runAnalyticsSync } from './services/analytics.js';
 import { isExasolConfigured } from './exasol/client.js';
+import { asError } from './errors.js';
 
 const isVercel = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 const isProd = process.env.NODE_ENV === 'production';
@@ -25,9 +26,9 @@ async function openStore(): Promise<Store> {
       const store = await openMongoStore(uri, process.env.MONGODB_DB || 'careweave', onChange);
       console.log('[storage] MongoDB: every read and write goes to the database. No data is cached in this process.');
       return store;
-    } catch (err: any) {
+    } catch (err) {
       // Not falling back to local files: on a serverless host that would give every instance its own private data.
-      throw new Error(`MongoDB connection failed: ${(err.message || '').replace(/mongodb(\+srv)?:\/\/\S+/g, '[uri]')}`);
+      throw new Error(`MongoDB connection failed: ${(asError(err).message || '').replace(/mongodb(\+srv)?:\/\/\S+/g, '[uri]')}`);
     }
   }
   if ((isProd || isVercel) && process.env.ALLOW_LOCAL_STORE !== 'true') {

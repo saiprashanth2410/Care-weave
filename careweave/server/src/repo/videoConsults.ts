@@ -1,5 +1,6 @@
 import { baseRepo, idIndex } from './base.js';
 import type { Collection, IndexSpec } from './store.js';
+import type { VideoConsult } from './types.js';
 
 // A video consult is one document (who, which doctor, when it expires). The browsers of the doctor and the patient set up their
 // peer-to-peer call by leaving small signalling messages (offer, answer, network candidates, captions) in `videoSignals`
@@ -12,7 +13,7 @@ export const DOCTOR_SILENT_MS = 45_000;
 export const isLive = (c: any, at = Date.now()) =>
   !c.endedAt && Date.parse(c.expiresAt) > at && at - Date.parse(c.doctorSeenAt || c.createdAt) < DOCTOR_SILENT_MS;
 
-export const videoConsultsRepo = (c: Collection) => ({
+export const videoConsultsRepo = (c: Collection<VideoConsult>) => ({
   ...baseRepo(c),
   byToken: (token: string) => c.findOne({ id: token }),
   /** The newest consults of these doctors, for showing who is on a video call right now (filter with `isLive`). */

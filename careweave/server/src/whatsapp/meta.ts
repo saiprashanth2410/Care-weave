@@ -1,3 +1,4 @@
+import { asError } from '../errors.js';
 /** Sends WhatsApp text messages straight through Meta's WhatsApp Cloud API (no n8n in between). */
 
 const TIMEOUT_MS = 4000;
@@ -41,8 +42,8 @@ export async function sendViaMeta(phone: unknown, text: string): Promise<MetaRes
     const error = `${HINTS[code] || body?.error?.message || `HTTP ${res.status}`} (code ${Number.isFinite(code) ? code : res.status})`;
     console.warn(`Meta WhatsApp send failed: ${error}`);
     return { ok: false, error };
-  } catch (err: any) {
-    const error = err?.name === 'TimeoutError' ? 'Meta did not answer in time' : err?.message || 'network error';
+  } catch (err) {
+    const error = asError(err).name === 'TimeoutError' ? 'Meta did not answer in time' : asError(err).message || 'network error';
     console.warn(`Meta WhatsApp send failed: ${error}`);
     return { ok: false, error };
   }

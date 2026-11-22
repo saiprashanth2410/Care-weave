@@ -1,24 +1,31 @@
 import type { NextFunction, Request, Response } from 'express';
 import { ConflictError, type Repos } from './repo/index.js';
+import { asError } from './errors.js';
 
 /** A request that has passed the sign-in check: `user` is the signed-in staff member. */
 export type SessionUser = { id: string; role: string; name?: string; [field: string]: any };
-export type AuthedRequest = Request & { user: SessionUser };
+declare global {
+  namespace Express {
+    // Set by the sign-in check (`ctx.auth`) before any staff route runs. Public routes (sign-in, patient video link, webhooks) must not read it.
+    interface Request { user: SessionUser }
+  }
+}
+export type AuthedRequest = Request;
 /** A request on a route that may or may not be signed in (sign-in, public pages, limiters). */
-export type MaybeAuthedRequest = Request & { user?: SessionUser };
+export type MaybeAuthedRequest = Request;
 
 /**
  * Fixed-window limiter. The count is kept in the database (one atomic upsert per request), so every server instance shares it
  * and a restart does not reset it. If the database cannot be reached the request is refused with 503 (fail closed).
  */
-export function rateLimit(repos: () => Repos, name: string, windowMs: number, max: number, keyOf: (req: MaybeAuthedRequest) => string) {
+export function rateLimit(repos: () => Repos, name: string, windowMs: number, max: number, keyOf: (req: Request) => string) {
   return async (req: Request, res: Response, next: NextFunction) => {
     let hit;
     try {
       hit = await repos().rateLimits.hit(`${name}:${keyOf(req)}`, windowMs);
-    } catch (err: any) {
+    } catch (err) {
       // Fail closed: without counters the limit cannot be enforced, and these routes need the same database anyway.
-      console.error(`Rate limiter could not reach the database (${name}):`, err?.message);
+      console.error(`Rate limiter could not reach the database (${name}):`, asError(err).message);
       return res.status(503).json({ error: 'Service temporarily unavailable. Try again shortly.' });
     }
     if (hit.count > max) {

@@ -1,62 +1,67 @@
+import type { Appointment, LabOrder, Patient, Prescription } from '../repo/types.js';
+
+/** What the WhatsApp replies read: the patients behind a phone number or UHID and their appointments, results and medicines. */
+export type WhatsAppDb = { patients: Patient[]; appointments: Appointment[]; labOrders: LabOrder[]; prescriptions: Prescription[]; rooms?: Record<string, string>; language?: string };
+
 // Everything a patient can ask on WhatsApp, answered from the live records. Shared by the n8n query endpoints,
 // the standalone inbound webhook and the in-browser simulator, so all three say the same thing.
 
 const ACTIVE_QUEUE = ['Checked In', 'Waiting', 'In Consultation'];
 const MINUTES_PER_PATIENT = 10; // a flat planning figure, so the wait is an estimate and is worded as one
 
-const digits = (v: any) => String(v ?? '').replace(/\D/g, '');
+const digits = (v: unknown) => String(v ?? '').replace(/\D/g, '');
 const today = () => new Date().toISOString().slice(0, 10);
 const isToday = (d: string) => !!d && (d === 'Today' || d.slice(0, 10) === today());
 
 /** Where a doctor sees patients, as the administrator set it on their account. Without one, patients are told the generic place. */
-export const roomOf = (db: any, appt: any): string => String(db.rooms?.[appt?.doctorId] || '').trim() || 'the consulting room';
+export const roomOf = (db: WhatsAppDb, appt: Appointment): string => String(db.rooms?.[appt?.doctorId ?? ''] || '').trim() || 'the consulting room';
 
-export function findPatients(db: any, q: { phone?: string; uhid?: string }) {
+export function findPatients(db: WhatsAppDb, q: { phone?: string; uhid?: string }) {
   const uhid = String(q.uhid || '').trim().toLowerCase();
-  if (uhid) return db.patients.filter((p: any) => String(p.patientId).toLowerCase() === uhid || p.id === q.uhid);
+  if (uhid) return db.patients.filter((p) => String(p.patientId).toLowerCase() === uhid || p.id === q.uhid);
   const want = digits(q.phone);
   if (want.length < 7) return [];
   const tail = want.slice(-10);
-  return db.patients.filter((p: any) => digits(p.phone).slice(-10) === tail);
+  return db.patients.filter((p) => digits(p.phone).slice(-10) === tail);
 }
 
 /**
  * Reports and medicines are private health data, and a phone number alone is not proof of who is asking (numbers are
  * shared, spoofed and recycled). They are shown only when the sender's phone AND the patient's UHID both match.
  */
-export function verifiedPatients(db: any, q: { phone?: string; uhid?: string }) {
+export function verifiedPatients(db: WhatsAppDb, q: { phone?: string; uhid?: string }) {
   if (!String(q.uhid || '').trim() || digits(q.phone).length < 7) return { status: 'needs_uhid' as const, patients: [] as any[] };
   const byUhid = findPatients(db, { uhid: q.uhid });
   const tail = digits(q.phone).slice(-10);
-  const patients = byUhid.filter((p: any) => digits(p.phone).slice(-10) === tail);
+  const patients = byUhid.filter((p) => digits(p.phone).slice(-10) === tail);
   return patients.length ? { status: 'ok' as const, patients } : { status: 'mismatch' as const, patients: [] as any[] };
 }
 
 /** The next OP token for a day: A-001, A-002 ... counted over appointments that already hold one. */
-export function nextToken(db: any, date: string) {
+export function nextToken(db: Pick<WhatsAppDb, 'appointments'>, date: string) {
   // One more than the highest number already issued that day (not a count), so a token that left the day never lets a number be issued twice.
   const n = db.appointments
-    .filter((a: any) => a.token && (a.date === date || (isToday(a.date) && isToday(date))))
+    .filter((a) => a.token && (a.date === date || (isToday(a.date) && isToday(date))))
     .reduce((max: number, a: any) => Math.max(max, Number(String(a.token).replace(/\D/g, '')) || 0), 0) + 1;
   return `A-${String(n).padStart(3, '0')}`;
 }
 
 /** Patients ahead of this appointment: same doctor, same day, already waiting or in the room. */
-export function queueAhead(db: any, appt: any) {
+export function queueAhead(db: Pick<WhatsAppDb, 'appointments'>, appt: Appointment) {
   const mine = String(appt.checkedInAt || '');
-  return db.appointments.filter((a: any) =>
+  return db.appointments.filter((a) =>
     a.id !== appt.id && a.doctorId === appt.doctorId && isToday(a.date) && ACTIVE_QUEUE.includes(a.status) &&
     (a.status === 'In Consultation' || String(a.checkedInAt || '') <= mine)
   ).length;
 }
 
-export function queueStatus(db: any, q: { phone?: string; uhid?: string }) {
+export function queueStatus(db: WhatsAppDb, q: { phone?: string; uhid?: string }) {
   const patients = findPatients(db, q);
   if (!patients.length) return { found: false as const };
   for (const p of patients) {
     const appt = db.appointments
-      .filter((a: any) => a.patientId === p.id && isToday(a.date) && ACTIVE_QUEUE.includes(a.status))
-      .sort((a: any, b: any) => String(b.checkedInAt || '').localeCompare(String(a.checkedInAt || '')))[0];
+      .filter((a) => a.patientId === p.id && isToday(a.date) && ACTIVE_QUEUE.includes(a.status))
+      .sort((a, b) => String(b.checkedInAt || '').localeCompare(String(a.checkedInAt || '')))[0];
     if (!appt) continue;
     const ahead = appt.status === 'In Consultation' ? 0 : queueAhead(db, appt);
     return {
@@ -67,27 +72,27 @@ export function queueStatus(db: any, q: { phone?: string; uhid?: string }) {
   return { found: true as const, active: false, patient: { name: patients[0].name, uhid: patients[0].patientId } };
 }
 
-export function latestReport(db: any, q: { phone?: string; uhid?: string }) {
+export function latestReport(db: WhatsAppDb, q: { phone?: string; uhid?: string }) {
   const v = verifiedPatients(db, q);
   if (v.status === 'needs_uhid') return { found: true as const, verificationRequired: true as const };
   const patients = v.patients;
   if (!patients.length) return { found: false as const };
-  const ids = new Set(patients.flatMap((p: any) => [p.id, p.patientId]));
+  const ids = new Set(patients.flatMap((p) => [p.id, p.patientId]));
   const order = db.labOrders
-    .filter((o: any) => ['verified', 'released'].includes(o.status) && (ids.has(o.registeredPatientRef) || ids.has(o.patientId)))
-    .sort((a: any, b: any) => String(b.verifiedAt || '').localeCompare(String(a.verifiedAt || '')))[0];
+    .filter((o) => ['verified', 'released'].includes(o.status) && (ids.has(o.registeredPatientRef) || ids.has(o.patientId)))
+    .sort((a, b) => String(b.verifiedAt || '').localeCompare(String(a.verifiedAt || '')))[0];
   // Family members can share one phone number: name the person the report belongs to, not just the first match.
-  const patient = (order && patients.find((p: any) => p.id === order.registeredPatientRef || p.patientId === order.patientId)) || patients[0];
+  const patient = (order && patients.find((p) => p.id === order.registeredPatientRef || p.patientId === order.patientId)) || patients[0];
   if (!order) return { found: true as const, available: false, patient: { name: patient.name, uhid: patient.patientId } };
-  const results = (order.results || []).filter((r: any) => r.value).map((r: any) => ({
+  const results = (order.results || []).filter((r) => r.value).map((r) => ({
     parameter: r.parameter, value: r.value, unit: r.unit || '', referenceRange: r.referenceRange || '', flag: r.flag || 'normal'
   }));
   return {
     found: true as const, available: true, patient: { name: patient.name, uhid: patient.patientId },
     report: {
       orderId: order.id, testName: order.testName, verifiedAt: order.verifiedAt, verifiedBy: order.verifiedBy,
-      criticalCount: results.filter((r: any) => r.flag === 'critical').length,
-      abnormalCount: results.filter((r: any) => r.flag === 'abnormal').length,
+      criticalCount: results.filter((r) => r.flag === 'critical').length,
+      abnormalCount: results.filter((r) => r.flag === 'abnormal').length,
       results
     }
   };
@@ -124,14 +129,14 @@ function stillRunning(rx: any) {
   return Date.now() - new Date(rx.date).getTime() <= days * 86400000;
 }
 
-export function activePrescriptions(db: any, q: { phone?: string; uhid?: string }) {
+export function activePrescriptions(db: WhatsAppDb, q: { phone?: string; uhid?: string }) {
   const v = verifiedPatients(db, q);
   if (v.status === 'needs_uhid') return { found: true as const, verificationRequired: true as const };
   const patients = v.patients;
   if (!patients.length) return { found: false as const };
-  const ids = new Set(patients.map((p: any) => p.id));
-  const meds = db.prescriptions.filter((r: any) => ids.has(r.patientId) && r.status === 'Active' && stillRunning(r)).map((r: any) => {
-    const slots = scheduleOf(r.frequency);
+  const ids = new Set(patients.map((p) => p.id));
+  const meds = db.prescriptions.filter((r) => ids.has(r.patientId) && r.status === 'Active' && stillRunning(r)).map((r) => {
+    const slots = scheduleOf(r.frequency ?? '');
     return {
       medicine: r.medicine, dosage: r.dosage, frequency: r.frequency, duration: r.duration || '',
       food: foodNote(`${r.frequency} ${r.instructions || ''}`), instructions: r.instructions || '',
@@ -142,7 +147,7 @@ export function activePrescriptions(db: any, q: { phone?: string; uhid?: string 
 }
 
 /** The language a sender chose is stored in the database (see repo/whatsappPrefs.ts); `replyTo` reads it from `db.language` and reports a change in `language`. */
-const languageOf = (db: any): 'en' | 'ta' => (db?.language === 'ta' ? 'ta' : 'en');
+const languageOf = (db: WhatsAppDb): 'en' | 'ta' => (db?.language === 'ta' ? 'ta' : 'en');
 
 // ── wording ────────────────────────────────────────────────────────────────
 export const HELP_TEXT = `🏥 CareWeave on WhatsApp. Reply with:
@@ -191,13 +196,13 @@ export function queueText(r: ReturnType<typeof queueStatus>, lang: 'en' | 'ta' =
 export function reportText(r: ReturnType<typeof latestReport>, lang: 'en' | 'ta' = 'en') {
   if (!r.found) return lang === 'ta' ? NOT_FOUND_TA : NOT_FOUND;
   if ('verificationRequired' in r) return lang === 'ta' ? NEEDS_UHID_TA : NEEDS_UHID;
-  if (!r.available) {
+  if (!r.available || !r.report) {
     return lang === 'ta'
       ? `வணக்கம் ${r.patient.name}, உங்களுக்கான ஆய்வக முடிவுகள் இன்னும் சரிபார்க்கப்படவில்லை.`
       : `Hello ${r.patient.name}, you have no verified lab report yet.`;
   }
   const { report } = r;
-  const lines = report.results.slice(0, 12).map((x: any) => `${x.flag === 'critical' ? '🔴' : x.flag === 'abnormal' ? '🟠' : '▫️'} ${x.parameter}: ${x.value} ${x.unit}${x.flag !== 'normal' ? ` (${x.flag.toUpperCase()})` : ''}`);
+  const lines = report.results.slice(0, 12).map((x) => `${x.flag === 'critical' ? '🔴' : x.flag === 'abnormal' ? '🟠' : '▫️'} ${x.parameter}: ${x.value} ${x.unit}${x.flag !== 'normal' ? ` (${x.flag.toUpperCase()})` : ''}`);
   return lang === 'ta'
     ? `🧪 ${report.testName} - மருத்துவர்/ஆய்வகம்: ${report.verifiedBy || 'CareWeave Central Lab'}.\n${lines.join('\n')}\nமுக்கிய எச்சரிக்கைகள்: ${report.criticalCount}. மாறுபட்டவை: ${report.abnormalCount}.\nதயவுசெய்து இந்த முடிவுகளை உங்கள் மருத்துவரிடம் கலந்தாலோசிக்கவும்.`
     : `🧪 ${report.testName} - verified by ${report.verifiedBy || 'the laboratory'}.\n${lines.join('\n')}\nCritical flags: ${report.criticalCount}. Abnormal: ${report.abnormalCount}.\nPlease discuss these results with your doctor.`;
@@ -212,10 +217,10 @@ export function medsText(r: ReturnType<typeof activePrescriptions>, lang: 'en' |
       : `Hello ${r.patient.name}, you have no active prescriptions.`;
   }
   const part = (label: string, slot: 'morning' | 'afternoon' | 'night') => {
-    const rows = r.medications.filter((m: any) => m.schedule?.[slot]).map((m: any) => `  • ${m.medicine} - ${m.schedule[slot]}${m.food ? ` (${m.food})` : ''}`);
+    const rows = r.medications.filter((m) => m.schedule?.[slot]).map((m) => `  • ${m.medicine} - ${m.schedule?.[slot]}${m.food ? ` (${m.food})` : ''}`);
     return rows.length ? `*${label}*\n${rows.join('\n')}` : '';
   };
-  const unclear = r.medications.filter((m: any) => !m.schedule).map((m: any) => `  • ${m.medicine} - ${m.dosage}, ${m.frequency}`);
+  const unclear = r.medications.filter((m) => !m.schedule).map((m) => `  • ${m.medicine} - ${m.dosage}, ${m.frequency}`);
   const morningLbl = lang === 'ta' ? '🌅 காலை (Morning)' : 'Morning';
   const afternoonLbl = lang === 'ta' ? '☀️ மதியம் (Afternoon)' : 'Afternoon';
   const nightLbl = lang === 'ta' ? '🌙 இரவு (Night)' : 'Night';
@@ -226,7 +231,7 @@ export function medsText(r: ReturnType<typeof activePrescriptions>, lang: 'en' |
 }
 
 /** One keyword in, one reply out. Unknown text gets the help list. */
-export function replyTo(db: any, phone: string, body: string): { command: string; reply: string; language?: 'en' | 'ta'; resetLanguage?: boolean } {
+export function replyTo(db: WhatsAppDb, phone: string, body: string): { command: string; reply: string; language?: 'en' | 'ta'; resetLanguage?: boolean } {
   const [first, second] = String(body || '').trim().split(/\s+/);
   const word = first?.toUpperCase() || '';
   const uhid = second || '';
@@ -257,6 +262,6 @@ export function replyTo(db: any, phone: string, body: string): { command: string
 export function eventText(e: any): string {
   if (e.event === 'PATIENT_CHECKED_IN') return `Welcome ${e.name}! Your token is *${e.token}* with ${e.doctor} (${e.room}). Queue position: ${e.queuePosition}. Reply QUEUE any time for your live wait.`;
   if (e.event === 'LAB_REPORT_RELEASED') return `🧪 CareWeave Lab Alert: Hello ${e.name}, your ${e.testName} results have been verified by ${e.pathologist || 'the laboratory'}. Critical flags: ${e.criticalCount}. Reply REPORT ${e.patientId || '<your UHID>'} to view them.`;
-  if (e.event === 'PRESCRIPTION_PRESCRIBED') return `💊 Hello ${e.name}, ${e.doctor || 'your doctor'} prescribed: ${(e.medicines || []).map((m: any) => m.name).join(', ')}. Reply MEDS ${e.patientId || '<your UHID>'} for your timings.`;
+  if (e.event === 'PRESCRIPTION_PRESCRIBED') return `💊 Hello ${e.name}, ${e.doctor || 'your doctor'} prescribed: ${(e.medicines || []).map((m: { name: string }) => m.name).join(', ')}. Reply MEDS ${e.patientId || '<your UHID>'} for your timings.`;
   return '';
 }

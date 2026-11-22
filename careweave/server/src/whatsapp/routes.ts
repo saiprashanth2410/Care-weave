@@ -6,14 +6,14 @@ import { recentEvents } from './emitter.js';
 import { sendViaMeta } from './meta.js';
 import { activePrescriptions, eventText, latestReport, queueStatus } from './messages.js';
 import { replyFor, whatsappView } from '../services/whatsappData.js';
-import type { MaybeAuthedRequest } from '../middleware.js';
 import type { NextFunction, Response } from 'express';
+import type { Request } from 'express';
 
 type Ctx = { repos: () => Repos };
 
 // n8n and the WhatsApp providers are not signed-in staff, so they present a shared key (header or ?key=).
 // With no key configured the endpoints stay open for local demos only; production refuses them.
-function keyGuard(req: MaybeAuthedRequest, res: Response, next: NextFunction) {
+function keyGuard(req: Request, res: Response, next: NextFunction) {
   const want = process.env.WHATSAPP_API_KEY;
   if (!want) {
     if (process.env.NODE_ENV === 'production') return res.status(503).json({ error: 'Set WHATSAPP_API_KEY to enable the WhatsApp endpoints' });
@@ -54,8 +54,8 @@ function parseBody(raw: Buffer, contentType: string): Record<string, any> | null
 export function whatsappPublicRoutes({ repos }: Ctx) {
   const router = Router();
   catchAsyncRoutes(router);
-  const q = (req: MaybeAuthedRequest) => ({ phone: String(req.query.phone || ''), uhid: String(req.query.uhid || '') });
-  const need = (req: MaybeAuthedRequest, res: Response) => {
+  const q = (req: Request) => ({ phone: String(req.query.phone || ''), uhid: String(req.query.uhid || '') });
+  const need = (req: Request, res: Response) => {
     if (!q(req).phone && !q(req).uhid) { res.status(400).json({ error: 'phone or uhid is required' }); return false; }
     return true;
   };
@@ -73,7 +73,7 @@ export function whatsappPublicRoutes({ repos }: Ctx) {
 
   // Standalone two-way fallback: Twilio (form post), Meta (signed JSON) or n8n (JSON with the shared key) call this.
   // A request that looks like Meta's is accepted only with a valid X-Hub-Signature-256; everything else needs the shared key.
-  router.post('/api/whatsapp/inbound', express.raw({ type: () => true, limit: '1mb' }), async (req: MaybeAuthedRequest, res) => {
+  router.post('/api/whatsapp/inbound', express.raw({ type: () => true, limit: '1mb' }), async (req, res) => {
     const raw: Buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
     const b = parseBody(raw, String(req.get('content-type') || ''));
     if (!b) return res.status(400).json({ error: 'Request body could not be read' });
@@ -120,9 +120,9 @@ export function whatsappSimulatorRoutes({ repos }: Ctx) {
   catchAsyncRoutes(router);
 
   router.get('/whatsapp/simulator/patients', async (_req, res) =>
-    res.json((await repos().patients.find({}, { sort: { createdAt: -1 }, limit: 50 })).map((p: any) => ({ name: p.name, uhid: p.patientId, phone: p.phone }))));
+    res.json((await repos().patients.find({}, { sort: { createdAt: -1 }, limit: 50 })).map((p) => ({ name: p.name, uhid: p.patientId, phone: p.phone }))));
 
-  router.post('/whatsapp/simulate', async (req: MaybeAuthedRequest, res) => {
+  router.post('/whatsapp/simulate', async (req, res) => {
     const phone = String(req.body?.phone || '');
     if (!phone) return res.status(400).json({ error: 'phone is required' });
     const message = String(req.body?.message || '');

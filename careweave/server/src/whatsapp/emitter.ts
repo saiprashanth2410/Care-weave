@@ -1,5 +1,6 @@
 import { eventText } from './messages.js';
 import { metaConfigured, sendViaMeta } from './meta.js';
+import { asError } from '../errors.js';
 
 export type WhatsAppEventType = 'PATIENT_CHECKED_IN' | 'LAB_REPORT_RELEASED' | 'PRESCRIPTION_PRESCRIBED';
 
@@ -31,8 +32,8 @@ async function twilioText(phone: unknown, text: string): Promise<boolean> {
     });
     if (!res.ok) console.warn(`Twilio WhatsApp dispatch failed: HTTP ${res.status}`);
     return res.ok;
-  } catch (err: any) {
-    console.warn(`Twilio WhatsApp dispatch failed: ${err?.message || err}`);
+  } catch (err) {
+    console.warn(`Twilio WhatsApp dispatch failed: ${asError(err).message || err}`);
     return false;
   }
 }

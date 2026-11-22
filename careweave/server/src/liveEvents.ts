@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
+import type { LiveEventRow } from './repo/types.js';
 import type { Response } from 'express';
 import type { Repos } from './repo/index.js';
+import { asError } from './errors.js';
 
 // Server-sent events: one open response per signed-in screen. A change anywhere tells every other screen to reload,
 // and a critical lab result reaches the right doctor at once.
@@ -12,7 +14,7 @@ import type { Repos } from './repo/index.js';
 // the stream cannot start or drops, polling goes back to POLL_MS. Without a database to share (no bus) it stays in-process.
 
 type Client = { res: Response; userId: string; role: string };
-type LiveEvent = { id: string; at: string; origin: string; type: string; data: unknown; to?: string[] };
+type LiveEvent = LiveEventRow;
 
 export const POLL_MS = 1500;
 export const SAFETY_POLL_MS = 15_000;
@@ -62,8 +64,8 @@ export class LiveHub {
     try {
       const now = new Date();
       await repos.liveEvents.insert({ id: crypto.randomUUID(), at: now.toISOString(), origin: this.origin, type, data: data ?? {}, ...(to ? { to } : {}), expireAt: new Date(now.getTime() + KEEP_MS) });
-    } catch (err: any) {
-      console.warn('Could not share a live event with other instances:', err?.message); // this instance's own screens already got it
+    } catch (err) {
+      console.warn('Could not share a live event with other instances:', asError(err).message); // this instance's own screens already got it
     }
   }
 
@@ -130,7 +132,7 @@ export class LiveHub {
     const repos = this.bus();
     if (!repos || !this.cursor || !this.clients.size) return;
     let events: LiveEvent[];
-    try { events = await repos.liveEvents.since(this.cursor); } catch (err: any) { console.warn('Could not read live events:', err?.message); return; }
+    try { events = await repos.liveEvents.since(this.cursor); } catch (err) { console.warn('Could not read live events:', asError(err).message); return; }
     for (const e of events) this.deliver(e);
   }
 }

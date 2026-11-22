@@ -11,8 +11,8 @@ import { parseImageDataUrl } from '../services/imageData.js';
 import { ask, MODELS } from '../clinicalSummary.js';
 import { readAiConfig } from '../services/aiConfig.js';
 import { id, now } from '../util.js';
-import type { AuthedRequest } from '../middleware.js';
 import type { Response } from 'express';
+import type { Request } from 'express';
 
 const CONSULT_MINUTES = 120;
 const MAX_SIGNAL_BYTES = 24_000; // a session description is about 5 to 10 KB
@@ -32,7 +32,7 @@ const sameSecret = (a: unknown, b: unknown) => {
 };
 
 /** The address the patient should open: PUBLIC_APP_URL if set, otherwise the host this request came to. */
-function appOrigin(req: AuthedRequest) {
+function appOrigin(req: Request) {
   const set = String(process.env.PUBLIC_APP_URL || '').replace(/\/$/, '');
   if (set) return set;
   const proto = String(req.get('x-forwarded-proto') || req.protocol).split(',')[0];
@@ -55,7 +55,7 @@ export function videoPublicRoutes(ctx: AppCtx) {
 
   router.get('/video/public/:token', async (req, res) => {
     const r = await open(req.params.token);
-    if ('error' in r) return res.status(r.status).json({ error: r.error });
+    if ('error' in r) return res.status(r.status ?? 500).json({ error: r.error });
     // Only what the patient needs to recognise the call: the doctor's name and their own first name.
     res.json({ doctorName: r.consult.doctorName, patientFirstName: String(r.consult.patientName || '').split(' ')[0], expiresAt: r.consult.expiresAt });
   });
@@ -63,14 +63,14 @@ export function videoPublicRoutes(ctx: AppCtx) {
   // The network helpers for this call, including the relay when the administrator has set one up.
   router.get('/video/public/:token/ice', async (req, res) => {
     const r = await open(req.params.token);
-    if ('error' in r) return res.status(r.status).json({ error: r.error });
+    if ('error' in r) return res.status(r.status ?? 500).json({ error: r.error });
     res.set('Cache-Control', 'no-store');
     res.json(await iceServers());
   });
 
   router.post('/video/public/:token/signal', async (req, res) => {
     const r = await open(req.params.token);
-    if ('error' in r) return res.status(r.status).json({ error: r.error });
+    if ('error' in r) return res.status(r.status ?? 500).json({ error: r.error });
     const { role, key, type } = req.body || {};
     let data = req.body?.data;
     if (role !== 'doctor' && role !== 'patient') return res.status(400).json({ error: 'role must be doctor or patient' });
@@ -106,17 +106,17 @@ export function videoPublicRoutes(ctx: AppCtx) {
 
   router.get('/video/public/:token/signals', async (req, res) => {
     const r = await open(req.params.token);
-    if ('error' in r) return res.status(r.status).json({ error: r.error });
+    if ('error' in r) return res.status(r.status ?? 500).json({ error: r.error });
     const role = String(req.query.role);
     if (role !== 'doctor' && role !== 'patient') return res.status(400).json({ error: 'role must be doctor or patient' });
     if (role === 'doctor' && !sameSecret(req.query.key, r.consult.doctorKey)) return res.status(403).json({ error: 'Not allowed' });
     if (role === 'doctor') {
       // A heartbeat for the front desk's "in a video consultation" badge, written at most every 15 seconds.
-      const last = Date.parse(r.consult.doctorSeenAt || r.consult.createdAt);
+      const last = Date.parse(r.consult.doctorSeenAt || r.consult.createdAt || '');
       if (Date.now() - last > 15_000) await R().videoConsults.update(r.consult, { doctorSeenAt: now() }).catch(() => {});
     }
     const rows = await R().videoSignals.forReader(r.consult.id, role, Number(req.query.since) || 0);
-    res.json({ signals: rows.map((s: any) => ({ id: s.id, at: s.at, type: s.type, data: JSON.parse(s.data) })), now: Date.now() });
+    res.json({ signals: rows.map((s) => ({ id: s.id, at: s.at, type: s.type, data: JSON.parse(s.data) })), now: Date.now() });
   });
 
   return router;
@@ -129,13 +129,13 @@ export function videoStaffRoutes(ctx: AppCtx) {
   const { roles, audit } = ctx;
   const R = () => ctx.repos;
 
-  const own = async (req: AuthedRequest, res: Response) => {
+  const own = async (req: Request, res: Response) => {
     const c = await R().videoConsults.byToken(String(req.params.id));
     if (!c || c.doctorId !== req.user.id) { res.status(404).json({ error: 'Consultation not found' }); return null; }
     return c;
   };
 
-  router.post('/video/consults', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.post('/video/consults', roles('doctor'), async (req, res) => {
     // Either a patient the doctor is linked to, or a walk-in / phone-in person who has no record yet: then only a name and a phone
     // number are taken, nothing about any chart is reachable, and the call has nothing to attach to until the front desk registers them.
     let who: { patientId: string | null; patientName: string; phone: string; note: string };
@@ -163,7 +163,7 @@ export function videoStaffRoutes(ctx: AppCtx) {
     res.status(201).json({ id: consult.id, doctorKey: consult.doctorKey, expiresAt: consult.expiresAt, patientName: who.patientName, hasPhone: Boolean(who.phone), walkIn: !who.patientId });
   });
 
-  router.post('/video/consults/:id/send', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.post('/video/consults/:id/send', roles('doctor'), async (req, res) => {
     const c = await own(req, res);
     if (!c) return;
     const phone = c.patientId ? (await R().patients.byRef(c.patientId))?.phone : c.phone;
@@ -176,29 +176,29 @@ export function videoStaffRoutes(ctx: AppCtx) {
 
   const transcriptOf = async (consultId: string) => {
     const rows = await R().videoSignals.transcript(consultId);
-    return rows.map((r: any) => {
+    return rows.map((r) => {
       const d = JSON.parse(r.data) || {};
       return {
         from: r.from as 'doctor' | 'patient', kind: r.type as 'chat' | 'caption', at: r.at as number,
         text: String(d.text || '') || (r.hasImage ? '(shared a photo)' : ''),
         translated: typeof d.translated === 'string' ? d.translated : undefined,
       };
-    }).filter((l: any) => l.text);
+    }).filter((l) => l.text);
   };
 
-  router.get('/video/consults/:id/transcript', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.get('/video/consults/:id/transcript', roles('doctor'), async (req, res) => {
     const c = await own(req, res);
     if (!c) return;
     res.json({ lines: await transcriptOf(c.id) });
   });
 
   // A summary of what was said, written by the AI key the administrator stored. Names are never sent: only "Doctor" and "Patient" lines.
-  router.post('/video/consults/:id/summary', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.post('/video/consults/:id/summary', roles('doctor'), async (req, res) => {
     const c = await own(req, res);
     if (!c) return;
     const lines = await transcriptOf(c.id);
     if (!lines.length) return res.status(400).json({ error: 'Nothing to summarise yet: no chat messages or captions were recorded in this call.' });
-    const text = lines.map((l: any) => `${l.from === 'doctor' ? 'Doctor' : 'Patient'}: ${l.text}${l.translated ? ` [translation: ${l.translated}]` : ''}`).join('\n').slice(-MAX_TRANSCRIPT_CHARS);
+    const text = lines.map((l) => `${l.from === 'doctor' ? 'Doctor' : 'Patient'}: ${l.text}${l.translated ? ` [translation: ${l.translated}]` : ''}`).join('\n').slice(-MAX_TRANSCRIPT_CHARS);
     const ai = await readAiConfig(R());
     if (!ai.key || !ai.features.brief) return res.json({ summary: null, reason: 'ai-off', lines });
     for (const model of [ai.model, ...MODELS].filter(Boolean) as string[]) {
@@ -211,7 +211,7 @@ export function videoStaffRoutes(ctx: AppCtx) {
     res.json({ summary: null, reason: 'ai-failed', lines });
   });
 
-  router.post('/video/consults/:id/end', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.post('/video/consults/:id/end', roles('doctor'), async (req, res) => {
     const c = await own(req, res);
     if (!c) return;
     if (!c.endedAt) {

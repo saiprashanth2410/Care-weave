@@ -5,14 +5,15 @@ import { extractWithGemini } from './geminiScan.js';
 import { searchMedicines } from './medicines.js';
 import { ScanError } from './scanSchema.js';
 import { readAiConfig } from './services/aiConfig.js';
-import type { AuthedRequest } from './middleware.js';
+import { asError } from './errors.js';
+import type { Request } from 'express';
 
 export type ScanCtx = {
   app: IRouter;
   roles: (...allowed: string[]) => any;
   uploadLimit: any;
   text: (v: any, max?: number) => string;
-  audit: (req: AuthedRequest, action: string, entity: string, entityId: string, detail?: string) => Promise<void>;
+  audit: (req: Request, action: string, entity: string, entityId: string, detail?: string) => Promise<void>;
   repos: () => Repos;
 };
 
@@ -20,7 +21,7 @@ export type ScanCtx = {
 export function registerScanRoutes({ app, roles, uploadLimit, text, audit, repos }: ScanCtx) {
   const scanCache = new Map<string, unknown>(); // identical uploads reuse the result instead of spending quota
 
-  app.post('/lab/extract', roles('lab'), uploadLimit, async (req: AuthedRequest, res) => {
+  app.post('/lab/extract', roles('lab'), uploadLimit, async (req, res) => {
     const ai = await readAiConfig(repos());
     if (!ai.features.scan) return res.status(503).json({ error: 'Report scanning is switched off. Ask the administrator to turn it on.' });
     const geminiKey = ai.key;
@@ -40,18 +41,18 @@ export function registerScanRoutes({ app, roles, uploadLimit, text, audit, repos
       scanCache.set(fileKey, parsed);
       if (scanCache.size > 50) scanCache.delete(scanCache.keys().next().value as string);
       res.json({ data: parsed });
-    } catch (e: any) {
+    } catch (e) {
       const status = e instanceof ScanError ? e.status : 503;
       console.log(`[scan] gemini -> ${status} (${mimeType}, ${kb} KB)`);
       res.status(status).json({ error: e instanceof ScanError ? e.message : 'The scanner is unavailable right now, try again shortly.' });
     }
   });
 
-  app.get('/medicines/search', roles('doctor'), async (req: AuthedRequest, res) => {
+  app.get('/medicines/search', roles('doctor'), async (req, res) => {
     try {
       res.json(await searchMedicines(String(req.query.q ?? ''), 15, repos().mode === 'mongo'));
-    } catch (err: any) {
-      res.status(500).json({ error: err?.message || 'Medicine search failed' });
+    } catch (err) {
+      res.status(500).json({ error: asError(err).message || 'Medicine search failed' });
     }
   });
 }

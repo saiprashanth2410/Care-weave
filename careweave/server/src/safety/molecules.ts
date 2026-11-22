@@ -1,5 +1,6 @@
 import { parseMedicine } from '../medicines.js';
 import { INTERACTION_LIST, type Interaction } from './interactions.js';
+import type { ExternalRecord, Prescription } from '../repo/types.js';
 
 // Duplicate-therapy engine: reduces any medicine (catalogue name, brand or free text) to its canonical active
 // molecules, so the same ingredient is caught when it is sold under different brand names.
@@ -152,7 +153,7 @@ export const durationDays = (s: unknown) => {
 type Active = { name: string; source: CollisionAlert['conflictingDrug']['source']; date: string; doctor?: string; facility?: string; dose: string; freq: string };
 
 /** Medicines the patient is still taking: Active in-house prescriptions and linked outside records, inside their course (at least 14 days). */
-export function activeMedicines(prescriptions: any[], externalRecords: any[], now = new Date()): Active[] {
+export function activeMedicines(prescriptions: Prescription[], externalRecords: ExternalRecord[], now = new Date()): Active[] {
   const live = (date: string, duration: unknown) => {
     const t = Date.parse(date);
     return !isNaN(t) && now.getTime() - t <= Math.max(14, durationDays(duration)) * dayMs;
@@ -164,16 +165,17 @@ export function activeMedicines(prescriptions: any[], externalRecords: any[], no
   }
   for (const rec of externalRecords) {
     if (rec.kind !== 'medication' || !rec.patientId || ['Unmatched', 'Kept separate', 'Rejected'].includes(rec.status)) continue;
-    const date = rec.eventDate || rec.importedAt;
-    if (!rec.content?.medicine || !live(date, rec.content.duration)) continue;
-    out.push({ name: String(rec.content.medicine), source: 'EXTERNAL_RECONCILED_RECORD', date, facility: rec.facility, dose: String(rec.content.dosage ?? ''), freq: String(rec.content.frequency ?? '') });
+    const date = rec.eventDate || rec.importedAt || '';
+    const content = rec.content;
+    if (!content?.medicine || !live(date, content.duration)) continue;
+    out.push({ name: String(content.medicine), source: 'EXTERNAL_RECONCILED_RECORD', date, facility: rec.facility, dose: String(content.dosage ?? ''), freq: String(content.frequency ?? '') });
   }
   return out;
 }
 
 export async function checkDuplicateTherapy(input: {
   medicine: string; dosage?: string; frequency?: string;
-  prescriptions: any[]; externalRecords: any[]; now?: Date;
+  prescriptions: Prescription[]; externalRecords: ExternalRecord[]; now?: Date;
   /** Looks a bare brand name up in the catalogue and returns its generic composition. */
   resolve?: (name: string) => Promise<string | undefined>;
 }): Promise<CollisionAlert[]> {

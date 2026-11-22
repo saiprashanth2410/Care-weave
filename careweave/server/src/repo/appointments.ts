@@ -1,5 +1,6 @@
 import { baseRepo, idIndex } from './base.js';
 import type { Collection, Filter, IndexSpec } from './store.js';
+import type { Appointment } from './types.js';
 
 export const appointmentsIndexes: IndexSpec[] = [
   idIndex,
@@ -23,12 +24,12 @@ const INACTIVE = ['Cancelled', 'Completed', 'No Show'];
 export const patientKeyOf = (a: { patientId?: string; date: string; time: string; status: string }) =>
   a.patientId && !INACTIVE.includes(a.status) ? `${a.patientId}|${a.date}|${a.time}` : undefined;
 /** The OP token for a day, however the date was written ('Today' and today's ISO date are the same day). */
-export const tokenKeyOf = (a: { token?: string; date: string }) =>
+export const tokenKeyOf = (a: { token?: string | number; date: string }) =>
   a.token ? `${a.date === 'Today' ? new Date().toISOString().slice(0, 10) : a.date.slice(0, 10)}|${a.token}` : undefined;
 
 export const ACTIVE: Filter = { status: { $nin: ['Cancelled', 'Completed', 'No Show'] } };
 
-export const appointmentsRepo = (c: Collection) => ({
+export const appointmentsRepo = (c: Collection<Appointment>) => ({
   ...baseRepo(c),
   forDoctor: (doctorId: string) => c.find({ doctorId }),
   forPatient: (patientId: string) => c.find({ patientId }),

@@ -1,5 +1,6 @@
 import { text } from '../util.js';
-import type { AuthedRequest } from '../middleware.js';
+import type { Request } from 'express';
+import type { Appointment } from '../repo/types.js';
 
 export const LAB_STATUSES = ['requested', 'collection_pending', 'collected', 'processing', 'awaiting_verification', 'verified', 'released', 'recollect_required', 'cancelled'];
 export const LAB_NEXT: Record<string, string[]> = {
@@ -16,8 +17,8 @@ export const LAB_NEXT: Record<string, string[]> = {
 // Fields the laboratory may change on an order. Identity and ordering fields are fixed at creation.
 export const LAB_EDITABLE = ['sampleType', 'sampleContainer', 'sampleBarcode', 'collectedBy', 'technicianNotes', 'pathologistNotes', 'statusReason', 'results', 'consultantPathologist', 'headOfDepartment', 'handlingNote'];
 
-export const cleanResults = (v: any) =>
-  (Array.isArray(v) ? v.slice(0, 200) : []).map((r: any) => ({
+export const cleanResults = (v: unknown) =>
+  (Array.isArray(v) ? v.slice(0, 200) : []).map((r) => ({
     parameter: text(r?.parameter, 120),
     value: text(r?.value, 60),
     unit: text(r?.unit, 30),
@@ -27,7 +28,7 @@ export const cleanResults = (v: any) =>
     flag: ['normal', 'abnormal', 'critical'].includes(r?.flag) ? r.flag : undefined
   }));
 
-export const resultsSignature = (rs: any[]) => JSON.stringify((rs || []).map((r) => [r.parameter, r.value, r.unit, r.referenceRange]));
+export const resultsSignature = (rs: Record<string, any>[] | undefined) => JSON.stringify((rs || []).map((r) => [r.parameter, r.value, r.unit, r.referenceRange]));
 
 export const FILE_TYPES: Record<string, { ext: string; magic: number[] }> = {
   'application/pdf': { ext: 'pdf', magic: [0x25, 0x50, 0x44, 0x46] },
@@ -35,5 +36,5 @@ export const FILE_TYPES: Record<string, { ext: string; magic: number[] }> = {
   'image/jpeg': { ext: 'jpg', magic: [0xff, 0xd8, 0xff] }
 };
 
-export const OPEN_VISIT = (a: any) => !['Cancelled', 'No Show'].includes(a.status);
-export const can = (req: AuthedRequest, permission: string) => (req.user.permissions || []).includes(permission);
+export const OPEN_VISIT = (a: Appointment) => !['Cancelled', 'No Show'].includes(a.status);
+export const can = (req: Request, permission: string) => (req.user.permissions || []).includes(permission);

@@ -15,6 +15,7 @@ import { casesFor, chartPoints, doctorLab, importedFor, labsFor, timeline } from
 import { cleanVitals, conflictsWith } from '../services/clinical.js';
 import type { AuthedRequest } from '../middleware.js';
 import type { Response } from 'express';
+import type { Request } from 'express';
 
 // Doctor portal API. Every route checks the role here on the server, and patient data is only
 // reachable for a patient the doctor is linked to (an appointment assigned to them, or their own encounter).
@@ -25,7 +26,7 @@ export function doctorRoutes(ctx: AppCtx) {
   const R = () => ctx.repos;
 
   /** Resolve :id to a patient this doctor may use, or answer 404/403 without disclosing anything about the chart. */
-  const patientFor = async (req: AuthedRequest, res: Response, value: string) => {
+  const patientFor = async (req: Request, res: Response, value: string) => {
     const p = await R().patients.byRef(String(value));
     if (!p) { res.status(404).json({ error: 'Patient not found' }); return null; }
     if (!(await linkedPatientIds(R(), req.user.id)).has(p.id)) {
@@ -38,7 +39,7 @@ export function doctorRoutes(ctx: AppCtx) {
 
   // A walk-in or newly registered patient has no booking yet. A doctor who knows the exact patient ID can open the
   // chart by stating why; that creates a booking in their name, so access is explicit, limited to one patient and audited.
-  router.post('/patients/open', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.post('/patients/open', roles('doctor'), async (req, res) => {
     const wanted = text(req.body?.patientId, 40);
     const reason = text(req.body?.reason, 200);
     if (reason.length < 5) return res.status(400).json({ error: 'Give the reason you are opening this chart (at least 5 characters)' });
@@ -56,7 +57,7 @@ export function doctorRoutes(ctx: AppCtx) {
     res.json(adminPatientView(p));
   });
 
-  router.get('/patients/:id/record', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.get('/patients/:id/record', roles('doctor'), async (req, res) => {
     const p = await patientFor(req, res, req.params.id);
     if (!p) return;
     await audit(req, 'read', 'patient', p.id, 'Open unified health record');
@@ -81,7 +82,7 @@ export function doctorRoutes(ctx: AppCtx) {
 
   // Pre-consultation brief. One request per doctor every few seconds, so it cannot be used to run up the model quota.
   const lastBrief = new Map<string, number>();
-  router.post('/patients/:id/summary', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.post('/patients/:id/summary', roles('doctor'), async (req, res) => {
     const p = await patientFor(req, res, req.params.id);
     if (!p) return;
     const t = Date.now();
@@ -94,19 +95,19 @@ export function doctorRoutes(ctx: AppCtx) {
     const [allLabs, vitalsList, prescriptions, encounters, referrals] = await Promise.all([
       labsFor(R(), p), R().vitals.forPatient(p.id, 1), R().prescriptions.forPatient(p.id), R().encounters.forPatient(p.id, 3), R().referrals.find({ patientId: p.id }),
     ]);
-    const labs = allLabs.filter((o: any) => ['verified', 'released'].includes(o.status)).slice(0, 6)
-      .flatMap((o: any) => (o.results ?? []).filter((r: any) => r.value).map((r: any) => ({ test: r.parameter, value: r.value, unit: r.unit, flag: r.flag, date: o.verifiedAt })));
+    const labs = allLabs.filter((o) => ['verified', 'released'].includes(o.status)).slice(0, 6)
+      .flatMap((o) => (o.results ?? []).filter((r) => r.value).map((r: Record<string, any>) => ({ test: r.parameter, value: r.value, unit: r.unit, flag: r.flag, date: o.verifiedAt })));
     const ai = await readAiConfig(R());
     const brief = await makeBrief({
       ageYears: ageFromDob(p.dob), sex: p.gender || 'O',
       allergies: p.allergies || [], problems: (p.problems || []).slice(0, 12),
       vitals: vitalsList[0],
-      medicines: prescriptions.filter((r: any) => r.status === 'Active').slice(0, 12),
+      medicines: prescriptions.filter((r) => r.status === 'Active').slice(0, 12),
       labs: labs.slice(0, 14),
       encounters,
       openItems: [
-        ...referrals.filter((r: any) => r.status !== 'Completed').map((r: any) => `Referral to ${r.specialty} is ${String(r.status).toLowerCase()}`),
-        ...allLabs.filter((o: any) => !['verified', 'released', 'cancelled'].includes(o.status)).map((o: any) => `${o.testName} not yet verified`),
+        ...referrals.filter((r) => r.status !== 'Completed').map((r) => `Referral to ${r.specialty} is ${String(r.status).toLowerCase()}`),
+        ...allLabs.filter((o) => !['verified', 'released', 'cancelled'].includes(o.status)).map((o) => `${o.testName} not yet verified`),
       ].slice(0, 6),
     }, ai.features.brief ? ai.key : '', ai.model || undefined);
     await audit(req, 'read', 'summary', p.id, `Pre-consultation brief (${brief.source})`);
@@ -114,7 +115,7 @@ export function doctorRoutes(ctx: AppCtx) {
   });
 
   // ── encounters (SOAP) ─────────────────────────────────────────────────────
-  router.post('/encounters', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.post('/encounters', roles('doctor'), async (req, res) => {
     const p = await patientFor(req, res, req.body?.patientId);
     if (!p) return;
     const b = req.body ?? {};
@@ -136,7 +137,7 @@ export function doctorRoutes(ctx: AppCtx) {
     res.status(201).json(saved);
   });
 
-  router.patch('/encounters/:id', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.patch('/encounters/:id', roles('doctor'), async (req, res) => {
     const e = await R().encounters.byId(req.params.id);
     if (!e || e.doctorId !== req.user.id) return res.status(404).json({ error: 'Encounter not found' });
     const expected = expectedVersion(req, e);
@@ -148,7 +149,7 @@ export function doctorRoutes(ctx: AppCtx) {
   });
 
   // ── vitals, allergies, problems ───────────────────────────────────────────
-  router.post('/patients/:id/vitals', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.post('/patients/:id/vitals', roles('doctor'), async (req, res) => {
     const p = await patientFor(req, res, req.params.id);
     if (!p) return;
     const v = cleanVitals(req.body ?? {});
@@ -159,7 +160,7 @@ export function doctorRoutes(ctx: AppCtx) {
     res.status(201).json(row);
   });
 
-  router.post('/patients/:id/allergies', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.post('/patients/:id/allergies', roles('doctor'), async (req, res) => {
     const p = await patientFor(req, res, req.params.id);
     if (!p) return;
     const allergen = text(req.body?.allergen, 120);
@@ -170,7 +171,7 @@ export function doctorRoutes(ctx: AppCtx) {
     res.status(201).json(al);
   });
 
-  router.post('/patients/:id/problems', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.post('/patients/:id/problems', roles('doctor'), async (req, res) => {
     const p = await patientFor(req, res, req.params.id);
     if (!p) return;
     const name = text(req.body?.name, 160);
@@ -182,13 +183,13 @@ export function doctorRoutes(ctx: AppCtx) {
   });
 
   // ── referrals and care plans ──────────────────────────────────────────────
-  const mine = async (req: AuthedRequest) => [...(await linkedPatientIds(R(), req.user.id))];
+  const mine = async (req: Request) => [...(await linkedPatientIds(R(), req.user.id))];
 
-  router.get('/referrals', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.get('/referrals', roles('doctor'), async (req, res) => {
     await audit(req, 'read', 'referral', 'directory');
     res.json(await R().referrals.newestFirst({ patientId: { $in: await mine(req) } }));
   });
-  router.post('/referrals', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.post('/referrals', roles('doctor'), async (req, res) => {
     const p = await patientFor(req, res, req.body?.patientId);
     if (!p) return;
     const reason = text(req.body?.reason, 500);
@@ -202,7 +203,7 @@ export function doctorRoutes(ctx: AppCtx) {
     await audit(req, 'create', 'referral', rf.id, `Referral to ${rf.specialty}`);
     res.status(201).json(rf);
   });
-  router.patch('/referrals/:id', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.patch('/referrals/:id', roles('doctor'), async (req, res) => {
     const rf = await R().referrals.byId(req.params.id);
     if (!rf || !(await mine(req)).includes(rf.patientId)) return res.status(404).json({ error: 'Referral not found' });
     if (!['Drafted', 'Sent', 'Scheduled', 'Completed'].includes(req.body?.status)) return res.status(400).json({ error: 'Unknown referral status' });
@@ -211,25 +212,25 @@ export function doctorRoutes(ctx: AppCtx) {
     res.json(saved);
   });
 
-  router.get('/care-plans', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.get('/care-plans', roles('doctor'), async (req, res) => {
     await audit(req, 'read', 'care-plan', 'directory');
     res.json(await R().carePlans.newestFirst({ patientId: { $in: await mine(req) } }));
   });
-  router.post('/care-plans', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.post('/care-plans', roles('doctor'), async (req, res) => {
     const p = await patientFor(req, res, req.body?.patientId);
     if (!p) return;
     const title = text(req.body?.title, 160);
     if (!title) return res.status(400).json({ error: 'Give the care plan a title' });
     const cp = await R().carePlans.insert({
       id: id('cp'), patientId: p.id, patientName: p.name, title, category: text(req.body?.category, 80) || 'General',
-      goals: Array.isArray(req.body?.goals) ? req.body.goals.slice(0, 20).map((g: any) => text(g, 200)).filter(Boolean) : [],
+      goals: Array.isArray(req.body?.goals) ? req.body.goals.slice(0, 20).map((g: unknown) => text(g, 200)).filter(Boolean) : [],
       targets: Array.isArray(req.body?.targets) ? req.body.targets.slice(0, 20) : [],
       nextReviewDate: text(req.body?.nextReviewDate, 40) || now(), status: 'Active', createdBy: req.user.id, createdAt: now()
     });
     await audit(req, 'create', 'care-plan', cp.id, 'Care plan started');
     res.status(201).json(cp);
   });
-  router.patch('/care-plans/:id', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.patch('/care-plans/:id', roles('doctor'), async (req, res) => {
     const cp = await R().carePlans.byId(req.params.id);
     if (!cp || !(await mine(req)).includes(cp.patientId)) return res.status(404).json({ error: 'Care plan not found' });
     const changes: Record<string, any> = {};
@@ -241,22 +242,22 @@ export function doctorRoutes(ctx: AppCtx) {
   });
 
   // ── lab orders (the laboratory itself works through /api/lab/*) ───────────
-  router.get('/lab-orders', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.get('/lab-orders', roles('doctor'), async (req, res) => {
     const linked = [...(await linkedPatientIds(R(), req.user.id))];
     await audit(req, 'read', 'lab-order', 'directory');
     const rows = await R().orders.newestFirst({ status: { $ne: 'cancelled' }, $or: [{ createdBy: req.user.id }, { registeredPatientRef: { $in: linked } }] });
     res.json(rows.map(doctorLab));
   });
 
-  router.post('/lab-orders', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.post('/lab-orders', roles('doctor'), async (req, res) => {
     const p = await patientFor(req, res, req.body?.patientId);
     if (!p) return;
     const testName = text(req.body?.testName, 120);
     if (!testName) return res.status(400).json({ error: 'Choose the test to order' });
     // Every order is tied to a visit: the one named, else this doctor's latest encounter, else an open appointment.
     const wanted = text(req.body?.encounterId, 60);
-    const enc = (await R().encounters.forPatient(p.id)).find((e: any) => e.doctorId === req.user.id && (!wanted || e.id === wanted))
-      ?? (await R().appointments.forPatient(p.id)).find((a: any) => a.doctorId === req.user.id && !['Cancelled', 'No Show'].includes(a.status) && (!wanted || a.id === wanted));
+    const enc = (await R().encounters.forPatient(p.id)).find((e) => e.doctorId === req.user.id && (!wanted || e.id === wanted))
+      ?? (await R().appointments.forPatient(p.id)).find((a) => a.doctorId === req.user.id && !['Cancelled', 'No Show'].includes(a.status) && (!wanted || a.id === wanted));
     if (!enc) return res.status(400).json({ error: 'Open an encounter (SOAP note) or have an appointment for this patient before ordering a test' });
     const draw = () => `ORD-${Date.now().toString().slice(-7)}${crypto.randomInt(10, 100)}`;
     let orderId = draw();
@@ -275,7 +276,7 @@ export function doctorRoutes(ctx: AppCtx) {
   });
 
   // A doctor may withdraw an order the lab has not started on. Everything else is the laboratory's call.
-  router.patch('/lab-orders/:id/status', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.patch('/lab-orders/:id/status', roles('doctor'), async (req, res) => {
     const o = await R().orders.byId(req.params.id);
     if (!o || o.createdBy !== req.user.id) return res.status(404).json({ error: 'Lab order not found' });
     if (!['requested', 'collection_pending'].includes(o.status)) return res.status(409).json({ error: 'The laboratory has already started this order' });
@@ -303,17 +304,17 @@ export function doctorRoutes(ctx: AppCtx) {
     });
 
   /** A medicine of the prescription being written, shaped like a saved one so the duplicate check can read it. */
-  const pendingRx = (req: AuthedRequest, r: any, i: number) => ({
+  const pendingRx = (req: Request, r: any, i: number) => ({
     id: `pending-${i}`, medicine: text(r?.medicine, 120), dosage: text(r?.dosage, 80), frequency: text(r?.frequency, 80), duration: text(r?.duration, 60),
     status: 'Active', date: now(), source: 'CareWeave Clinic', prescribingClinician: req.user.name,
   });
 
-  router.post('/encounters/validate-prescription', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.post('/encounters/validate-prescription', roles('doctor'), async (req, res) => {
     const p = await patientFor(req, res, req.body?.patientId);
     if (!p) return;
     const medicine = text(req.body?.medicine, 200);
     if (!medicine) return res.status(400).json({ error: 'Name the medicine to check' });
-    const also = (Array.isArray(req.body?.alsoPrescribing) ? req.body.alsoPrescribing.slice(0, 15) : []).filter((r: any) => text(r?.medicine, 120)).map((r: any, i: number) => pendingRx(req, r, i));
+    const also = (Array.isArray(req.body?.alsoPrescribing) ? req.body.alsoPrescribing.slice(0, 15) : []).filter((r: Record<string, any>) => text(r?.medicine, 120)).map((r: Record<string, any>, i: number) => pendingRx(req, r, i));
     const alerts = await duplicateAlerts(p, medicine, text(req.body?.dosage, 80), text(req.body?.frequency, 80), also);
     res.json({ alerts, blocking: alerts.some((a) => a.severity === 'HIGH_COLLISION') });
   });
@@ -324,18 +325,18 @@ export function doctorRoutes(ctx: AppCtx) {
     ...(r.diagnosis ? { diagnosis: text(r.diagnosis, 200) } : {}), ...(r.notes ? { notes: text(r.notes, 500) } : {}),
     status: 'Active', date: now(), source: 'CareWeave Clinic', prescribingClinician: req.user.name, imported: false,
     allergyOverrideReason: allergy ? text(r.allergyOverrideReason, 300) : undefined,
-    duplicateOverride: high.length ? { reason: text(ov.overrideReason, 500), acknowledgedRisks: true, molecules: high.flatMap((x: any) => x.matchedMolecules), conflictsWith: high.map((x: any) => x.conflictingDrug.name) } : undefined,
+    duplicateOverride: high.length ? { reason: text(ov.overrideReason, 500), acknowledgedRisks: true, molecules: high.flatMap((x) => x.matchedMolecules), conflictsWith: high.map((x) => x.conflictingDrug.name) } : undefined,
   });
 
-  router.post('/prescriptions', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.post('/prescriptions', roles('doctor'), async (req, res) => {
     const p = await patientFor(req, res, req.body?.patientId);
     if (!p) return;
     const b = req.body ?? {};
     const medicine = text(b.medicine, 120), dosage = text(b.dosage, 80), frequency = text(b.frequency, 80);
     if (!medicine || !dosage || !frequency) return res.status(400).json({ error: 'Medicine, dose and frequency are required' });
-    const enc = (await R().encounters.forPatient(p.id)).find((e: any) => e.doctorId === req.user.id && (!b.encounterId || e.id === b.encounterId));
+    const enc = (await R().encounters.forPatient(p.id)).find((e) => e.doctorId === req.user.id && (!b.encounterId || e.id === b.encounterId));
     if (!enc) return res.status(400).json({ error: 'Document an encounter for this patient first, so the prescription is linked to it' });
-    const allergy = (p.allergies || []).find((a: any) => conflictsWith(String(a.allergen), medicine));
+    const allergy = (p.allergies || []).find((a) => conflictsWith(String(a.allergen), medicine));
     if (allergy && text(b.allergyOverrideReason, 300).length < 15) {
       await audit(req, 'blocked', 'prescription', p.id, 'Allergy conflict');
       return res.status(409).json({ error: `Allergy on record: ${allergy.allergen} (${allergy.severity}). Choose another medicine, or send an override reason of at least 15 characters.` });
@@ -364,36 +365,36 @@ export function doctorRoutes(ctx: AppCtx) {
 
   // One prescription with several medicines. Every medicine is checked first (allergy, and duplicate therapy against what the patient
   // already takes AND against the other medicines in this prescription); if any needs the doctor's decision nothing is saved.
-  router.post('/prescriptions/batch', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.post('/prescriptions/batch', roles('doctor'), async (req, res) => {
     const p = await patientFor(req, res, req.body?.patientId);
     if (!p) return;
     const b = req.body ?? {};
-    const rows = (Array.isArray(b.medicines) ? b.medicines : []).slice(0, 15).map((r: any) => ({
+    const rows = (Array.isArray(b.medicines) ? b.medicines : []).slice(0, 15).map((r: Record<string, any>) => ({
       medicine: text(r?.medicine, 120), dosage: text(r?.dosage, 80), frequency: text(r?.frequency, 80), route: text(r?.route, 40),
       duration: text(r?.duration, 60), instructions: text(r?.instructions, 500), refills: r?.refills,
       diagnosis: text(b.diagnosis, 200), notes: text(b.notes, 500),
       allergyOverrideReason: text(r?.allergyOverrideReason, 300), duplicateOverride: r?.duplicateOverride,
     }));
     if (!rows.length) return res.status(400).json({ error: 'Add at least one medicine' });
-    const bad = rows.findIndex((r: any) => !r.medicine || !r.dosage || !r.frequency);
+    const bad = rows.findIndex((r: Record<string, any>) => !r.medicine || !r.dosage || !r.frequency);
     if (bad >= 0) return res.status(400).json({ error: `Medicine ${bad + 1}: name, dose and frequency are required`, row: bad });
-    const enc = (await R().encounters.forPatient(p.id)).find((e: any) => e.doctorId === req.user.id && (!b.encounterId || e.id === b.encounterId));
+    const enc = (await R().encounters.forPatient(p.id)).find((e) => e.doctorId === req.user.id && (!b.encounterId || e.id === b.encounterId));
     if (!enc) return res.status(400).json({ error: 'Document an encounter for this patient first, so the prescription is linked to it' });
 
     const blocked: { index: number; kind: 'allergy' | 'duplicate'; error: string; alerts?: any[] }[] = [];
     const checks: { allergy: any; high: any[]; ov: any }[] = [];
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
-      const allergy = (p.allergies || []).find((a: any) => conflictsWith(String(a.allergen), r.medicine));
+      const allergy = (p.allergies || []).find((a) => conflictsWith(String(a.allergen), r.medicine));
       if (allergy && r.allergyOverrideReason.length < 15) {
         blocked.push({ index: i, kind: 'allergy', error: `Allergy on record: ${allergy.allergen} (${allergy.severity}). Choose another medicine, or give an override reason of at least 15 characters.` });
       }
       const alerts = await duplicateAlerts(p, r.medicine, r.dosage, r.frequency, rows.slice(0, i).map((x: any, j: number) => pendingRx(req, x, j)));
-      const high = alerts.filter((x: any) => x.severity === 'HIGH_COLLISION');
+      const high = alerts.filter((x) => x.severity === 'HIGH_COLLISION');
       const ov = r.duplicateOverride;
       const overrideOk = !!ov && ov.acknowledgedRisks === true && text(ov.overrideReason, 500).length >= 15;
       if (high.length && !overrideOk) {
-        const molecules = [...new Set(high.flatMap((x: any) => x.matchedMolecules))].join(', ');
+        const molecules = [...new Set(high.flatMap((x) => x.matchedMolecules))].join(', ');
         blocked.push({ index: i, kind: 'duplicate', alerts, error: `Duplicate therapy: ${molecules} is already being taken. Cancel this medicine, or give an override reason of at least 15 characters and acknowledge the risks.` });
       }
       checks.push({ allergy, high, ov });
@@ -411,16 +412,16 @@ export function doctorRoutes(ctx: AppCtx) {
     for (let i = 0; i < saved.length; i++) {
       const { allergy, high, ov } = checks[i];
       await audit(req, 'create', 'prescription', saved[i].id, `${rows[i].medicine} ${rows[i].dosage}${allergy ? ' (allergy override)' : ''} · ${saved.length} medicine(s) in one prescription`);
-      if (high.length) await audit(req, 'override', 'prescription', saved[i].id, `Duplicate therapy override for ${[...new Set(high.flatMap((x: any) => x.matchedMolecules))].join(', ')}: ${text(ov.overrideReason, 500)}`);
+      if (high.length) await audit(req, 'override', 'prescription', saved[i].id, `Duplicate therapy override for ${[...new Set(high.flatMap((x) => x.matchedMolecules))].join(', ')}: ${text(ov.overrideReason, 500)}`);
     }
     await emitEvent('PRESCRIPTION_PRESCRIBED', {
       patientId: p.patientId, name: p.name, phone: p.phone, doctor: req.user.name,
-      medicines: saved.map((r: any) => ({ name: r.medicine, dosage: r.dosage, frequency: r.frequency, foodInstruction: r.instructions || '' })),
+      medicines: saved.map((r) => ({ name: r.medicine, dosage: r.dosage, frequency: r.frequency, foodInstruction: r.instructions || '' })),
     });
     res.status(201).json(saved);
   });
 
-  router.patch('/prescriptions/:id', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.patch('/prescriptions/:id', roles('doctor'), async (req, res) => {
     const r = await R().prescriptions.byId(req.params.id);
     if (!r || r.prescribingClinician !== req.user.name) return res.status(404).json({ error: 'Prescription not found' });
     const expected = expectedVersion(req, r);
@@ -448,7 +449,7 @@ export function doctorRoutes(ctx: AppCtx) {
   const analyze = async (rec: any, p: any, by: string) => {
     const [others, labs, rx] = await Promise.all([
       R().externalRecords.find({ patientId: p.id, id: { $ne: rec.id } }),
-      labsFor(R(), p).then((l) => l.filter((o: any) => ['verified', 'released'].includes(o.status))),
+      labsFor(R(), p).then((l) => l.filter((o) => ['verified', 'released'].includes(o.status))),
       R().prescriptions.forPatient(p.id),
     ]);
     const issues = findIssues(rec, others, labs, rx);
@@ -456,7 +457,7 @@ export function doctorRoutes(ctx: AppCtx) {
     return { cases: issues.map((i) => caseFrom(rec, p.id, i, by)), status };
   };
 
-  const validRecord = (raw: any) => {
+  const validRecord = (raw: Record<string, any>) => {
     const facility = text(raw?.facility, 120);
     const kind = text(raw?.kind, 20);
     if (!facility) return { error: 'Name the source facility' };
@@ -470,7 +471,7 @@ export function doctorRoutes(ctx: AppCtx) {
     return { ok: { facility, kind, content, eventDate: ed || '', sourceRecordId: text(raw?.sourceRecordId, 80), documentRef: text(raw?.documentRef, 160), who } };
   };
 
-  router.post('/external-records/import', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.post('/external-records/import', roles('doctor'), async (req, res) => {
     const list = Array.isArray(req.body?.records) ? req.body.records : [req.body];
     if (list.length > 200) return res.status(400).json({ error: 'Import at most 200 records at a time' });
     const out: any[] = [];
@@ -507,13 +508,13 @@ export function doctorRoutes(ctx: AppCtx) {
     res.status(out.length && failed === out.length ? 400 : 201).json({ results: out, imported: out.length - failed, rejected: failed, ...(out[0]?.record ? { record: out[0].record, case: out[0].cases?.[0] } : { error: out[0]?.error }) });
   });
 
-  router.get('/reconciliation/cases', roles('doctor'), async (req: AuthedRequest, res) => {
+  router.get('/reconciliation/cases', roles('doctor'), async (req, res) => {
     await audit(req, 'read', 'reconciliation', 'queue');
     res.json(await casesFor(R(), req.user.id));
   });
 
-  router.patch('/reconciliation/cases/:id', roles('doctor'), async (req: AuthedRequest, res) => {
-    const k = (await casesFor(R(), req.user.id)).find((x: any) => x.id === req.params.id);
+  router.patch('/reconciliation/cases/:id', roles('doctor'), async (req, res) => {
+    const k = (await casesFor(R(), req.user.id)).find((x) => x.id === req.params.id);
     if (!k) return res.status(404).json({ error: 'Review case not found' });
     const decision = req.body?.decision;
     if (!['keep-separate', 'link'].includes(decision)) return res.status(400).json({ error: 'Decision must be keep-separate or link' });

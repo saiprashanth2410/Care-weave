@@ -11,7 +11,8 @@ import { INACTIVE_STATUSES, WAITING_STATUSES, hhmmToMinutes, labelToMinutes, shi
 import { emitEvent } from '../whatsapp/emitter.js';
 import { isLive } from '../repo/videoConsults.js';
 import { isoToday } from '../util.js';
-import type { AuthedRequest } from '../middleware.js';
+import type { Request } from 'express';
+import type { Appointment, User } from '../repo/types.js';
 
 /** Which of the unique guards fired: the patient already booked at that time, or the doctor's slot taken. */
 const clashMessage = (err: DuplicateError, patient: string, doctor: string | undefined, date: string, time: string) =>
@@ -28,13 +29,13 @@ export function appointmentRoutes(ctx: AppCtx) {
 
   // ── Doctors ────────────────────────────────────────────────────────────────
   // Everything here reads the staff directory, so a doctor an administrator adds, edits or disables shows up (or goes) everywhere at once.
-  const activeDoctors = async () => (await ctx.repos.users.byRole('doctor')).filter((u: any) => u.active !== false);
-  const doctorView = (u: any) => ({ id: u.id, name: u.name, facility: u.facility, room: u.room || '', shiftStart: shiftOf(u).start, shiftEnd: shiftOf(u).end });
+  const activeDoctors = async () => (await ctx.repos.users.byRole('doctor')).filter((u) => u.active !== false);
+  const doctorView = (u: User) => ({ id: u.id, name: u.name, facility: u.facility, room: u.room || '', shiftStart: shiftOf(u).start, shiftEnd: shiftOf(u).end });
 
   const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
   const HHMM_Q = /^([01]\d|2[0-3]):[0-5]\d$/;
   // The browser's own "today" and "now" are passed in: the server may be in another time zone, and "past" means past for the person at the desk.
-  const dayOf = (req: AuthedRequest) => {
+  const dayOf = (req: Request) => {
     const today = ISO_DATE.test(String(req.query.today || '')) ? String(req.query.today) : isoToday();
     const date = ISO_DATE.test(String(req.query.date || '')) ? String(req.query.date) : today;
     const now = HHMM_Q.test(String(req.query.now || '')) ? String(req.query.now) : '';
@@ -43,7 +44,7 @@ export function appointmentRoutes(ctx: AppCtx) {
   /** One day's appointments. Older rows wrote the date as the word "Today". */
   const rowsOn = (date: string, includeTodayWord: boolean) =>
     ctx.repos.appointments.find({ $or: [{ date: { $regex: `^${date}` } }, ...(includeTodayWord ? [{ date: 'Today' }] : [])] });
-  const slim = (a: any) => ({
+  const slim = (a: Appointment) => ({
     id: a.id, patientName: a.patientName, patientIdCode: a.patientIdCode, time: a.time, token: a.token, status: a.status, reason: a.reason,
     checkedInAt: a.checkedInAt, startedAt: a.startedAt, completedAt: a.completedAt,
   });
@@ -54,27 +55,27 @@ export function appointmentRoutes(ctx: AppCtx) {
   });
 
   // Live status of every doctor: who is with them now, how many wait, how many were seen, and the next free slot.
-  router.get('/doctors/roster', roles('receptionist'), async (req: AuthedRequest, res) => {
+  router.get('/doctors/roster', roles('receptionist'), async (req, res) => {
     const day = dayOf(req);
     const [doctors, rows] = await Promise.all([activeDoctors(), rowsOn(day.date, day.isToday)]);
-    const calls = (await ctx.repos.videoConsults.recentForDoctors(doctors.map((u: any) => u.id))).filter((c: any) => isLive(c));
+    const calls = (await ctx.repos.videoConsults.recentForDoctors(doctors.map((u) => u.id))).filter((c) => isLive(c));
     const nowMin = day.now ? hhmmToMinutes(day.now) : null;
-    res.json(doctors.map((u: any) => {
-      const mine = rows.filter((a: any) => a.doctorId === u.id);
+    res.json(doctors.map((u) => {
+      const mine = rows.filter((a) => a.doctorId === u.id);
       const shift = shiftOf(u);
-      const booked = new Set(mine.filter((a: any) => !INACTIVE_STATUSES.includes(a.status)).map((a: any) => a.time));
+      const booked = new Set(mine.filter((a) => !INACTIVE_STATUSES.includes(a.status)).map((a) => a.time));
       const free = slotsForShift(shift).filter((l) => !booked.has(l) && !(day.isToday && nowMin !== null && labelToMinutes(l)! < nowMin));
-      const current = mine.filter((a: any) => a.status === 'In Consultation').sort((a: any, b: any) => String(a.startedAt || '').localeCompare(String(b.startedAt || '')))[0];
+      const current = mine.filter((a) => a.status === 'In Consultation').sort((a, b) => String(a.startedAt || '').localeCompare(String(b.startedAt || '')))[0];
       const onShift = !(day.isToday && nowMin !== null) || (nowMin >= hhmmToMinutes(shift.start) && nowMin <= hhmmToMinutes(shift.end) + 30);
-      const video = calls.find((c: any) => c.doctorId === u.id);
+      const video = calls.find((c) => c.doctorId === u.id);
       return {
         ...doctorView(u),
         status: video ? 'in_video' : current ? 'in_consultation' : onShift ? 'available' : 'off_shift',
         video: video ? { patientName: video.patientName, startedAt: video.createdAt } : null,
         current: current ? slim(current) : null,
-        waiting: mine.filter((a: any) => WAITING_STATUSES.includes(a.status)).length,
-        scheduled: mine.filter((a: any) => a.status === 'Scheduled').length,
-        seen: mine.filter((a: any) => a.status === 'Completed').length,
+        waiting: mine.filter((a) => WAITING_STATUSES.includes(a.status)).length,
+        scheduled: mine.filter((a) => a.status === 'Scheduled').length,
+        seen: mine.filter((a) => a.status === 'Completed').length,
         nextOpenSlot: free[0] || null,
         freeSlots: free.length,
       };
@@ -82,30 +83,30 @@ export function appointmentRoutes(ctx: AppCtx) {
   });
 
   // Who one doctor is with, who is waiting, who is coming, and who they have seen, for a day.
-  router.get('/doctors/:id/day', roles('receptionist'), async (req: AuthedRequest, res) => {
+  router.get('/doctors/:id/day', roles('receptionist'), async (req, res) => {
     const u = await ctx.repos.users.byId(String(req.params.id));
     if (!u || u.role !== 'doctor') return res.status(404).json({ error: 'Doctor not found' });
     const day = dayOf(req);
-    const mine = (await rowsOn(day.date, day.isToday)).filter((a: any) => a.doctorId === u.id);
-    const by = (statuses: string[]) => mine.filter((a: any) => statuses.includes(a.status));
-    const minutes = (a: any) => labelToMinutes(a.time) ?? 0;
+    const mine = (await rowsOn(day.date, day.isToday)).filter((a) => a.doctorId === u.id);
+    const by = (statuses: string[]) => mine.filter((a) => statuses.includes(a.status));
+    const minutes = (a: Appointment) => labelToMinutes(a.time) ?? 0;
     res.json({
       doctor: doctorView(u), date: day.date,
       current: by(['In Consultation']).map(slim),
-      waiting: by(WAITING_STATUSES).sort((a: any, b: any) => String(a.checkedInAt || '').localeCompare(String(b.checkedInAt || ''))).map(slim),
-      upcoming: by(['Scheduled']).sort((a: any, b: any) => minutes(a) - minutes(b)).map(slim),
-      seen: by(['Completed']).sort((a: any, b: any) => String(b.completedAt || '').localeCompare(String(a.completedAt || ''))).map(slim),
+      waiting: by(WAITING_STATUSES).sort((a, b) => String(a.checkedInAt || '').localeCompare(String(b.checkedInAt || ''))).map(slim),
+      upcoming: by(['Scheduled']).sort((a, b) => minutes(a) - minutes(b)).map(slim),
+      seen: by(['Completed']).sort((a, b) => String(b.completedAt || '').localeCompare(String(a.completedAt || ''))).map(slim),
       notSeen: by(['Cancelled', 'No Show']).map(slim),
     });
   });
 
   // The slots a doctor can be booked into on a date: free ones can be picked, booked and (today) already-passed ones cannot.
-  router.get('/doctors/:id/slots', roles('receptionist', 'doctor'), async (req: AuthedRequest, res) => {
+  router.get('/doctors/:id/slots', roles('receptionist', 'doctor'), async (req, res) => {
     const u = await ctx.repos.users.byId(String(req.params.id));
     if (!u || u.role !== 'doctor' || u.active === false) return res.status(404).json({ error: 'Doctor not found' });
     const day = dayOf(req);
     const nowMin = day.now ? hhmmToMinutes(day.now) : null;
-    const booked = new Set((await rowsOn(day.date, day.isToday)).filter((a: any) => a.doctorId === u.id && !INACTIVE_STATUSES.includes(a.status)).map((a: any) => a.time));
+    const booked = new Set((await rowsOn(day.date, day.isToday)).filter((a) => a.doctorId === u.id && !INACTIVE_STATUSES.includes(a.status)).map((a) => a.time));
     const slots = slotsForShift(shiftOf(u)).map((time) => ({
       time,
       state: booked.has(time) ? 'booked' : (day.isToday && nowMin !== null && labelToMinutes(time)! < nowMin) ? 'past' : 'free',
@@ -113,7 +114,7 @@ export function appointmentRoutes(ctx: AppCtx) {
     res.json({ doctor: doctorView(u), date: day.date, slots, nextFree: slots.find((x) => x.state === 'free')?.time || null });
   });
 
-  router.get('/appointments', roles('receptionist', 'doctor'), async (req: AuthedRequest, res) => {
+  router.get('/appointments', roles('receptionist', 'doctor'), async (req, res) => {
     const { date, status, patientId } = req.query as any;
     const filter: Record<string, any> = {};
     if (req.user.role === 'doctor') filter.doctorId = req.user.id;
@@ -121,12 +122,12 @@ export function appointmentRoutes(ctx: AppCtx) {
     if (patientId) filter.patientId = patientId;
     // "today" reads one day's rows and narrows them; anything else is a normal filtered query.
     const rows = date === 'today'
-      ? (await ctx.repos.appointments.onDay(isoToday())).filter((a: any) => Object.entries(filter).every(([k, v]) => a[k] === v))
+      ? (await ctx.repos.appointments.onDay(isoToday())).filter((a) => Object.entries(filter).every(([k, v]) => a[k] === v))
       : await ctx.repos.appointments.find(filter);
     res.json(rows);
   });
 
-  router.post('/appointments', roles('receptionist', 'doctor'), async (req: AuthedRequest, res) => {
+  router.post('/appointments', roles('receptionist', 'doctor'), async (req, res) => {
     const p = await ctx.repos.patients.byRef(String(req.body?.patientId ?? ''));
     if (!p) return res.status(404).json({ error: 'Patient not found' });
     if (req.user.role === 'doctor') {
@@ -166,7 +167,7 @@ export function appointmentRoutes(ctx: AppCtx) {
     res.status(201).json(a);
   });
 
-  router.patch('/appointments/:id', roles('receptionist', 'doctor'), async (req: AuthedRequest, res) => {
+  router.patch('/appointments/:id', roles('receptionist', 'doctor'), async (req, res) => {
     const a = await ctx.repos.appointments.byId(req.params.id);
     if (!a) return res.status(404).json({ error: 'Appointment not found' });
     const { status, date, time, reason } = req.body || {};

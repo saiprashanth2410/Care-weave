@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import type { Row } from './types.js';
 import { CHANGE_LOG_KEEP, canMerge, changedFields, ConflictError, DuplicateError, UNIQUE_FIELDS, VERSIONED, splitChanges, stampChange, stampNew, type Collection, type FileStore, type Filter, type FindOpts, type IndexSpec, type Store } from './store.js';
 
 // Development fallback used only when MONGODB_URI is not set. Documents live in process memory and are saved to one JSON
@@ -164,10 +165,10 @@ export class LocalStore implements Store {
     if (fresh) await this.persist();
   }
 
-  collection(name: string) {
+  collection<T extends Row = Row>(name: string) {
     let c = this.colls.get(name);
     if (!c) { c = new LocalCollection(name, () => this.persist(), this.onChange); this.colls.set(name, c); }
-    return c;
+    return c as unknown as Collection<T>;
   }
 
   private txQueue: Promise<unknown> = Promise.resolve();

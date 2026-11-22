@@ -12,7 +12,7 @@ const ID = 'startup';
 export const STARTUP_VERSION = 1;
 
 export async function startupStamp(): Promise<string> {
-  const seed = (await buildSeed()).users.map((u: any) => [u.email, u.role, u.permissions ?? []]);
+  const seed = (await buildSeed()).users.map((u) => [u.email, u.role, u.permissions ?? []]);
   return crypto.createHash('sha1').update(JSON.stringify([STARTUP_VERSION, INDEXES, seed, DEMO_ACCOUNTS])).digest('hex');
 }
 

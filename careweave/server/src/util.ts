@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import type { Patient } from './repo/types.js';
 
 export const now = () => new Date().toISOString();
 export const id = (prefix: string) => `${prefix}-${crypto.randomBytes(4).toString('hex')}`;
@@ -21,7 +22,7 @@ export function ageFromDob(dob: string) {
 }
 
 /** What the front desk and the lab see of a patient: no chart data. `version` is what the client sends back on an edit. */
-export function adminPatientView(p: any) {
+export function adminPatientView(p: Patient) {
   return {
     id: p.id,
     patientId: p.patientId,

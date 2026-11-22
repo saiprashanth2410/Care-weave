@@ -2,6 +2,7 @@ import { queryExasol, pingExasol, updateSyncTelemetry } from './client.js';
 import { initializeExasolSchema, schemaName } from './schema.js';
 import { deriveLabOrders, deriveRx, deriveVisits } from './derive.js';
 import { analyticsInput } from './sampleHistory.js';
+import { asError } from '../errors.js';
 
 /** The Exasol operations the sync needs. Tests pass a fake; production uses the real connection. */
 export interface ExasolPort {
@@ -144,8 +145,8 @@ export async function syncDataToExasol(source: SyncSource, opts: { since?: strin
       syncedVisits: loaded.visits, syncedLabOrders: loaded.labs, syncedPrescriptions: loaded.rx,
       verified, durationMs: Date.now() - started, timestamp,
     };
-  } catch (err: any) {
+  } catch (err) {
     console.error('[Exasol Sync Error]:', err);
-    return fail(err?.message || 'Sync failed');
+    return fail(asError(err).message || 'Sync failed');
   }
 }

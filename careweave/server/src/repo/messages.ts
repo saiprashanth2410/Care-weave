@@ -1,5 +1,6 @@
 import { baseRepo, idIndex } from './base.js';
 import type { Collection, IndexSpec } from './store.js';
+import type { Message } from './types.js';
 
 // Direct messages between staff. A conversation is the pair of people, so its id is their two user ids in sorted order.
 // A photo is kept in its own collection so listing messages never loads image bytes.
@@ -8,7 +9,7 @@ export const messageImagesIndexes: IndexSpec[] = [idIndex];
 
 export const convIdOf = (a: string, b: string) => [a, b].sort().join('|');
 
-export const messagesRepo = (c: Collection) => ({
+export const messagesRepo = (c: Collection<Message>) => ({
   ...baseRepo(c),
   /** Everything a person sent or received, newest first (the conversation list is built from this). */
   involving: (userId: string, limit = 1500) => c.find({ $or: [{ fromId: userId }, { toId: userId }] }, { sort: { at: -1 }, limit }),

@@ -1,5 +1,7 @@
 import type mongoose from 'mongoose';
+import type { Row } from './types.js';
 import { CHANGE_LOG_KEEP, canMerge, changedFields, ConflictError, DuplicateError, VERSIONED, splitChanges, stampChange, stampNew, type Collection, type FileStore, type Filter, type FindOpts, type IndexSpec, type Store } from './store.js';
+import { asError } from '../errors.js';
 
 type Db = NonNullable<typeof mongoose.connection.db>;
 type MongoColl<T = any> = ReturnType<Db['collection']> & { __t?: T };
@@ -25,10 +27,10 @@ class MongoCollection implements Collection {
     if (opts.sort) cur = cur.sort(opts.sort);
     if (opts.skip) cur = cur.skip(opts.skip);
     if (opts.limit) cur = cur.limit(opts.limit);
-    return cur.toArray();
+    return cur.toArray() as unknown as Promise<Row[]>;
   }
   findOne(filter: Filter) {
-    return this.c.findOne(filter, { projection: { _id: 0 }, ...this.o });
+    return this.c.findOne(filter, { projection: { _id: 0 }, ...this.o }) as unknown as Promise<Row | null>;
   }
   count(filter: Filter = {}) {
     return this.c.countDocuments(filter, this.o);
@@ -37,8 +39,8 @@ class MongoCollection implements Collection {
     const row = stampNew(this.name, this.versioned ? { ...doc, version: doc.version ?? 1 } : { ...doc });
     try {
       await this.c.insertOne({ ...row }, this.o); // the driver adds _id to what it is given, so give it a copy
-    } catch (err: any) {
-      if (err?.code === 11000) throw new DuplicateError(Object.keys(err.keyPattern ?? {})[0] ?? 'id');
+    } catch (err) {
+      if (asError(err).code === 11000) throw new DuplicateError(Object.keys(asError(err).keyPattern ?? {})[0] ?? 'id');
       throw err;
     }
     this.changed(this.name);
@@ -48,8 +50,8 @@ class MongoCollection implements Collection {
     if (!docs.length) return;
     try {
       await this.c.insertMany(docs.map((d) => stampNew(this.name, this.versioned ? { ...d, version: d.version ?? 1 } : { ...d })), this.o);
-    } catch (err: any) {
-      if (err?.code === 11000) throw new DuplicateError(Object.keys(err.keyPattern ?? {})[0] ?? 'id');
+    } catch (err) {
+      if (asError(err).code === 11000) throw new DuplicateError(Object.keys(asError(err).keyPattern ?? {})[0] ?? 'id');
       throw err;
     }
     this.changed(this.name);
@@ -71,8 +73,8 @@ class MongoCollection implements Collection {
     let res;
     try {
       res = await this.c.updateOne(this.versioned ? { id: current.id, version: want } : { id: current.id }, ops, this.o);
-    } catch (err: any) {
-      if (err?.code === 11000) throw new DuplicateError(Object.keys(err.keyPattern ?? {})[0] ?? 'id');
+    } catch (err) {
+      if (asError(err).code === 11000) throw new DuplicateError(Object.keys(asError(err).keyPattern ?? {})[0] ?? 'id');
       throw err;
     }
     if (res.matchedCount === 0) throw new ConflictError();
@@ -96,8 +98,8 @@ class MongoCollection implements Collection {
     let doc;
     try {
       doc = await run();
-    } catch (err: any) {
-      if (err?.code !== 11000) throw err;
+    } catch (err) {
+      if (asError(err).code !== 11000) throw err;
       doc = await run(); // two first hits raced to create the row; the second now updates it
     }
     return { count: doc!.count as number, resetAt: doc!.resetAt as Date };
@@ -121,7 +123,7 @@ export class MongoStore implements Store {
     delete: async (id) => { await this.db.collection('files').deleteOne({ id }); },
   };
 
-  async watchInserts(collection: string, onInsert: (doc: any) => void, onLost: (err: Error) => void) {
+  async watchInserts(collection: string, onInsert: (doc: Row) => void, onLost: (err: Error) => void) {
     const hello: any = await this.db.admin().command({ hello: 1 });
     if (!hello.setName && hello.msg !== 'isdbgrid') throw new Error('change streams need a replica set or a sharded cluster');
     const stream = this.db.collection(collection).watch([{ $match: { operationType: 'insert' } }]);
@@ -142,8 +144,8 @@ export class MongoStore implements Store {
     private client?: Client, private session?: Session,
   ) {}
 
-  collection(name: string) {
-    return new MongoCollection(this.db, name, this.onChange, this.session);
+  collection<T extends Row = Row>(name: string) {
+    return new MongoCollection(this.db, name, this.onChange, this.session) as unknown as Collection<T>;
   }
 
   async transaction<T>(fn: (tx: Store) => Promise<T>): Promise<T> {
@@ -159,10 +161,10 @@ export class MongoStore implements Store {
       }) as T;
       for (const n of changed) this.onChange(n); // other screens are told only once the data is really committed
       return out;
-    } catch (err: any) {
+    } catch (err) {
       // A standalone mongod has no transactions. The first command fails before anything is written, so running `fn`
       // without one loses nothing; it just loses the all-or-nothing guarantee, which is said once in the log.
-      if (err?.codeName === 'IllegalOperation' || /Transaction numbers are only allowed|does not support retryable writes/.test(err?.message ?? '')) {
+      if (asError(err).codeName === 'IllegalOperation' || /Transaction numbers are only allowed|does not support retryable writes/.test(asError(err).message ?? '')) {
         this.transactionsSupported = false;
         console.warn('[storage] This MongoDB server does not support transactions (it is not a replica set). Multi-document writes are NOT atomic here.');
         return fn(this);
@@ -197,10 +199,10 @@ export class MongoStore implements Store {
       for (const s of list) {
         try {
           await this.db.collection(name).createIndex(s.keys, { unique: s.unique, expireAfterSeconds: s.expireAfterSeconds, partialFilterExpression: s.partial });
-        } catch (err: any) {
+        } catch (err) {
           // A unique index fails when old data already has duplicates. The server still works, only without that guarantee.
           failed++;
-          console.warn(`Could not create index ${name}.${Object.keys(s.keys).join('+')}:`, err?.message);
+          console.warn(`Could not create index ${name}.${Object.keys(s.keys).join('+')}:`, asError(err).message);
         }
       }
     }

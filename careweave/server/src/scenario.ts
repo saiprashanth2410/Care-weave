@@ -1,3 +1,4 @@
+import type { Patient, User } from './repo/types.js';
 // Loads one synthetic patient journey by calling the real API as each role, so every rule, link and audit entry
 // is produced the same way it would be in use. Nothing here writes to the database directly.
 export const SAMPLE_NAME = 'Priya Raman';
@@ -5,7 +6,7 @@ export const SAMPLE_DOB = '1984-03-12';
 
 type Mint = (userId: string) => Promise<string>;
 
-export async function runScenario(base: string, users: any[], patients: any[], mint: Mint, requester: any) {
+export async function runScenario(base: string, users: User[], patients: Patient[], mint: Mint, requester: any) {
   if (patients.some((p) => p.sample)) return { loaded: false, message: 'The sample scenario is already loaded.' };
 
   const doctor = requester.role === 'doctor' ? requester : users.find((u) => u.role === 'doctor');
