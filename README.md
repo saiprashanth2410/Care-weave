@@ -25,7 +25,7 @@ In typical community hospitals and diagnostic centers, **Front Desk (OPD)**, **D
 1. **Operational store (OLTP, MongoDB):** One shared source of truth for the Front Desk, Laboratory and Physician workspaces. Every request reads and writes MongoDB directly; the server keeps no copy of the data. Every collection that staff edit (patients, encounters, lab orders, appointments, prescriptions, referrals, care plans, vitals, external records, review cases, users) carries a `version`, and a write made from an out-of-date copy is refused with HTTP 409 (see [Data consistency](#-data-consistency-exactly-what-is-implemented)). Writes that touch several documents run in a transaction. Every action is written to an audit log.
 2. **Analytics (OLAP, Exasol Personal):** A columnar engine runs window functions, `PERCENTILE_CONT` and aggregations over outpatient queues, diagnostic turnaround times (TAT) and prescribing volume. Data reaches Exasol when someone presses **Sync to Exasol** on the analytics page, or on a schedule if you switch one on (`ANALYTICS_SYNC_MINUTES`, or a cron call to `/api/analytics/cron` with `CRON_SECRET`); nothing syncs by itself otherwise. The sync reads records a page at a time and, after the first run, loads only what changed (`updatedAt` stamp); **Full resync** rebuilds from every record and removes Exasol rows whose source is gone. Each loaded page is counted back from Exasol. If Exasol is offline the page says so and shows figures computed by the application instead.
 3. **Multimodal AI (Google Gemma 4):** Reads photographed lab reports into structured rows. The output is a draft; a second person with verification permission must sign it off (maker-checker).
-4. **Drug safety checks:** Brand-to-molecule lookup over a 93,911-row brand catalogue, an allergy check against a short hand-written list of drug families (penicillins, sulfonamides, NSAIDs, cephalosporins; anything else is matched by name only), duplicate-molecule detection across brands, and a 12-pair drug-drug interaction list.
+4. **Drug safety checks:** Brand-to-molecule lookup over a 93,911-row brand catalogue, an allergy check against a short hand-written list of drug families (penicillins, sulfonamides, NSAIDs, cephalosporins; anything else is matched by name only), duplicate-molecule detection across brands, and a drug-drug interaction list of about 400 pairs (generated from grouped rules) that covers warfarin and the modern anticoagulants (apixaban/Eliquis, rivaroxaban/Xarelto, dabigatran, edoxaban) with NSAIDs and aspirin, digoxin with amiodarone, QT-prolonging combinations and more.
 5. **WhatsApp (n8n, Twilio, Meta):** Event pushes (OP token, lab report released, prescription) and two-way keywords. Meta webhook calls are accepted only with a valid `X-Hub-Signature-256`.
 6. **Video consultation with live translation:** the doctor starts a call from the portal, the patient joins from a temporary link on a phone (no account), and English, Tamil and Hindi speech is shown as captions and translated for the other person. See [Video consultation](#-video-consultation-and-live-translation).
 7. **Staff messaging:** one-to-one chat with photos between the front desk and doctors, with unread badges. See [Staff messaging](#-staff-messaging).
@@ -73,7 +73,8 @@ What needs setup to work, so you are not surprised: translation, the AI summary 
 - The two browsers find each other through small signalling messages kept in MongoDB and polled over HTTPS (about every 0.35 s while connecting, then every second), because a Vercel serverless function cannot hold a socket open.
 - Google's free STUN servers find each browser's public address. When no direct path exists (different countries, strict college or hospital Wi-Fi), a **TURN relay** carries the still-encrypted call: set `METERED_DOMAIN` + `METERED_API_KEY` (free account at metered.ca) or `TURN_URLS` + `TURN_USERNAME` + `TURN_CREDENTIAL` on the server and redeploy; no rebuild. Without a relay, such a call can stay on "Connecting…"; the screen then shows a **Network check** line saying what the network did, and a **Try again** button.
 - The doctor can open other pages of the portal during a call: it keeps running, with a "Video consultation in progress" banner and a **Return to call** button. Closing or reloading the tab asks for confirmation and tells the patient the call is over.
-- **Laptop:** video on the left, chat as a side panel on the right. **Phone:** full-screen video, chat as a bottom sheet.
+- **Doctor:** before the patient joins, the side panel shows the link and language settings. Once the call connects the video takes the room and a **Chat** button in the call bar opens the panel (Details, Chat, Summary) on demand.
+- **Patient laptop:** video on the left, chat as a side panel on the right. **Patient phone:** full-screen video, chat as a bottom sheet.
 
 **Chat with photos.** Text and photos (a prescription, a report, a rash). Photos are shrunk in the browser (about 330 KB), checked on the server (JPEG, PNG or WebP by their real bytes, 450 KB, 15 per call) and shown full size on click.
 
@@ -201,12 +202,14 @@ Separately, every analytics widget has a **SQL Inspector** that shows the exact 
 - Uploads crumpled paper lab slips, invoices, or outside diagnostic PDFs.
 - Gemma 4 extracts parameters, numerical values, units, and reference ranges.
 - **Maker-Checker Security:** AI output is saved strictly as an unverified draft; clinical values can never touch a patient chart without human verifier sign-off.
+- **Age and sex adjusted ranges:** haemoglobin is flagged against the range for the patient (adult male 13.5 - 17.5, adult female 12.0 - 15.5, child 11.0 - 14.0 g/dL).
 - **Plausibility check:** Rejects impossible values for a short list of analytes (glucose, haemoglobin, HbA1c, creatinine, potassium, sodium, cholesterol, triglycerides, bilirubin, pH) and negative values for analytes that cannot be negative. Other analytes are not range-checked.
 
 ### 2. Physician Workspace & E-Prescribing
 - **Brand catalogue:** 93,911 brand rows with their generic composition (`server/catalog/BrandMaster.tsv.gz`).
 - **Allergy check:** Matches the allergen against the medicine name and against four hand-written drug families (penicillins, sulfonamides, NSAIDs, cephalosporins). Prescribing Amoxicillin to a patient with a penicillin allergy is blocked; an override needs a written reason (15+ characters) and is audited. Allergies outside those families are matched by name only.
 - **Duplicate Molecule Interceptor:** Blocks accidental therapeutic doubling across different brand names (e.g., Augmentin + Moxikind-CV, or Calpol + Ultracet).
+- **SOAP notes are never lost:** what the doctor types is kept per patient in the browser until it is saved, so a refused save or a reload brings it back, and a conflict (the chart changed meanwhile) says so and lets the doctor press Save again.
 - **One-line prescription form:** one row per medicine (name, dosage, route, frequency, duration, instructions, refills), **Add medicine** for more rows, and an optional **Diagnosis** and **Notes** for the whole prescription. All rows are saved together; the printable slip shows the diagnosis and notes.
 
 ### 3. Record Reconciliation (rule-based scoring)
@@ -238,11 +241,12 @@ Separately, every analytics widget has a **SQL Inspector** that shows the exact 
 | Layer | Technologies & Tools |
 | :--- | :--- |
 | **Frontend** | React 19, TypeScript, Vite, Tailwind CSS, Lucide Icons, Recharts |
-| **Backend API** | Node.js (v20+), Express, TypeScript. Zod validates the scanner's model output; other request checks are hand-written |
+| **Backend API** | Node.js (v20+), Express, TypeScript in `strict` mode with typed records for every collection. Zod validates the scanner's model output; other request checks are hand-written |
 | **OLTP Database** | MongoDB (Atlas or local) through `repo/`; a local JSON file is a development-only fallback |
 | **OLAP Analytics** | **Exasol Personal** via `@exasol/exasol-driver-ts` |
 | **AI Vision** | Google Gemma 4 (`gemma-4-26b-a4b-it`) via Gemini API Interactions |
 | **Automation** | n8n Workflow Automation, Webhooks, Twilio WhatsApp API, Meta Cloud API |
+| **Quality** | Lint (oxlint), type-check, 300+ unit and integration tests, and six real-Chrome browser tests of the video call and messaging, all run by GitHub Actions on every push (`npm run check`, `npm run e2e`) |
 | **Security & Auth** | Firebase Authentication, Sessions stored as SHA-256 hashes in MongoDB, Role-Based Access Control, Helmet |
 
 ---
@@ -329,7 +333,7 @@ cd careweave/server && npm run test:exasol
 # 4. Exasol scale benchmark (needs Exasol; see "Scale benchmark" above)
 cd careweave/server && npm run demo:scale
 
-# 5. Client tests (89)
+# 5. Client tests (97)
 cd careweave/client && npm test
 
 # 6. Browser tests of the video call and messaging (real Chrome, API and client running; see careweave/e2e/README.md)
