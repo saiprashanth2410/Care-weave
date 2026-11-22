@@ -1,7 +1,7 @@
 # CareWeave 🏥
 ### Unified Clinical Records & Hospital Operations Analytics
 
-> **Team:** Goofy Coders — Saiprashanth T, Saveetha G  
+> **Team:** Goofy Coders — [Saiprashanth T](https://github.com/saiprashanth2410), [Saveetha G](https://github.com/saveetha3107)  
 > **Repository:** [https://github.com/saiprashanth2410/Care-weave](https://github.com/saiprashanth2410/Care-weave)  
 
 > All data in this repository is synthetic.
