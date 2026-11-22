@@ -4,26 +4,17 @@
 > **Repository:** https://github.com/saiprashanth2410/Care-weave  
 > **Live demo:** https://careweave-ten.vercel.app (synthetic data)  
 > **Demo video:** [`CareWeave_Demo_5min.mp4`](https://github.com/saiprashanth2410/Care-weave/releases/tag/demo-assets), about 5 minutes, synthetic voice-over (Microsoft Edge TTS, `en-US-AriaNeural`)  
-> **Slide deck:** [`CareWeave.pptx`](https://github.com/saiprashanth2410/Care-weave/releases/tag/demo-assets), 14 slides
+> **Slide deck:** [`CareWeave.pptx`](CareWeave.pptx), 5 slides
 
 ---
 
 ## Part 1: Slide deck outline
 
-1. Title
-2. The problem: three desks, three silos
-3. The answer: one shared record for every desk
-4. Architecture: React, Express, MongoDB, Exasol, Gemma vision, n8n and WhatsApp
-5. Front desk: check-in, OP tokens, live queue
-6. Laboratory: maker-checker release
-7. Doctor: safety checks at the point of care
-8. Reconciliation: outside records are never merged silently
-9. Analytics: every figure traced to its query
-10. Patients: WhatsApp through n8n
-11. Engineering: data integrity and security
-12. Stack
-13. Roadmap
-14. Thank you
+1. The problem: front desk, lab and doctor do not share records
+2. The solution: one shared record for every desk
+3. Features: report scanning, safer prescriptions, video consultation with translation, WhatsApp bot, analytics, outside records and staff chat
+4. Technical approach: React, Express, MongoDB, Exasol, Gemini API, n8n and WebRTC; version checks, audit log, encrypted key
+5. Future scope and live demo links
 
 ---
 

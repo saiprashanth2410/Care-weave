@@ -39,7 +39,8 @@ In typical community hospitals and diagnostic centers, **Front Desk (OPD)**, **D
 | :--- | :--- | :--- |
 | 🎬 **Demo Video** | 5-minute end-to-end video walkthrough of CareWeave | [`CareWeave_Demo_5min.mp4`](https://github.com/saiprashanth2410/Care-weave/releases/tag/demo-assets) |
 | 🌐 **Live Demo** | Deployed on Vercel with synthetic data. Sign in with the staff accounts in [Live demo access](#-live-demo-access) | [careweave-ten.vercel.app](https://careweave-ten.vercel.app) |
-| 📊 **Pitch Deck** | 10-slide presentation deck | [`CareWeave.pptx`](https://github.com/saiprashanth2410/Care-weave/releases/tag/demo-assets) |
+| 📊 **Pitch Deck** | 5-slide deck: problem, solution, features, technical approach, future scope | [`CareWeave.pptx`](CareWeave.pptx) |
+| 📘 **Technical Documentation** | Architecture, tech stack, data consistency, API reference, integrations, security, testing and setup | [`docs/CareWeave_Technical_Documentation.pdf`](docs/CareWeave_Technical_Documentation.pdf) |
 | 📝 **Demo Guide & Script** | Slide-by-slide pitch narrative and demo script | [`DEMO.md`](DEMO.md) |
 | 🏛️ **Exasol Integration Guide** | Comprehensive schema design, SQL queries, and scale benchmarks | [`EXASOL_SETUP.md`](EXASOL_SETUP.md) |
 | 🤖 **WhatsApp & n8n Specs** | Event-driven notification workflow and two-way bot documentation | [`careweave/n8n/README.md`](careweave/n8n/README.md) |
@@ -241,7 +242,7 @@ Separately, every analytics widget has a **SQL Inspector** that shows the exact 
 | Layer | Technologies & Tools |
 | :--- | :--- |
 | **Frontend** | React 19, TypeScript, Vite, Tailwind CSS, Lucide Icons, Recharts |
-| **Backend API** | Node.js (v20+), Express, TypeScript in `strict` mode with typed records for every collection. Zod validates the scanner's model output; other request checks are hand-written |
+| **Backend API** | Node.js 22, Express, TypeScript in `strict` mode with typed records for every collection. Zod validates the scanner's model output; other request checks are hand-written |
 | **OLTP Database** | MongoDB (Atlas or local) through `repo/`; a local JSON file is a development-only fallback |
 | **OLAP Analytics** | **Exasol Personal** via `@exasol/exasol-driver-ts` |
 | **AI Vision** | Google Gemma 4 (`gemma-4-26b-a4b-it`) via Gemini API Interactions |
@@ -254,7 +255,7 @@ Separately, every analytics widget has a **SQL Inspector** that shows the exact 
 ## 🚀 Quickstart: Running CareWeave Locally
 
 ### Prerequisites
-- **Node.js:** v20+
+- **Node.js:** v22 (the version CI and Vercel use)
 - **MongoDB:** Local instance (`mongodb://127.0.0.1:27017`) or MongoDB Atlas URI. Without `MONGODB_URI` the server uses a local JSON file (development only).
 - **Exasol Personal:** Running on `localhost:8563` (See [`EXASOL_SETUP.md`](EXASOL_SETUP.md) for 2-minute install)
 

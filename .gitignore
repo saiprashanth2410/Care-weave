@@ -77,6 +77,5 @@ careweave/*/package-lock.json
 .vercel
 .env*
 
-# Demo video and slide deck are published as GitHub release assets (releases/tag/demo-assets), not kept in the repository
+# The demo video is a GitHub release asset (releases/tag/demo-assets), not kept in the repository
 *.mp4
-*.pptx
