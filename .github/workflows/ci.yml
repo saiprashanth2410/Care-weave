@@ -18,3 +18,28 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+
+  # Real Chrome (under a virtual display) drives two browsers through a video call, the chat panel and staff messaging.
+  e2e:
+    runs-on: ubuntu-latest
+    needs: check
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --include=optional
+      - name: Start the API (local store, demo sign-in) and the client
+        run: |
+          cd careweave/server && ALLOW_LOCAL_LOGIN=true LOGIN_RATE_LIMIT=200 PORT=4000 nohup npx tsx src/index.ts > /tmp/api.log 2>&1 &
+          cd careweave/client && nohup npx vite --port 5173 > /tmp/web.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf localhost:4000/api/health >/dev/null && curl -sf localhost:5173 >/dev/null && exit 0; sleep 2; done
+          cat /tmp/api.log /tmp/web.log; exit 1
+      - run: cd careweave/e2e && npm install
+      - run: cd careweave/e2e && xvfb-run -a npm test
+        env:
+          CHROME: /usr/bin/google-chrome
+      - if: failure()
+        run: tail -50 /tmp/api.log

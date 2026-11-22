@@ -37,9 +37,9 @@ In typical community hospitals and diagnostic centers, **Front Desk (OPD)**, **D
 
 | Resource | Description | Direct Link |
 | :--- | :--- | :--- |
-| 🎬 **Demo Video** | 5-minute end-to-end video walkthrough of CareWeave | [`CareWeave_Demo_5min.mp4`](CareWeave_Demo_5min.mp4) |
+| 🎬 **Demo Video** | 5-minute end-to-end video walkthrough of CareWeave | [`CareWeave_Demo_5min.mp4`](https://github.com/saiprashanth2410/Care-weave/releases/tag/demo-assets) |
 | 🌐 **Live Demo** | Deployed on Vercel with synthetic data. Sign in with the staff accounts in [Live demo access](#-live-demo-access) | [careweave-ten.vercel.app](https://careweave-ten.vercel.app) |
-| 📊 **Pitch Deck** | 10-slide presentation deck | [`CareWeave.pptx`](CareWeave.pptx) |
+| 📊 **Pitch Deck** | 10-slide presentation deck | [`CareWeave.pptx`](https://github.com/saiprashanth2410/Care-weave/releases/tag/demo-assets) |
 | 📝 **Demo Guide & Script** | Slide-by-slide pitch narrative and demo script | [`DEMO.md`](DEMO.md) |
 | 🏛️ **Exasol Integration Guide** | Comprehensive schema design, SQL queries, and scale benchmarks | [`EXASOL_SETUP.md`](EXASOL_SETUP.md) |
 | 🤖 **WhatsApp & n8n Specs** | Event-driven notification workflow and two-way bot documentation | [`careweave/n8n/README.md`](careweave/n8n/README.md) |
@@ -204,7 +204,7 @@ Separately, every analytics widget has a **SQL Inspector** that shows the exact 
 - **Plausibility check:** Rejects impossible values for a short list of analytes (glucose, haemoglobin, HbA1c, creatinine, potassium, sodium, cholesterol, triglycerides, bilirubin, pH) and negative values for analytes that cannot be negative. Other analytes are not range-checked.
 
 ### 2. Physician Workspace & E-Prescribing
-- **Brand catalogue:** 93,911 brand rows with their generic composition (`server/catalog/BrandMaster.tsv`).
+- **Brand catalogue:** 93,911 brand rows with their generic composition (`server/catalog/BrandMaster.tsv.gz`).
 - **Allergy check:** Matches the allergen against the medicine name and against four hand-written drug families (penicillins, sulfonamides, NSAIDs, cephalosporins). Prescribing Amoxicillin to a patient with a penicillin allergy is blocked; an override needs a written reason (15+ characters) and is audited. Allergies outside those families are matched by name only.
 - **Duplicate Molecule Interceptor:** Blocks accidental therapeutic doubling across different brand names (e.g., Augmentin + Moxikind-CV, or Calpol + Ultracet).
 - **One-line prescription form:** one row per medicine (name, dosage, route, frequency, duration, instructions, refills), **Add medicine** for more rows, and an optional **Diagnosis** and **Notes** for the whole prescription. All rows are saved together; the printable slip shows the diagnosis and notes.

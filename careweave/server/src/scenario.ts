@@ -35,7 +35,7 @@ export async function runScenario(base: string, users: User[], patients: Patient
 
   await call('POST', `/api/patients/${pat.id}/allergies`, tok.doc, { allergen: 'Penicillin', severity: 'Moderate', reaction: 'Skin rash' });
 
-  // A medicine picked from the catalogue (data/BrandMaster.tsv), prescribed by the doctor against the encounter.
+  // A medicine picked from the catalogue (catalog/BrandMaster.tsv.gz), prescribed by the doctor against the encounter.
   await call('POST', '/api/prescriptions', tok.doc, { patientId: pat.id, medicine: 'Trajenta Duo (linagliptin and metformin hydrochloride) 2.5 mg + 500 mg oral tablet', dosage: '2.5 mg + 500 mg', route: 'Oral', frequency: 'Twice daily with meals', duration: '90 days', refills: 2, instructions: 'Take with food.' });
 
   // 1. Released result: entered by one lab user, verified and released by a different one.

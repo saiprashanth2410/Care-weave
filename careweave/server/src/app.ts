@@ -63,7 +63,7 @@ export function createApp(opts: CreateAppOptions) {
       next();
     },
     limits: {
-      login: rateLimit(getRepos, 'login', 15 * 60 * 1000, 10, (r) => `${r.ip}|${String(r.body?.email || '').toLowerCase()}`),
+      login: rateLimit(getRepos, 'login', 15 * 60 * 1000, Number(process.env.LOGIN_RATE_LIMIT) || 10, (r) => `${r.ip}|${String(r.body?.email || '').toLowerCase()}`),
       upload: rateLimit(getRepos, 'upload', 60 * 1000, 20, (r) => `${r.user?.id || r.ip}`),
     },
   };

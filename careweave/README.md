@@ -3,8 +3,8 @@
 > **Core engine of CareWeave**  
 > Main Presentation & Documentation: [Root README.md](../README.md)  
 > Exasol Analytics Setup & Architecture: [EXASOL_SETUP.md](../EXASOL_SETUP.md)  
-> 5-Minute Video Walkthrough: [`CareWeave_Demo_5min.mp4`](../CareWeave_Demo_5min.mp4)  
-> Presentation Deck: [`CareWeave.pptx`](../CareWeave.pptx)  
+> 5-Minute Video Walkthrough: [`CareWeave_Demo_5min.mp4`](https://github.com/saiprashanth2410/Care-weave/releases/tag/demo-assets)  
+> Presentation Deck: [`CareWeave.pptx`](https://github.com/saiprashanth2410/Care-weave/releases/tag/demo-assets)  
 > Live demo: https://careweave-ten.vercel.app  
 
 ---

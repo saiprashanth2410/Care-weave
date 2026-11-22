@@ -3,8 +3,8 @@
 > **Team:** Goofy Coders (Saiprashanth T, Saveetha G)  
 > **Repository:** https://github.com/saiprashanth2410/Care-weave  
 > **Live demo:** https://careweave-ten.vercel.app (synthetic data)  
-> **Demo video:** [`CareWeave_Demo_5min.mp4`](CareWeave_Demo_5min.mp4), about 5 minutes, synthetic voice-over (Microsoft Edge TTS, `en-US-AriaNeural`)  
-> **Slide deck:** [`CareWeave.pptx`](CareWeave.pptx), 14 slides
+> **Demo video:** [`CareWeave_Demo_5min.mp4`](https://github.com/saiprashanth2410/Care-weave/releases/tag/demo-assets), about 5 minutes, synthetic voice-over (Microsoft Edge TTS, `en-US-AriaNeural`)  
+> **Slide deck:** [`CareWeave.pptx`](https://github.com/saiprashanth2410/Care-weave/releases/tag/demo-assets), 14 slides
 
 ---
 

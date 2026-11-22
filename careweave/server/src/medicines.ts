@@ -1,12 +1,14 @@
 import fs from 'node:fs/promises';
+import { gunzip } from 'node:zlib';
+import { promisify } from 'node:util';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import mongoose from 'mongoose';
 
-// Medicine catalogue from catalog/BrandMaster.tsv (about 94,000 rows). It is kept in its own MongoDB
+// Medicine catalogue from catalog/BrandMaster.tsv.gz (about 94,000 rows, 2.8 MB compressed). It is kept in its own MongoDB
 // collection rather than the in-memory db, which holds every document in RAM.
 
-const FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'catalog', 'BrandMaster.tsv');
+const FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'catalog', 'BrandMaster.tsv.gz');
 const COLLECTION = 'medicines';
 
 export type Medicine = {
@@ -48,7 +50,7 @@ export function parseMedicine(line: string): Medicine | null {
 async function readAll(): Promise<Medicine[]> {
   let raw: string;
   try {
-    raw = await fs.readFile(FILE, 'utf8');
+    raw = (await promisify(gunzip)(await fs.readFile(FILE))).toString('utf8');
   } catch {
     console.warn(`Medicine catalogue not found at ${FILE}. Medicine search is empty until it is added.`);
     return [];
