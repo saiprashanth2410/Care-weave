@@ -16,13 +16,17 @@ const TERMS: Doc = {
 
 const PRIVACY: Doc = {
   title: 'Privacy Policy',
-  updated: 'Draft for the hackathon demonstration',
+  updated: 'Last updated: 24 November 2026',
   sections: [
-    { h: 'What we collect', p: 'In this demonstration, only synthetic records created for the demo. No real patient data should be entered.' },
-    { h: 'How access is limited', p: 'Each role sees only what its work requires. The laboratory role sees patient identifiers and the clinical context of an order, not the full history.' },
-    { h: 'Audit trail', p: 'Sensitive actions such as releasing a result or amending one are meant to be recorded with who did it and when.' },
-    { h: 'Sharing', p: 'Records are not sold or shared. If an optional AI service is enabled later, only authorised records for that user are sent to it.' },
-    { h: 'Before real use', p: 'A real deployment needs a reviewed privacy policy, a lawful basis for processing, and the retention and consent rules of the jurisdiction. This draft is not legal advice and makes no compliance claim.' },
+    { h: 'Who we are', p: 'CareWeave is a hospital workflow application built by Saiprashanth T and Saveetha for the CodeQuest National Tech Hackathon 2026. This policy explains what the application and its WhatsApp service do with information.' },
+    { h: 'What we collect', p: 'Patient name, date of birth, gender, phone number, appointments, prescriptions, lab orders and results entered by hospital staff or given by the patient on WhatsApp. For WhatsApp we also receive the phone number and the text of the messages a person sends to the CareWeave number. The demonstration uses synthetic records, and real patient information should not be entered.' },
+    { h: 'How we use it', p: 'Only to run the hospital workflow: to give queue status, prescriptions and reports, to send appointment, prescription and video-consult messages, and to let the care team see the patient record. We do not use it for advertising and we do not sell it.' },
+    { h: 'WhatsApp messages', p: 'Messages are sent and received through the WhatsApp Business Platform operated by Meta. A person receives a CareWeave message only after a hospital staff member records their number or the person messages the CareWeave number first. Replying CANCEL ends registration, and a person can ask the hospital to stop messaging them at any time.' },
+    { h: 'How access is limited', p: 'Each staff role sees only what its work requires. The laboratory role sees patient identifiers and the clinical context of an order, not the full history. Passwords are stored hashed and sign-in attempts are rate limited.' },
+    { h: 'Audit trail', p: 'Sensitive actions such as releasing or amending a result, or overriding a drug safety alert, are recorded with who did it and when.' },
+    { h: 'Sharing', p: 'Records are not sold. They are processed by service providers that run the application: the hosting provider (Vercel), the database provider (MongoDB Atlas), Meta (WhatsApp messaging) and, when switched on, Google Gemini for AI summaries and translation, which receives only the record needed for that request.' },
+    { h: 'Retention and deletion', p: 'Records are kept for as long as the hospital needs them for care. A person can ask us to correct or delete their information, including their WhatsApp data, using the contact below, and we will act on it within 30 days.' },
+    { h: 'Contact', p: 'To ask a question or request deletion, open an issue at github.com/saiprashanth2410/Care-weave/issues.' },
   ],
 }
 
@@ -30,7 +34,7 @@ function Legal({ doc }: { doc: Doc }) {
   return (
     <div className="min-h-screen bg-paper">
       <header className="border-b border-rule bg-surface px-4 py-4 sm:px-8">
-        <Link to="/lab/overview" className="text-sm font-bold tracking-tight text-ink">CareWeave</Link>
+        <Link to="/login" className="text-sm font-bold tracking-tight text-ink">CareWeave</Link>
       </header>
       <main className="mx-auto max-w-2xl px-4 py-10 sm:px-8">
         <h1 className="text-3xl font-semibold tracking-tight">{doc.title}</h1>
@@ -44,7 +48,7 @@ function Legal({ doc }: { doc: Doc }) {
           ))}
         </div>
         <p className="mt-10 text-sm">
-          <Link to="/lab/overview" className="underline underline-offset-2">Back to the laboratory</Link>
+          <Link to="/login" className="underline underline-offset-2">Back to sign in</Link>
         </p>
       </main>
     </div>
