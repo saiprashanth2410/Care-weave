@@ -37,7 +37,7 @@ In typical community hospitals and diagnostic centers, **Front Desk (OPD)**, **D
 
 | Resource | Description | Direct Link |
 | :--- | :--- | :--- |
-| 🎬 **Demo Video** | 5-minute end-to-end video walkthrough of CareWeave | [`CareWeave_Demo_5min.mp4`](https://github.com/saiprashanth2410/Care-weave/releases/tag/demo-assets) |
+| 🎬 **Demo Video** | 5-minute end-to-end video walkthrough of CareWeave | [Watch on YouTube](https://youtu.be/1CMKedRmXOM) · [`CareWeave_Demo_5min.mp4`](https://github.com/saiprashanth2410/Care-weave/releases/tag/demo-assets) |
 | 🌐 **Live Demo** | Deployed on Vercel with synthetic data. Sign in with the staff accounts in [Live demo access](#-live-demo-access) | [careweave-ten.vercel.app](https://careweave-ten.vercel.app) |
 | 📊 **Pitch Deck** | 5-slide deck: problem, solution, features, technical approach, future scope | [`CareWeave.pptx`](CareWeave.pptx) |
 | 📘 **Technical Documentation** | Architecture, tech stack, data consistency, API reference, integrations, security, testing and setup | [`docs/CareWeave_Technical_Documentation.pdf`](docs/CareWeave_Technical_Documentation.pdf) |
